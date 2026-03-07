@@ -58,7 +58,7 @@ export default function FinancePage() {
           const { data: condos } = await supabase
             .from('condominiums')
             .select('id')
-            .eq('organization_id', org?.id)
+            .eq('organization_id', org?.id ?? '')
             .eq('status', 'active')
             .limit(1)
 

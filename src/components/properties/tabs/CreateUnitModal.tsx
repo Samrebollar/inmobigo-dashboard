@@ -58,7 +58,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
             let result: Unit
             if (unitToEdit) {
                 result = await unitsService.update(unitToEdit.id, {
-                    ...formData as UpdateUnitDTO,
+                    ...formData as any
                 })
             } else {
                 result = await unitsService.create({

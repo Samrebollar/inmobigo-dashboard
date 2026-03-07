@@ -1,0 +1,10 @@
+﻿src/app/dashboard/properties/page.tsx(179,16): error TS2304: Cannot find name 'Building'.
+src/components/finance/revenue-chart.tsx(78,29): error TS2322: Type '(value: number) => [string, undefined]' is not assignable to type 'Formatter<number, NameType> & ((value: number, name: NameType, item: Payload<number, NameType>, index: number, payload: Payload<number, NameType>[]) => ReactNode | [...])'.
+  Type '(value: number) => [string, undefined]' is not assignable to type 'Formatter<number, NameType>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'number | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+src/components/properties/PropertyCard.tsx(85,45): error TS2322: Type '"icon"' is not assignable to type '"sm" | "md" | "lg" | undefined'.
+src/components/properties/PropertyCard.tsx(88,45): error TS2322: Type '"icon"' is not assignable to type '"sm" | "md" | "lg" | undefined'.
+src/components/properties/tabs/UnitsTab.tsx(72,105): error TS2322: Type '{ children: string; variant: "default" | "success"; className: string; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; variant?: "default" | "success" | "warning" | "destructive" | undefined; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { children: ReactNode; variant?: "default" | "success" | "warning" | "destructive" | undefined; }'.

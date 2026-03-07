@@ -1,0 +1,153 @@
+import { createClient } from '@/utils/supabase/client'
+import { Resident, CreateResidentDTO, UpdateResidentDTO } from '@/types/residents'
+import { demoDb } from '@/utils/demo-db'
+
+export const residentsService = {
+    async getByCondominium(condominiumId: string): Promise<Resident[]> {
+        if (condominiumId.startsWith('demo-')) {
+            const residents = demoDb.getResidents(condominiumId)
+            const units = demoDb.getUnits(condominiumId)
+            return residents.map(r => ({
+                ...r,
+                unit_number: units.find(u => u.id === r.unit_id)?.unit_number
+            }))
+        }
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('residents')
+            .select(`
+        *,
+        units (
+          unit_number
+        ),
+        vehicles (*)
+      `)
+            .eq('condominium_id', condominiumId)
+            .order('first_name', { ascending: true })
+
+        if (error) throw error
+
+        // Transform to flatten unit_number if needed
+        return data?.map(r => ({
+            ...r,
+            unit_number: r.units?.unit_number
+        })) || []
+    },
+
+    async getById(id: string): Promise<Resident | null> {
+        if (id.startsWith('demo-')) {
+            const residents = demoDb.getResidents()
+            const resident = residents.find(r => r.id === id)
+            if (!resident) return null
+            const unit = demoDb.getUnits().find(u => u.id === resident.unit_id)
+            return {
+                ...resident,
+                unit_number: unit?.unit_number
+            }
+        }
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('residents')
+            .select(`
+        *,
+        units (
+          unit_number
+        ),
+        vehicles (*)
+      `)
+            .eq('id', id)
+            .single()
+
+        if (error) {
+            console.error('Error fetching resident:', error)
+            return null
+        }
+
+        return {
+            ...data,
+            unit_number: data.units?.unit_number
+        }
+    },
+
+    async create(resident: CreateResidentDTO): Promise<Resident> {
+        if (resident.condominium_id.startsWith('demo-')) {
+            const newResident: Resident = {
+                id: `demo-res-${Math.random().toString(36).substr(2, 9)}`,
+                ...resident,
+                created_at: new Date().toISOString()
+            }
+            demoDb.saveResident(newResident)
+            return newResident
+        }
+        const supabase = createClient()
+        // ... existing implementation ...
+        const { vehicles, ...residentData } = resident
+        const { data: newResident, error: residentError } = await supabase
+            .from('residents')
+            .insert(residentData)
+            .select()
+            .single()
+
+        if (residentError) throw residentError
+
+        if (vehicles && vehicles.length > 0) {
+            const vehicleInserts = vehicles.map(v => ({
+                resident_id: newResident.id,
+                plate: v.plate,
+                brand: v.brand,
+                color: v.color
+            }))
+            await supabase.from('vehicles').insert(vehicleInserts)
+        }
+        return newResident
+    },
+
+    async update(id: string, updates: UpdateResidentDTO): Promise<Resident> {
+        if (id.startsWith('demo-')) {
+            const residents = demoDb.getResidents()
+            const existing = residents.find(r => r.id === id)
+            const updated = { ...existing, ...updates } as Resident
+            demoDb.saveResident(updated)
+            return updated
+        }
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('residents')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single()
+
+        if (error) throw error
+        return data
+    },
+
+    async delete(id: string): Promise<void> {
+        if (id.startsWith('demo-')) {
+            demoDb.deleteResident(id)
+            return
+        }
+        const supabase = createClient()
+        const { error } = await supabase
+            .from('residents')
+            .delete()
+            .eq('id', id)
+
+        if (error) throw error
+    },
+
+    async deleteAll(condominiumId: string): Promise<void> {
+        if (condominiumId.startsWith('demo-')) {
+            const residents = demoDb.getResidents(condominiumId)
+            residents.forEach(r => demoDb.deleteResident(r.id))
+            return
+        }
+        const supabase = createClient()
+        const { error } = await supabase
+            .from('residents')
+            .delete()
+            .eq('condominium_id', condominiumId)
+
+        if (error) throw error
+    }
+}

@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .animate-aurora-1 {
+    animation: aurora1 15s ease-in-out infinite;
+  }
+
+  .animate-aurora-2 {
+    animation: aurora2 20s ease-in-out infinite 2s;
+  }
+
+  .animate-aurora-3 {
+    animation: aurora3 25s ease-in-out infinite;
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  .animate-fade-out {
+    animation: fadeOut 1.5s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.5s ease-out 0.2s both;
+  }
+
+  .animate-slide-in-right {
+    animation: slideInRight 0.8s ease-out 0.4s both;
+  }
+
+  .animate-grow-width-75 {
+    animation: growWidth75 1.5s ease-out 1s both;
+  }
+
+  .animate-grow-width-60 {
+    animation: growWidth60 1.5s ease-out 1.2s both;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 1s linear infinite;
+  }
+}
+
+@keyframes aurora1 {
+
+  0%,
+  100% {
+    transform: scale(1) translate(-100px, -50px);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: scale(1.2) translate(100px, 50px);
+    opacity: 0.5;
+  }
+}
+
+@keyframes aurora2 {
+
+  0%,
+  100% {
+    transform: scale(1) translate(100px, 50px);
+    opacity: 0.2;
+  }
+
+  50% {
+    transform: scale(1.3) translate(-100px, -50px);
+    opacity: 0.4;
+  }
+}
+
+@keyframes aurora3 {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+
+  50% {
+    transform: scale(1.5);
+    opacity: 0.3;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  to {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes growWidth75 {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 75%;
+  }
+}
+
+@keyframes growWidth60 {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 60%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}

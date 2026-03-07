@@ -1,0 +1,16 @@
+﻿src/app/dashboard/finance/page.tsx(61,41): error TS2339: Property 'id' does not exist on type 'any[]'.
+src/app/dashboard/finance/page.tsx(69,89): error TS2339: Property 'id' does not exist on type 'any[]'.
+src/app/dashboard/page.tsx(220,23): error TS2322: Type '{ children: Element; asChild: true; className: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+src/app/dashboard/page.tsx(241,41): error TS2339: Property 'id' does not exist on type 'any[]'.
+src/app/dashboard/residents/[id]/page.tsx(18,10): error TS2305: Module '"@/types/residents"' has no exported member 'CommunicationLog'.
+src/app/dashboard/residents/[id]/page.tsx(430,48): error TS2322: Type '"outline"' is not assignable to type '"default" | "success" | "warning" | "destructive" | undefined'.
+src/app/dashboard/residents/page.tsx(248,52): error TS2322: Type '"outline"' is not assignable to type '"default" | "success" | "warning" | "destructive" | undefined'.
+src/components/finance/billing-table.tsx(238,17): error TS2322: Type '{ isOpen: boolean; onClose: () => void; onSubmit: (data: any) => void; }' is not assignable to type 'IntrinsicAttributes & CreateInvoiceModalProps'.
+  Property 'onSubmit' does not exist on type 'IntrinsicAttributes & CreateInvoiceModalProps'.
+src/components/finance/create-invoice-modal.tsx(162,72): error TS2322: Type '{ children: Element; isOpen: boolean; onClose: () => void; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & ModalProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & ModalProps'.
+src/components/maintenance/resident-maintenance-view.tsx(223,44): error TS2322: Type '"outline"' is not assignable to type '"default" | "success" | "warning" | "destructive" | undefined'.
+src/components/settings/resident-profile-client.tsx(112,36): error TS2322: Type '"secondary"' is not assignable to type '"default" | "success" | "warning" | "destructive" | undefined'.
+src/services/notifications-service.ts(2,10): error TS2305: Module '"@/types/residents"' has no exported member 'CommunicationLog'.
+src/services/notifications-service.ts(103,43): error TS2339: Property 'organization_id' does not exist on type 'Resident'.

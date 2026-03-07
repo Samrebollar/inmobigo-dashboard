@@ -1,0 +1,5 @@
+﻿src/components/finance/revenue-chart.tsx(78,29): error TS2322: Type '(value: number) => any' is not assignable to type 'Formatter<number, NameType> & ((value: number, name: NameType, item: Payload<number, NameType>, index: number, payload: Payload<number, NameType>[]) => ReactNode | [...])'.
+  Type '(value: number) => any' is not assignable to type 'Formatter<number, NameType>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'number | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.

@@ -1,0 +1,21 @@
+﻿{
+    "id":  "36a2e622bc5d45f0ac3e7a7d5727574a",
+    "back_url":  "https://app.inmobigo.mx/checkout/success",
+    "collector_id":  3190862015,
+    "application_id":  8976267036097744,
+    "reason":  "Core",
+    "status":  "active",
+    "external_reference":  "IG-CORE",
+    "date_created":  "2026-02-09T17:52:13.078-04:00",
+    "last_modified":  "2026-02-24T14:09:58.407-04:00",
+    "init_point":  "https://www.mercadopago.com.mx/subscriptions/checkout?preapproval_plan_id=36a2e622bc5d45f0ac3e7a7d5727574a",
+    "auto_recurring":  {
+                           "frequency":  1,
+                           "frequency_type":  "months",
+                           "transaction_amount":  1199.00,
+                           "currency_id":  "MXN"
+                       },
+    "payment_methods_allowed":  {
+
+                                }
+}

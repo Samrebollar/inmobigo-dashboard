@@ -1,0 +1,3 @@
+﻿src/app/dashboard/finance/page.tsx(60,41): error TS2339: Property 'id' does not exist on type 'any[]'.
+src/app/dashboard/finance/page.tsx(68,89): error TS2339: Property 'id' does not exist on type 'any[]'.
+src/app/dashboard/page.tsx(238,41): error TS2339: Property 'id' does not exist on type 'any[]'.

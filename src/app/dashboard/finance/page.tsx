@@ -63,7 +63,7 @@ export default function FinancePage() {
             .limit(1)
 
           if (condos && condos.length > 0) {
-            setCondominiumId(condos[0].id)
+            setCondominiumId((condos as any)[0].id)
           }
         }
 

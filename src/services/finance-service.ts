@@ -18,7 +18,6 @@ export const financeService = {
                     due_date: new Date(now.getFullYear(), now.getMonth(), 5).toISOString(),
                     created_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
                     folio: 'INV-0001',
-                    type: 'maintenance'
                 },
                 {
                     id: 'demo-inv-2',

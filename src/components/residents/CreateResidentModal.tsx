@@ -107,7 +107,7 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
             if (residentToEdit) {
                 // Remove vehicles for update as it goes directly to the residents table
                 const { vehicles, ...updatePayload } = submitData
-                result = await residentsService.update(residentToEdit.id, updatePayload)
+                result = await residentsService.update(residentToEdit.id, updatePayload as any)
             } else {
                 // Service.create handles both resident and vehicles
                 result = await residentsService.create({

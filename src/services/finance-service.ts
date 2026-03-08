@@ -31,7 +31,6 @@ export const financeService = {
                     due_date: new Date(now.getFullYear(), now.getMonth(), 10).toISOString(),
                     created_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
                     folio: 'INV-0002',
-                    type: 'maintenance'
                 },
                 {
                     id: 'demo-inv-3',
@@ -43,7 +42,6 @@ export const financeService = {
                     due_date: new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString(),
                     created_at: new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString(),
                     folio: 'INV-0003',
-                    type: 'maintenance'
                 },
                 {
                     id: 'demo-inv-4',

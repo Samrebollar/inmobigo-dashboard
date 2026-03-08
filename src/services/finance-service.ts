@@ -10,14 +10,16 @@ export const financeService = {
             const mockInvoices: Invoice[] = [
                 {
                     id: 'demo-inv-1',
+                    organization_id: 'demo-org',
                     condominium_id: condominiumId,
                     unit_id: 'demo-unit-1',
-                    unit_number: 'A-101',
+                    unit_number: '101',
                     amount: 1500,
                     status: 'paid',
-                    due_date: new Date(now.getFullYear(), now.getMonth(), 5).toISOString(),
-                    created_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
-                    folio: 'INV-0001',
+                    description: 'Cuota de mantenimiento',
+                    due_date: now.toISOString(),
+                    created_at: now.toISOString(),
+                    folio: 'INV-0001'
                 },
                 {
                     id: 'demo-inv-2',

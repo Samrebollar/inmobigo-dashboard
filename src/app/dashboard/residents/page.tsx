@@ -206,17 +206,17 @@ export default function ResidentsPage() {
     const handleCreateInvoice = (id: string) => checkAction(() => alert('Crear factura: ' + id))
 
     return (
-        <div className="mx-auto max-w-7xl space-y-8 p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto max-w-7xl space-y-6 md:space-y-8 p-4 md:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-white">Residentes</h1>
-                    <p className="text-zinc-400">Directorio global de residentes por condominio.</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Residentes</h1>
+                    <p className="text-sm md:text-base text-zinc-400">Directorio global de residentes por condominio.</p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4">
                     <div className="relative">
                         <Building className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                         <select
-                            className="h-10 rounded-md border border-zinc-800 bg-zinc-900 pl-9 pr-4 text-sm text-white focus:border-indigo-500 focus:outline-none appearance-none"
+                            className="h-10 w-full sm:w-auto rounded-md border border-zinc-800 bg-zinc-900 pl-9 pr-8 text-sm text-white focus:border-indigo-500 focus:outline-none appearance-none cursor-pointer"
                             value={selectedCondo}
                             onChange={(e) => setSelectedCondo(e.target.value)}
                         >
@@ -225,22 +225,29 @@ export default function ResidentsPage() {
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </div>
                     </div>
-                    <Button
-                        variant="outline"
-                        onClick={() => checkAction(() => setIsBulkOpen(true))}
-                        className="border-zinc-800 hover:bg-zinc-800 text-zinc-300 gap-2"
-                        disabled={!selectedCondo}
-                    >
-                        <FileSpreadsheet className="h-4 w-4" /> Carga Masiva
-                    </Button>
-                    <Button
-                        onClick={() => checkAction(() => setIsCreateOpen(true))}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2"
-                        disabled={!selectedCondo}
-                    >
-                        <Plus className="h-4 w-4" /> Nuevo Residente
-                    </Button>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={() => checkAction(() => setIsBulkOpen(true))}
+                            className="flex-1 sm:flex-none border-zinc-800 hover:bg-zinc-800 text-zinc-300 gap-2 h-10 px-3 md:px-4"
+                            disabled={!selectedCondo}
+                        >
+                            <FileSpreadsheet className="h-4 w-4" /> <span className="hidden xs:inline">Carga Masiva</span><span className="xs:hidden">Cargar</span>
+                        </Button>
+                        <Button
+                            onClick={() => checkAction(() => setIsCreateOpen(true))}
+                            className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white gap-2 h-10 px-3 md:px-4"
+                            disabled={!selectedCondo}
+                        >
+                            <Plus className="h-4 w-4" /> <span className="hidden xs:inline">Nuevo Residente</span><span className="xs:hidden">Nuevo</span>
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -270,34 +277,35 @@ export default function ResidentsPage() {
                     >
                         <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden transition-all duration-300 hover:border-indigo-500/50 hover:shadow-2xl hover:shadow-indigo-500/10 hover:bg-zinc-900/80">
                             <CardContent className="p-0">
-                                <div className="flex flex-col md:flex-row w-full">
-                                    {/* Left: Profile Info - Larger and Enhanced */}
-                                    <div className="p-8 flex-1 border-b md:border-b-0 md:border-r border-zinc-800 space-y-6">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-start gap-6">
-                                                {/* Larger Avatar */}
-                                                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 text-orange-500 flex items-center justify-center text-3xl font-bold border border-orange-500/30 shadow-lg shadow-orange-900/10">
+                                <div className="flex flex-col lg:flex-row w-full">
+                                    {/* Left: Profile Info */}
+                                    <div className="p-5 md:p-8 flex-1 border-b lg:border-b-0 lg:border-r border-zinc-800 space-y-5 md:space-y-6">
+                                        <div className="flex justify-between items-start gap-4">
+                                            <div className="flex items-start gap-4 md:gap-6">
+                                                {/* Avatar */}
+                                                <div className="h-14 w-14 md:h-20 md:w-20 rounded-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 text-orange-500 flex items-center justify-center text-xl md:text-3xl font-bold border border-orange-500/30 shadow-lg shadow-orange-900/10 flex-shrink-0">
                                                     {resident.first_name.charAt(0)}
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-3">
-                                                        <h3 className="font-bold text-2xl text-white tracking-tight">
+                                                <div className="space-y-1 min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                                                        <h3 className="font-bold text-lg md:text-2xl text-white tracking-tight truncate">
                                                             {resident.first_name} {resident.last_name}
                                                         </h3>
                                                         {resident.overdueCount > 0 && (
                                                             <motion.div
                                                                 animate={{ scale: [1, 1.2, 1] }}
                                                                 transition={{ repeat: Infinity, duration: 2 }}
+                                                                className="flex-shrink-0"
                                                             >
-                                                                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                                                                <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-amber-500" />
                                                             </motion.div>
                                                         )}
                                                     </div>
-                                                    <p className="text-base text-zinc-400 font-medium">{resident.email}</p>
+                                                    <p className="text-sm md:text-base text-zinc-400 font-medium truncate">{resident.email}</p>
                                                 </div>
                                             </div>
                                             <Badge variant="outline" className={`
-                                                px-3 py-1 text-sm font-medium
+                                                px-2 py-0.5 md:px-3 md:py-1 text-[10px] md:text-sm font-medium flex-shrink-0
                                                 ${resident.status === 'active'
                                                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
                                                     : 'bg-red-500/10 text-red-400 border-red-500/20'}
@@ -306,47 +314,47 @@ export default function ResidentsPage() {
                                             </Badge>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-6 pt-2">
-                                            <div className="flex items-center gap-3 text-zinc-300 text-base bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                                                <div className="p-2 bg-zinc-800 rounded-md">
-                                                    <Building className="h-5 w-5 text-indigo-400" />
+                                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-4 md:gap-6 pt-2">
+                                            <div className="flex items-center gap-3 text-zinc-300 text-sm md:text-base bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
+                                                <div className="p-2 bg-zinc-800 rounded-md flex-shrink-0">
+                                                    <Building className="h-4 w-4 md:h-5 md:w-5 text-indigo-400" />
                                                 </div>
-                                                <div>
-                                                    <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Unidad</p>
-                                                    <p className="font-medium">{resident.unit_number || 'N/A'}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Unidad</p>
+                                                    <p className="font-medium truncate">{resident.unit_number || 'N/A'}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-3 text-zinc-300 text-base bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
-                                                <div className="p-2 bg-zinc-800 rounded-md">
-                                                    <Phone className="h-5 w-5 text-emerald-400" />
+                                            <div className="flex items-center gap-3 text-zinc-300 text-sm md:text-base bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
+                                                <div className="p-2 bg-zinc-800 rounded-md flex-shrink-0">
+                                                    <Phone className="h-4 w-4 md:h-5 md:w-5 text-emerald-400" />
                                                 </div>
-                                                <div>
-                                                    <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Teléfono</p>
-                                                    <p className="font-medium">{resident.phone || '-'}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Teléfono</p>
+                                                    <p className="font-medium truncate">{resident.phone || '-'}</p>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Middle: Finance Info */}
-                                    <div className="p-8 md:w-[400px] border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col justify-center space-y-4 bg-zinc-900/30">
+                                    <div className="p-5 md:p-8 lg:w-[350px] border-b lg:border-b-0 lg:border-r border-zinc-800 flex flex-col justify-center space-y-4 bg-zinc-900/10">
                                         <div>
-                                            <p className="text-zinc-400 text-sm font-medium mb-1 uppercase tracking-wider">Saldo pendiente</p>
-                                            <p className="text-4xl font-bold text-white tracking-tight">
+                                            <p className="text-zinc-400 text-xs md:text-sm font-medium mb-1 uppercase tracking-wider">Saldo pendiente</p>
+                                            <p className="text-3xl md:text-4xl font-bold text-white tracking-tight">
                                                 {formatMoney(resident.calculatedDebt)}
                                             </p>
                                         </div>
                                         <div className="space-y-3 pt-2">
-                                            <div className="flex justify-between items-center text-sm border-b border-zinc-800 pb-2">
-                                                <span className="text-zinc-500">Último pago</span>
-                                                <span className="text-zinc-300 font-medium">
+                                            <div className="flex justify-between items-center text-xs md:text-sm border-b border-zinc-800 pb-2">
+                                                <span className="text-zinc-500 font-medium">Último pago</span>
+                                                <span className="text-zinc-300 font-semibold">
                                                     {resident.lastPaymentDate ? format(parseISO(resident.lastPaymentDate), 'd MMM yyyy', { locale: es }) : 'Sin registros'}
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-zinc-400 text-sm">{resident.overdueCount} facturas vencidas</span>
+                                                <span className="text-zinc-400 text-xs md:text-sm">{resident.overdueCount} facturas vencidas</span>
                                                 {resident.overdueCount > 0 && (
-                                                    <Badge variant="destructive" className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 transition-colors">
+                                                    <Badge variant="destructive" className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 transition-colors py-0 md:py-1">
                                                         {resident.maxDaysOverdue}+ días
                                                     </Badge>
                                                 )}
@@ -355,16 +363,16 @@ export default function ResidentsPage() {
                                     </div>
 
                                     {/* Right: Actions */}
-                                    <div className="p-8 md:w-[280px] flex flex-col gap-3 justify-center bg-zinc-950/30">
-                                        <Link href={`/dashboard/residents/${resident.id}`}>
+                                    <div className="p-5 md:p-8 lg:w-[260px] flex flex-col xs:flex-row lg:flex-col gap-3 justify-center bg-zinc-950/30">
+                                        <Link href={`/dashboard/residents/${resident.id}`} className="flex-1 lg:flex-none">
                                             <motion.button
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}
-                                                className="w-full flex items-center justify-start px-4 py-3 rounded-lg text-sm font-medium transition-all
-                                                bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 shadow-lg shadow-emerald-900/5"
+                                                className="w-full flex items-center justify-center lg:justify-start px-4 py-3 rounded-lg text-xs md:text-sm font-semibold transition-all
+                                                bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 shadow-lg shadow-emerald-900/5 h-11 md:h-12"
                                             >
-                                                <FileText className="mr-3 h-5 w-5" />
-                                                Ver Movimientos
+                                                <FileText className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" />
+                                                <span className="lg:hidden xl:inline">Movimientos</span><span className="hidden lg:inline xl:hidden">Ver</span>
                                             </motion.button>
                                         </Link>
 
@@ -372,22 +380,22 @@ export default function ResidentsPage() {
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => handleSendReminder(resident.id)}
-                                            className="w-full flex items-center justify-start px-4 py-3 rounded-lg text-sm font-medium transition-all
-                                            bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 shadow-lg shadow-amber-900/5"
+                                            className="flex-1 lg:flex-none w-full flex items-center justify-center lg:justify-start px-4 py-3 rounded-lg text-xs md:text-sm font-semibold transition-all
+                                            bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30 shadow-lg shadow-amber-900/5 h-11 md:h-12"
                                         >
-                                            <UserCheck className="mr-3 h-5 w-5" />
-                                            Enviar Recordatorio
+                                            <UserCheck className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" />
+                                            <span className="lg:hidden xl:inline">Recordatorio</span><span className="hidden lg:inline xl:hidden">Avisar</span>
                                         </motion.button>
 
                                         <motion.button
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => handleCreateInvoice(resident.id)}
-                                            className="w-full flex items-center justify-start px-4 py-3 rounded-lg text-sm font-medium transition-all
-                                            bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 hover:border-indigo-500/30 shadow-lg shadow-indigo-900/5"
+                                            className="flex-1 lg:flex-none w-full flex items-center justify-center lg:justify-start px-4 py-3 rounded-lg text-xs md:text-sm font-semibold transition-all
+                                            bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 hover:border-indigo-500/30 shadow-lg shadow-indigo-900/5 h-11 md:h-12"
                                         >
-                                            <FilePlus className="mr-3 h-5 w-5" />
-                                            Crear Factura
+                                            <FilePlus className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" />
+                                            <span className="lg:hidden xl:inline">Factura</span><span className="hidden lg:inline xl:hidden">Cobrar</span>
                                         </motion.button>
                                     </div>
                                 </div>

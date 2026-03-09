@@ -114,23 +114,23 @@ export default function AdminDashboardClient({ userEmail, stats }: AdminDashboar
                     </motion.div>
                 </motion.div>
 
-                <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 md:grid-cols-7">
+                <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 lg:grid-cols-7">
                     {/* Main Chart Section */}
-                    <motion.div variants={item} className="col-span-4">
+                    <motion.div variants={item} className="lg:col-span-4">
                         <Card className="h-full bg-zinc-900 border-zinc-800">
                             <CardHeader>
                                 <CardTitle>Resumen de Ingresos</CardTitle>
                                 <CardDescription>Comportamiento de cobros en los últimos 6 meses.</CardDescription>
                             </CardHeader>
                             <CardContent className="pl-2">
-                                <div className="h-[240px] w-full flex items-end justify-between px-4 gap-2">
+                                <div className="h-[200px] md:h-[240px] w-full flex items-end justify-between px-4 gap-1 md:gap-2">
                                     {[45, 60, 55, 70, 65, 80].map((h, i) => (
                                         <div key={i} className="w-full bg-indigo-500/10 hover:bg-indigo-500/20 rounded-t-sm relative group transition-all" style={{ height: `${h}%` }}>
                                             <div className="absolute bottom-0 w-full bg-indigo-600 rounded-t-sm transition-all group-hover:bg-indigo-500" style={{ height: `${h / 2}%` }}></div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex justify-between mt-2 px-4 text-xs text-zinc-500">
+                                <div className="flex justify-between mt-2 px-4 text-[10px] md:text-xs text-zinc-500">
                                     <span>Ene</span><span>Feb</span><span>Mar</span><span>Abr</span><span>May</span><span>Jun</span>
                                 </div>
                             </CardContent>
@@ -138,7 +138,7 @@ export default function AdminDashboardClient({ userEmail, stats }: AdminDashboar
                     </motion.div>
 
                     {/* Recent Activity */}
-                    <motion.div variants={item} className="col-span-3">
+                    <motion.div variants={item} className="lg:col-span-3">
                         <Card className="h-full bg-zinc-900 border-zinc-800">
                             <CardHeader>
                                 <CardTitle>Actividad Reciente</CardTitle>
@@ -147,13 +147,13 @@ export default function AdminDashboardClient({ userEmail, stats }: AdminDashboar
                             <CardContent>
                                 <div className="space-y-4">
                                     {[1, 2, 3].map((i) => (
-                                        <div key={i} className="flex items-center gap-4 p-3 rounded-lg hover:bg-zinc-800/50 transition-colors border border-transparent hover:border-zinc-800">
-                                            <div className="h-9 w-9 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                                        <div key={i} className="flex items-center gap-3 md:gap-4 p-3 rounded-lg hover:bg-zinc-800/50 transition-colors border border-transparent hover:border-zinc-800">
+                                            <div className="h-8 w-8 md:h-9 md:h-9 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 flex-shrink-0">
                                                 <DollarSign className="h-4 w-4" />
                                             </div>
-                                            <div className="flex-1 space-y-1">
-                                                <p className="text-sm font-medium text-white">Pago Recibido</p>
-                                                <p className="text-xs text-zinc-500">Torre Reforma - A-10{i}</p>
+                                            <div className="flex-1 min-w-0 space-y-1">
+                                                <p className="text-sm font-medium text-white truncate">Pago Recibido</p>
+                                                <p className="text-xs text-zinc-500 truncate">Torre Reforma - A-10{i}</p>
                                             </div>
                                             <div className="text-sm font-bold text-emerald-400">+$2,500</div>
                                         </div>
@@ -170,7 +170,7 @@ export default function AdminDashboardClient({ userEmail, stats }: AdminDashboar
                     variants={container}
                     initial="hidden"
                     animate="show"
-                    className="grid gap-6 md:grid-cols-4"
+                    className="grid gap-4 md:gap-6 grid-cols-2 lg:grid-cols-4"
                 >
                     <Link href="/dashboard/properties">
                         <motion.div variants={item} whileHover={{ y: -5 }} className="h-full">

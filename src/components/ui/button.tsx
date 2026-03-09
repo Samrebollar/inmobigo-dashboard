@@ -28,9 +28,9 @@ export function Button({
 
     const sizes = {
         sm: 'h-8 px-3 text-xs',
-        md: 'h-9 px-4 py-2 text-sm',
-        lg: 'h-10 px-8 text-base',
-        icon: 'h-9 w-9 p-0',
+        md: 'h-10 md:h-9 px-4 py-2 text-base md:text-sm',
+        lg: 'h-12 md:h-11 px-8 text-lg md:text-base',
+        icon: 'h-10 w-10 md:h-9 md:w-9 p-0',
     }
 
     return (

@@ -42,23 +42,24 @@ export function ResidentFinanceView() {
     }
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-6 md:space-y-8 p-4 md:p-0">
             {/* Header */}
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
+                    className="text-left"
                 >
-                    <h1 className="text-3xl font-bold tracking-tight text-white">Mis Finanzas</h1>
-                    <p className="text-zinc-400">Historial de pagos y estado de cuenta</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Mis Finanzas</h1>
+                    <p className="text-sm md:text-base text-zinc-400">Historial de pagos y estado de cuenta</p>
                 </motion.div>
 
                 <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="flex gap-3"
+                    className="flex flex-col sm:flex-row gap-3"
                 >
-                    <Button variant="outline" className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white">
+                    <Button variant="outline" className="h-11 border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white w-full sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
                         Estado de Cuenta
                     </Button>
@@ -71,38 +72,38 @@ export function ResidentFinanceView() {
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="md:col-span-2 group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 shadow-xl transition-all hover:border-indigo-500/30 hover:shadow-indigo-500/10"
+                    className="lg:col-span-2 group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-8 shadow-xl transition-all hover:border-indigo-500/30 hover:shadow-indigo-500/10"
                 >
                     {/* Animated Background Gradient */}
                     <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
                     <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl group-hover:bg-indigo-500/20 transition-all duration-700 animate-pulse" />
 
-                    <div className="relative z-10 flex flex-col sm:flex-row justify-between items-center px-2 py-1">
+                    <div className="relative z-10 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-6">
                         <div className="space-y-1">
-                            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-2">Saldo Total a Pagar</h2>
-                            <div className="flex items-center gap-3">
-                                <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white to-zinc-400">
+                            <h2 className="text-[10px] md:text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] mb-2">Saldo Total a Pagar</h2>
+                            <div className="flex items-baseline gap-3">
+                                <span className="text-4xl md:text-6xl font-black text-white tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white to-zinc-500">
                                     ${currentDebt.toLocaleString()}
                                 </span>
-                                <span className="text-sm font-medium text-zinc-500 mt-2">MXN</span>
+                                <span className="text-sm font-bold text-zinc-500">MXN</span>
                             </div>
-                            <div className="flex items-center gap-2 mt-3">
+                            <div className="flex items-center gap-2 mt-4 bg-amber-500/5 border border-amber-500/10 w-fit px-3 py-1 rounded-full">
                                 <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                                 </span>
-                                <p className="text-xs font-medium text-amber-400/90">
+                                <p className="text-[10px] md:text-xs font-bold text-amber-500 uppercase tracking-wider">
                                     Vence el 28 de Febrero
                                 </p>
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-3 w-full sm:w-auto mt-6 sm:mt-0">
-                            <Button size="lg" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 px-8 h-12 rounded-xl font-medium transition-all hover:-translate-y-0.5 hover:shadow-indigo-500/40">
-                                <CreditCard className="mr-2 h-4 w-4" />
+                        <div className="flex flex-col gap-3 w-full sm:w-auto">
+                            <Button size="lg" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 px-8 h-12 md:h-14 rounded-xl font-bold text-base transition-all hover:-translate-y-1 hover:shadow-indigo-600/40 active:scale-95">
+                                <CreditCard className="mr-2 h-5 w-5" />
                                 Pagar Ahora
                             </Button>
-                            <div className="flex justify-center gap-2 text-[10px] text-zinc-500">
+                            <div className="flex justify-center gap-2 text-[9px] md:text-[10px] text-zinc-500 font-medium">
                                 <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Seguro</span>
                                 <span>•</span>
                                 <span>Encriptado SSL</span>

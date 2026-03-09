@@ -35,12 +35,12 @@ export default async function DashboardPage() {
   // --- RESIDENT VIEW ---
   if (resident) {
     return (
-      <div className="mx-auto max-w-7xl space-y-8 p-6">
+      <div className="mx-auto max-w-7xl space-y-6 md:space-y-8 p-4 md:p-6">
         <DashboardHeader userEmail={user.email} userName={resident.first_name} />
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {/* Condominium Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all hover:border-indigo-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-indigo-500/10">
+          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-6 transition-all hover:border-indigo-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-indigo-500/10">
             <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-indigo-500/10 blur-2xl group-hover:bg-indigo-500/20 transition-all" />
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
@@ -49,14 +49,14 @@ export default async function DashboardPage() {
               <h3 className="text-sm font-medium text-zinc-400">Condominio</h3>
             </div>
             <div>
-              <div className="text-2xl font-bold text-white tracking-tight">
+              <div className="text-xl md:text-2xl font-bold text-white tracking-tight">
                 {resident.condominiums?.name || 'No asignado'}
               </div>
             </div>
           </div>
 
           {/* Unit Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all hover:border-emerald-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-emerald-500/10">
+          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-6 transition-all hover:border-emerald-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-emerald-500/10">
             <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl group-hover:bg-emerald-500/20 transition-all" />
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
@@ -65,7 +65,7 @@ export default async function DashboardPage() {
               <h3 className="text-sm font-medium text-zinc-400">Tu Unidad</h3>
             </div>
             <div>
-              <div className="text-2xl font-bold text-white tracking-tight">
+              <div className="text-xl md:text-2xl font-bold text-white tracking-tight">
                 {resident.units?.unit_number || 'Sin asignar'}
               </div>
               <p className="text-xs font-medium text-emerald-500/70 mt-1 uppercase tracking-wider">
@@ -75,7 +75,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Debt Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all hover:border-rose-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-rose-500/10">
+          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-6 transition-all hover:border-rose-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-rose-500/10">
             <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-rose-500/10 blur-2xl group-hover:bg-rose-500/20 transition-all" />
             <div className="flex items-center gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-colors">
@@ -85,7 +85,7 @@ export default async function DashboardPage() {
             </div>
             <div>
               <div className={cn(
-                "text-2xl font-bold tracking-tight",
+                "text-xl md:text-2xl font-bold tracking-tight",
                 (resident.debt_amount || 0) > 0 ? "text-rose-500" : "text-emerald-500"
               )}>
                 ${(resident.debt_amount || 0).toLocaleString()}
@@ -97,14 +97,14 @@ export default async function DashboardPage() {
           </div>
 
           {/* Quick Action - Report Problem */}
-          <div className="group relative cursor-pointer overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 transition-all hover:-translate-y-1 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/20">
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400 transition-all group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white shadow-inner">
+          <div className="group relative cursor-pointer overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 md:p-6 transition-all hover:-translate-y-1 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/20">
+            <div className="flex flex-row md:flex-col items-center justify-start md:justify-center h-full gap-4 md:gap-3 text-left md:text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400 transition-all group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white shadow-inner flex-shrink-0">
                 <Wrench className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors">Reportar Problema</h3>
-                <p className="text-xs text-zinc-500 mt-1 max-w-[120px] mx-auto">Notificar mantenimiento</p>
+                <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors text-sm md:text-base">Reportar Problema</h3>
+                <p className="text-xs text-zinc-500 mt-1 max-w-[120px] md:mx-auto">Notificar mantenimiento</p>
               </div>
             </div>
           </div>

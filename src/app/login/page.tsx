@@ -25,10 +25,10 @@ export default function LoginPage() {
       <div className="relative z-10 grid w-full lg:grid-cols-2 min-h-screen">
 
         {/* Left: Login Form */}
-        <div className="flex h-full flex-col items-center justify-center p-8 sm:p-12 lg:p-24 relative z-20 border-r border-white/5">
+        <div className="flex h-full flex-col items-center justify-center p-6 sm:p-12 lg:p-24 relative z-20 md:border-r border-white/5">
 
           {/* Form Container with Glass Effect if requested, or clean */}
-          <div className="w-full max-w-sm space-y-8">
+          <div className="w-full max-w-sm space-y-8 bg-zinc-900/50 md:bg-transparent p-8 md:p-0 rounded-2xl border border-white/5 md:border-0 shadow-2xl md:shadow-none">
             <LoginForm />
           </div>
         </div>

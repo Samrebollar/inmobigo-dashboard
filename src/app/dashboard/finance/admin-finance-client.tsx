@@ -14,31 +14,31 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
 
     return (
-        <div className="space-y-8 p-8">
+        <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             {/* Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-white">Finanzas & Facturación</h1>
-                    <p className="text-zinc-400">Visión general del estado financiero de tu condominio.</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Finanzas & Facturación</h1>
+                    <p className="text-sm md:text-base text-zinc-400">Visión general del estado financiero de tu condominio.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3">
                     <button
                         onClick={() => setIsCreateInvoiceOpen(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all"
+                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all flex-1 sm:flex-none"
                     >
                         <Plus size={16} />
                         Nueva Factura
                     </button>
                     <button
                         onClick={() => setIsReportModalOpen(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 transition-colors"
+                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 transition-colors flex-1 sm:flex-none border border-zinc-700"
                     >
                         <Download size={16} />
-                        Exportar Reporte
+                        Reporte
                     </button>
-                    <Link href="/dashboard/finance/billing" className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all">
+                    <Link href="/dashboard/finance/billing" className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all flex-[2] sm:flex-none">
                         <FileText size={16} />
-                        Gestionar Facturación
+                        <span className="hidden xs:inline">Gestionar Facturación</span><span className="xs:hidden">Facturación</span>
                     </Link>
                 </div>
             </div>
@@ -47,14 +47,14 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
             <KPICards />
 
             {/* Main Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-3 h-[500px]">
+            <div className="grid gap-6 lg:grid-cols-3 min-h-[400px]">
                 {/* Revenue Chart - Taking up 2/3 space */}
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 order-2 lg:order-1">
                     <RevenueChart />
                 </div>
 
                 {/* Delinquency Center - Taking up 1/3 space */}
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 order-1 lg:order-2">
                     <DelinquencyCenter condominiumId={condominiumId} />
                 </div>
             </div>

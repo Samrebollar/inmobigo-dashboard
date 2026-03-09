@@ -98,10 +98,10 @@ export default async function DashboardLayout({
     const sidebarContent = (
         <>
             <div className="hidden lg:flex h-16 items-center border-b border-zinc-800 px-6">
-                <span className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                    <div className="h-6 w-6 rounded bg-indigo-600"></div>
-                    <span>InmobiGo</span>
-                </span>
+                <Link href="/dashboard" className="flex items-center gap-2">
+                    <img src="/inmobigo-logo.png" alt="InmobiGo Logo" className="h-8 w-8 rounded-lg object-contain" />
+                    <span className="text-lg font-bold tracking-tight text-white">InmobiGo</span>
+                </Link>
             </div>
             <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto">
                 <Link

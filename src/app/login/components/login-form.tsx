@@ -43,11 +43,9 @@ export function LoginForm() {
         <div className="relative z-10 w-full max-w-sm animate-fade-in-up">
             {/* BRANDING */}
             <div className="mb-8 flex flex-col items-center text-center">
-                <div className="flex items-center gap-2 mb-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 font-bold text-white shadow-lg shadow-indigo-500/30 animate-scale-in">
-                        I
-                    </div>
-                    <span className="text-xl font-bold tracking-tight text-white"><span>InmobiGo</span></span>
+                <div className="flex items-center gap-3 mb-2">
+                    <img src="/inmobigo-logo.png" alt="InmobiGo Logo" className="h-12 w-12 rounded-2xl shadow-lg shadow-indigo-500/20 object-contain animate-scale-in" />
+                    <span className="text-2xl font-bold tracking-tight text-white">InmobiGo</span>
                 </div>
             </div>
 

@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+// Force re-index for new route
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, ShieldCheck, AlertCircle, RefreshCw, LogOut, Wallet, Info } from 'lucide-react'
+import { CheckCircle2, ShieldCheck, AlertCircle, RefreshCw, LogOut, Wallet, Info, Zap } from 'lucide-react'
 
 import { motion } from 'framer-motion'
 
@@ -39,11 +40,11 @@ export default function PaymentsPage() {
                 className="flex flex-col gap-1"
             >
                 <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
-                    <Wallet className="h-8 w-8 text-indigo-400" />
-                    Pagos y Cobranza
+                    <Zap className="h-8 w-8 text-indigo-400" />
+                    Integraciones
                 </h1>
                 <p className="text-zinc-400 text-lg">
-                    Conecta tu cuenta de MercadoPago para comenzar a recibir pagos de residentes.
+                    Activa pagos en línea conectando tu cuenta de Mercado Pago.
                 </p>
             </motion.div>
 
@@ -57,7 +58,7 @@ export default function PaymentsPage() {
                         <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-500 to-indigo-600"></div>
                         <CardHeader className="pb-4">
                             <div className="flex items-center justify-between">
-                                <CardTitle className="text-white text-xl">Conectar MercadoPago</CardTitle>
+                                <CardTitle className="text-white text-xl">Vincular MercadoPago</CardTitle>
                                 {isConnected && (
                                     <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1">
                                         <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Cuenta conectada
@@ -65,7 +66,7 @@ export default function PaymentsPage() {
                                 )}
                             </div>
                             <CardDescription className="text-zinc-400 text-base">
-                                Permite que los residentes paguen cuotas, mantenimiento y otros cargos directamente desde la plataforma.
+                                Permite que los residentes paguen cuotas de mantenimiento y otros cargos directamente desde la plataforma.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6 pt-4 border-t border-zinc-800/50">
@@ -81,7 +82,7 @@ export default function PaymentsPage() {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <h3 className="text-white font-semibold text-lg">Aún no has conectado tu cuenta de MercadoPago</h3>
+                                        <h3 className="text-white font-semibold text-lg">Aún no has vinculado tu cuenta de Mercado Pago</h3>
                                         <p className="text-zinc-500 max-w-sm mx-auto">
                                             Vincula tu cuenta para activar los pagos automáticos y reconciliación de facturas.
                                         </p>
@@ -98,7 +99,7 @@ export default function PaymentsPage() {
                                                 Conectando...
                                             </>
                                         ) : (
-                                            'Conectar MercadoPago'
+                                            'Vincular MercadoPago'
                                         )}
                                     </Button>
                                 </div>
@@ -144,10 +145,10 @@ export default function PaymentsPage() {
                 {/* Features Section */}
                 <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-500 ${isConnected ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
                     {[
-                        { title: 'Cobro de cuotas de mantenimiento', desc: 'Automatiza el cobro mensual.' },
+                        { title: 'Cobro automático de cuotas', desc: 'Automatiza el cobro mensual.' },
                         { title: 'Pagos en línea para residentes', desc: 'Tus residentes pagan desde la App.' },
-                        { title: 'Historial automático de pagos', desc: 'Reconciliación bancaria al instante.' },
-                        { title: 'Reportes financieros automáticos', desc: 'Todo en orden para tu contabilidad.' }
+                        { title: 'Registro automático de pagos', desc: 'Reconciliación bancaria al instante.' },
+                        { title: 'Reportes financieros en tiempo real', desc: 'Todo en orden para tu contabilidad.' }
                     ].map((feature, i) => (
                         <motion.div
                             key={i}
@@ -174,7 +175,7 @@ export default function PaymentsPage() {
                     <div className="space-y-1">
                         <h4 className="text-zinc-200 font-semibold">Conexión Segura</h4>
                         <p className="text-zinc-400 text-sm leading-relaxed">
-                            Tus credenciales están protegidas mediante conexión segura OAuth con MercadoPago. InmobiGo no guarda tus contraseñas de acceso.
+                            Tus credenciales están protegidas mediante OAuth con Mercado Pago.
                         </p>
                     </div>
                 </div>

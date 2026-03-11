@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -97,16 +97,16 @@ export default async function DashboardLayout({
 
     const sidebarContent = (
         <>
-            <div className="hidden lg:flex h-16 items-center border-b border-zinc-800 px-6">
-                <Link href="/dashboard" className="flex items-center gap-2">
-                    <img src="/inmobigo-logo.png" alt="InmobiGo Logo" className="h-8 w-8 rounded-lg object-contain" />
-                    <span className="text-lg font-bold tracking-tight text-white">InmobiGo</span>
+            <div className="hidden lg:flex h-20 items-center border-b border-zinc-800 px-6">
+                <Link href="/dashboard" className="flex items-center gap-3">
+                    <img src="/logo-inmobigo.png" alt="InmobiGo Logo" className="h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(79,70,229,0.4)]" />
+                    <span className="text-xl font-bold tracking-tight text-white">InmobiGo</span>
                 </Link>
             </div>
-            <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto">
+            <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto">
                 <Link
                     href="/dashboard"
-                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                 >
                     <LayoutDashboard size={18} />
                     <span>Dashboard</span>
@@ -115,7 +115,7 @@ export default async function DashboardLayout({
                 {showProperties && (
                     <Link
                         href="/dashboard/properties"
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Building2 size={18} />
                         <span>Propiedades</span>
@@ -125,7 +125,7 @@ export default async function DashboardLayout({
                 {showResidents && (
                     <Link
                         href="/dashboard/residents"
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Users size={18} />
                         <span>Residentes</span>
@@ -135,7 +135,7 @@ export default async function DashboardLayout({
                 {showFinance && (
                     <Link
                         href="/dashboard/finance"
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Receipt size={18} />
                         <span>Finanzas</span>
@@ -145,7 +145,7 @@ export default async function DashboardLayout({
                 {showMaintenance && (
                     <Link
                         href="/dashboard/maintenance"
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Wrench size={18} />
                         <span>Mantenimiento</span>
@@ -155,34 +155,34 @@ export default async function DashboardLayout({
                 {showReports && (
                     <Link
                         href="/dashboard/reports"
-                        className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <BarChart3 size={18} />
                         <span>Reportes</span>
                     </Link>
                 )}
 
-                <div className="my-2 border-t border-zinc-800/50"></div>
+                <div className="my-4 border-t border-zinc-800/50"></div>
 
                 {showSettings && (
                     <>
                         <Link
                             href="/dashboard/settings/plans"
-                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
                             <CreditCard size={18} />
                             <span>Planes</span>
                         </Link>
                         <Link
-                            href="/dashboard/settings/payments"
-                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                            href="/dashboard/payments"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
-                            <Wallet size={18} />
-                            <span>Pagos y Cobranza</span>
+                            <Zap size={18} />
+                            <span>Integraciones</span>
                         </Link>
                         <Link
                             href="/dashboard/settings"
-                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
                             <Settings size={18} />
                             <span>Configuración</span>

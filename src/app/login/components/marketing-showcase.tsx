@@ -94,7 +94,7 @@ export function MarketingShowcase({ variant = 'login' }: { variant?: 'login' | '
             </div>
 
             {/* Content Container */}
-            <div className="relative z-10 w-full max-w-[500px] flex flex-col items-center gap-8 opacity-80 hover:opacity-100 transition-opacity duration-700">
+            <div className="relative z-10 w-full max-w-[500px] flex flex-col items-center gap-8 translate-y-20 opacity-80 hover:opacity-100 transition-all duration-700">
 
                 {/* Floating Stats Row - Even narrower for better proportion */}
                 <div className="flex items-center gap-2 w-full max-w-[260px]">

@@ -10,7 +10,14 @@ export default async function ProfilePage() {
         redirect('/login')
     }
 
-    // Fetch Resident Data
+    // Fetch Profile Data (for Avatar and Full Name)
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+    // Fetch Resident Data (if applicable)
     const { data: resident } = await supabase
         .from('residents')
         .select('*')
@@ -18,5 +25,5 @@ export default async function ProfilePage() {
         .single()
 
     // Pass data to Client Component
-    return <ResidentProfileClient user={user} initialResident={resident} />
+    return <ResidentProfileClient user={user} initialResident={resident} profile={profile} />
 }

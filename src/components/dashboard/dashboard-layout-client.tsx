@@ -76,10 +76,10 @@ export function DashboardLayoutClient({
                             className="fixed inset-y-0 left-0 z-50 w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col lg:hidden"
                         >
                             <div className="flex h-16 items-center justify-between border-b border-zinc-800 px-6">
-                                <span className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                                    <div className="h-6 w-6 rounded bg-indigo-600"></div>
+                                <Link href="/dashboard" className="text-lg font-bold tracking-tight text-white flex items-center gap-3">
+                                    <img src="/logo-inmobigo.png" alt="InmobiGo Logo" className="h-12 w-auto object-contain" />
                                     <span>InmobiGo</span>
-                                </span>
+                                </Link>
                                 <button
                                     onClick={() => setIsSidebarOpen(false)}
                                     className="p-2 text-zinc-400 hover:text-white transition-colors"
@@ -113,10 +113,10 @@ export function DashboardLayoutClient({
                         </div>
 
                         {/* Mobile Logo Visibility */}
-                        <div className="md:hidden flex items-center gap-2 lg:hidden">
-                            <div className="h-5 w-5 rounded bg-indigo-600"></div>
-                            <span className="font-bold text-sm tracking-tight">InmobiGo</span>
-                        </div>
+                        <Link href="/dashboard" className="md:hidden flex items-center gap-2 lg:hidden">
+                            <img src="/logo-inmobigo.png" alt="InmobiGo Logo" className="h-10 w-auto object-contain" />
+                            <span className="font-bold text-sm tracking-tight text-white">InmobiGo</span>
+                        </Link>
                     </div>
 
                     <div className="flex items-center gap-3 md:gap-4">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,44 +11,124 @@ import { Camera, Mail, Phone, MapPin, User, Save, Loader2, CheckCircle2 } from '
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
 
-export default function ResidentProfileClient({ user, initialResident }: { user: any, initialResident: any }) {
+export default function ResidentProfileClient({ user, initialResident, profile }: { user: any, initialResident: any, profile: any }) {
+    const router = useRouter()
+    const supabase = createClient()
     const [loading, setLoading] = useState(false)
-    const [resident, setResident] = useState(initialResident || {})
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-    const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Mock avatar state from local storage or previous session could be added here
+    // Initialize state with default empty strings to prevent controlled/uncontrolled warnings
+    const [resident, setResident] = useState(() => {
+        const res = initialResident || {}
+        // If it's an admin (no resident record), try to get names from profile
+        if (!res.first_name && profile?.full_name) {
+            const parts = profile.full_name.split(' ')
+            return {
+                first_name: parts[0] || '',
+                last_name: parts.slice(1).join(' ') || '',
+                phone: '',
+                ...res
+            }
+        }
+        return {
+            first_name: res.first_name || '',
+            last_name: res.last_name || '',
+            phone: res.phone || '',
+            ...res
+        }
+    })
+
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const handleAvatarClick = () => {
         fileInputRef.current?.click()
     }
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (file) {
-            // Create local preview
-            const objectUrl = URL.createObjectURL(file)
-            setAvatarUrl(objectUrl)
-            // in a real app, we would upload to Supabase Storage here
-            // toast.success("Foto de perfil actualizada (Vista previa)")
-            alert("Foto de perfil actualizada (Vista previa)")
+        if (!file) return
+
+        try {
+            setLoading(true)
+            
+            // Create a unique file path
+            const fileExt = file.name.split('.').pop()
+            const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`
+            const filePath = `avatars/${fileName}`
+
+            // Upload to Supabase Storage
+            const { error: uploadError, data } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, file, { upsert: true })
+
+            if (uploadError) throw uploadError
+
+            // Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath)
+
+            // Update profiles table
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ avatar_url: publicUrl })
+                .eq('id', user.id)
+
+            if (updateError) throw updateError
+
+            setAvatarUrl(publicUrl)
+            router.refresh()
+            alert("Foto de perfil actualizada correctamente")
+        } catch (error: any) {
+            console.error('Error uploading avatar:', error)
+            alert(`Error al subir imagen: ${error.message || 'Error desconocido'}`)
+        } finally {
+            setLoading(false)
         }
     }
 
     const handleSave = async () => {
         setLoading(true)
 
-        // Normalize phone number
-        const normalizedPhone = normalizeMexicanPhone(resident.phone || '')
-        const updatedResident = { ...resident, phone: normalizedPhone }
-        setResident(updatedResident)
+        try {
+            // Normalize phone number
+            const normalizedPhone = normalizeMexicanPhone(resident.phone || '')
+            const updatedResident = { ...resident, phone: normalizedPhone }
+            setResident(updatedResident)
 
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        setLoading(false)
-        // In real app: Update residents table
-        // await supabase.from('residents').update(updatedResident).eq('id', resident.id)
-        alert("Cambios guardados correctamente")
+            // Update residents table if they exist
+            if (resident.id) {
+                const { error } = await supabase
+                    .from('residents')
+                    .update({
+                        first_name: resident.first_name,
+                        last_name: resident.last_name,
+                        phone: normalizedPhone
+                    })
+                    .eq('id', resident.id)
+                
+                if (error) throw error
+            }
+
+            // Also update profile table (full_name)
+            const fullName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
+            if (fullName) {
+                const { error } = await supabase
+                    .from('profiles')
+                    .update({ full_name: fullName })
+                    .eq('id', user.id)
+                
+                if (error) throw error
+            }
+
+            router.refresh()
+            alert("Cambios guardados correctamente")
+        } catch (error: any) {
+            console.error('Error saving profile:', error)
+            alert(`Error al guardar: ${error.message}`)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const containerVariants = {
@@ -154,14 +235,16 @@ export default function ResidentProfileClient({ user, initialResident }: { user:
                             <div className="space-y-2">
                                 <Label className="text-zinc-400">Nombre(s)</Label>
                                 <Input
-                                    defaultValue={resident?.first_name || ''}
+                                    value={resident?.first_name || ''}
+                                    onChange={(e) => setResident({ ...resident, first_name: e.target.value })}
                                     className="bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-zinc-400">Apellido(s)</Label>
                                 <Input
-                                    defaultValue={resident?.last_name || ''}
+                                    value={resident?.last_name || ''}
+                                    onChange={(e) => setResident({ ...resident, last_name: e.target.value })}
                                     className="bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
                                 />
                             </div>
@@ -170,7 +253,8 @@ export default function ResidentProfileClient({ user, initialResident }: { user:
                                 <div className="relative">
                                     <Phone className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
                                     <Input
-                                        defaultValue={resident?.phone || ''}
+                                        value={resident?.phone || ''}
+                                        onChange={(e) => setResident({ ...resident, phone: e.target.value })}
                                         className="pl-9 bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
                                         placeholder="+52 (55) 1234-5678"
                                     />

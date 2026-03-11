@@ -10,6 +10,7 @@ import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 
 interface AdminDashboardClientProps {
     userEmail?: string
+    userName?: string
     stats: {
         totalFacturado: number
         totalCobrado: number
@@ -20,7 +21,7 @@ interface AdminDashboardClientProps {
     }
 }
 
-export default function AdminDashboardClient({ userEmail, stats }: AdminDashboardClientProps) {
+export default function AdminDashboardClient({ userEmail, userName, stats }: AdminDashboardClientProps) {
     const container = {
         hidden: { opacity: 0 },
         show: {
@@ -38,7 +39,7 @@ export default function AdminDashboardClient({ userEmail, stats }: AdminDashboar
 
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6">
-            <DashboardHeader userEmail={userEmail} userName="Administrador" />
+            <DashboardHeader userEmail={userEmail} userName={userName} />
 
             <motion.div
                 variants={container}

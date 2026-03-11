@@ -17,7 +17,17 @@ export default async function DashboardPage() {
 
   if (!user) return <div>No autenticado</div>
 
-  // 1. Determine Identity (Admin vs Resident)
+  // 1. Get Profile for Name and Avatar
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, avatar_url')
+    .eq('id', user.id)
+    .single()
+
+  const fullName = profile?.full_name || user.user_metadata?.full_name || ''
+  const firstName = fullName ? fullName.split(' ')[0] : (user.email?.split('@')[0] || 'Usuario')
+
+  // 2. Determine Identity (Admin vs Resident)
   // Check if Admin (Owner/Staff)
   const { data: orgUser } = await supabase
     .from('organization_users')
@@ -36,7 +46,7 @@ export default async function DashboardPage() {
   if (resident) {
     return (
       <div className="mx-auto max-w-7xl space-y-6 md:space-y-8 p-4 md:p-6">
-        <DashboardHeader userEmail={user.email} userName={resident.first_name} />
+        <DashboardHeader userEmail={user.email} userName={firstName} />
 
         <div className="grid gap-4 md:grid-gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {/* Condominium Card */}
@@ -264,6 +274,7 @@ export default async function DashboardPage() {
   return (
     <AdminDashboardClient
       userEmail={user.email}
+      userName={firstName}
       stats={{
         totalFacturado,
         totalCobrado,

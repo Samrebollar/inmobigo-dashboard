@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card'
-import { User, Shield, CreditCard, Mail, Trash2, Plus, Wallet, ArrowRight } from 'lucide-react'
+import { User, Shield, CreditCard, Mail, Trash2, Plus, ArrowRight, Zap } from 'lucide-react'
 import Link from 'next/link'
 
 import { InviteUserModal } from '@/components/settings/InviteUserModal'
@@ -30,6 +30,7 @@ export default function SettingsPage() {
     const [team, setTeam] = useState<TeamMember[]>([])
     const [orgName, setOrgName] = useState('')
     const [showInviteModal, setShowInviteModal] = useState(false)
+    const [subscription, setSubscription] = useState<any>(null)
 
     useEffect(() => {
         initialize()
@@ -56,6 +57,16 @@ export default function SettingsPage() {
             setOrgName(orgName || 'Mi Organización')
             fetchTeam(orgUser.organization_id)
         }
+
+        // Get Subscription
+        const { data: sub } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('subscription_status', 'active')
+            .maybeSingle()
+
+        setSubscription(sub)
     }
 
     const fetchTeam = async (orgId: string) => {
@@ -200,43 +211,45 @@ export default function SettingsPage() {
             />
 
             {/* Subscription */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Link href="/dashboard/settings/payments">
-                    <Card className="bg-zinc-900 border-zinc-800 hover:border-indigo-500/50 transition-all cursor-pointer group h-full">
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                                    <Wallet className="h-5 w-5" />
-                                </div>
-                                <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
-                            </div>
-                            <CardTitle className="text-white mt-4">Pagos y Cobranza</CardTitle>
-                            <CardDescription className="text-zinc-400">Configura tu cuenta de MercadoPago.</CardDescription>
-                        </CardHeader>
-                    </Card>
-                </Link>
-
-                <Card className="bg-zinc-900 border-zinc-800 flex flex-col justify-between">
-                    <CardHeader>
-                        <CardTitle className="text-white">Suscripción / Plan</CardTitle>
-                        <CardDescription className="text-zinc-400">Detalles de tu plan actual.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
+            <Card className="bg-zinc-900 border-zinc-800 flex flex-col justify-between overflow-hidden relative">
+                <CardHeader>
+                    <CardTitle className="text-white">Suscripción / Plan</CardTitle>
+                    <CardDescription className="text-zinc-400">Detalles de tu plan actual.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {subscription ? (
                         <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-indigo-900/20 to-purple-900/20 border border-indigo-500/20">
                             <div className="flex items-center gap-4">
                                 <div className="p-3 rounded-full bg-indigo-500/20 text-indigo-400">
                                     <CreditCard className="h-6 w-6" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-white">Plan Pro</h3>
-                                    <p className="text-sm text-zinc-400">Próxima facturación: 01 Mar 2026</p>
+                                    <h3 className="font-bold text-white">Plan {subscription.plan_name || 'Activo'}</h3>
+                                    <p className="text-sm text-zinc-400">Próxima facturación: {new Date(subscription.current_period_end).toLocaleDateString()}</p>
                                 </div>
                             </div>
                             <Badge className="bg-indigo-500 text-white hover:bg-indigo-600">Activo</Badge>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center p-8 rounded-lg border border-dashed border-zinc-800 bg-zinc-950/50 text-center space-y-4">
+                            <div className="p-3 rounded-full bg-amber-500/10 text-amber-500">
+                                <Shield className="h-8 w-8" />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="font-bold text-white text-lg">Estás en Modo Demo</h3>
+                                <p className="text-sm text-zinc-400 max-w-xs">
+                                    No tienes un plan activo actualmente. Suscríbete para desbloquear todas las funciones.
+                                </p>
+                            </div>
+                            <Link href="/dashboard/settings/plans">
+                                <Button className="bg-indigo-600 hover:bg-indigo-500 text-white">
+                                    Ver Planes Disponibles
+                                </Button>
+                            </Link>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     )
 }

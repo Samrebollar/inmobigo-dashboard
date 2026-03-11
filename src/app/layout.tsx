@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "InmobiGo | Portal Corporativo",
   description: "Plataforma inteligente para la administración de condominios y automatización de cobranza",
+  icons: {
+    icon: "/icon.png?v=4",
+    apple: "/icon.png?v=4",
+  },
 };
 
 export default function RootLayout({

@@ -173,7 +173,7 @@ export default function AdminDashboardClient({ userEmail, userName, stats }: Adm
                     animate="show"
                     className="grid gap-4 md:gap-6 grid-cols-2 lg:grid-cols-4"
                 >
-                    <Link href="/dashboard/properties">
+                    <Link href="/dashboard/condominios">
                         <motion.div variants={item} whileHover={{ y: -5 }} className="h-full">
                             <Card className="h-full bg-zinc-900 border-zinc-800 hover:border-indigo-500/50 transition-colors cursor-pointer group">
                                 <CardContent className="flex flex-col items-center justify-center p-6 gap-4 text-center h-full">

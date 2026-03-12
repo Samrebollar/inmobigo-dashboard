@@ -25,6 +25,27 @@ export const maintenanceService = {
         })) || []
     },
 
+    async getByResident(residentId: string): Promise<Ticket[]> {
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('tickets')
+            .select(`
+                *,
+                condominiums (name),
+                units (unit_number)
+            `)
+            .eq('resident_id', residentId)
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        return data?.map(t => ({
+            ...t,
+            condominium_name: t.condominiums?.name,
+            unit_number: t.units?.unit_number
+        })) || []
+    },
+
     async create(ticket: CreateTicketDTO): Promise<Ticket> {
         const supabase = createClient()
         const { data, error } = await supabase

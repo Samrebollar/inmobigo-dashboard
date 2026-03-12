@@ -12,16 +12,26 @@ interface CreateTicketModalProps {
     isOpen: boolean
     onClose: () => void
     onSuccess: () => void
+    residentId?: string
+    defaultCondominiumId?: string
+    defaultOrganizationId?: string
 }
 
-export function CreateTicketModal({ isOpen, onClose, onSuccess }: CreateTicketModalProps) {
+export function CreateTicketModal({ 
+    isOpen, 
+    onClose, 
+    onSuccess, 
+    residentId, 
+    defaultCondominiumId,
+    defaultOrganizationId 
+}: CreateTicketModalProps) {
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [condominiums, setCondominiums] = useState<{ id: string, name: string }[]>([])
-    const [orgId, setOrgId] = useState<string | null>(null)
+    const [orgId, setOrgId] = useState<string | null>(defaultOrganizationId || null)
 
     const [formData, setFormData] = useState({
-        condominium_id: '',
+        condominium_id: defaultCondominiumId || '',
         title: '',
         description: '',
         priority: 'medium' as TicketPriority,
@@ -68,12 +78,13 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess }: CreateTicketMo
             await maintenanceService.create({
                 ...formData,
                 organization_id: orgId,
+                resident_id: residentId,
                 status: 'open'
             })
             onSuccess()
             onClose()
             setFormData({
-                condominium_id: condominiums[0]?.id || '',
+                condominium_id: condominiums[0]?.id || defaultCondominiumId || '',
                 title: '',
                 description: '',
                 priority: 'medium',

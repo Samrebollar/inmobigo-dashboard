@@ -138,7 +138,7 @@ export default async function DashboardLayout({
 
                 {showProperties && (
                     <Link
-                        href="/dashboard/properties"
+                        href="/dashboard/condominios"
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Building2 size={18} />
@@ -148,7 +148,7 @@ export default async function DashboardLayout({
 
                 {showResidents && (
                     <Link
-                        href="/dashboard/residents"
+                        href="/dashboard/residentes"
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Users size={18} />
@@ -177,27 +177,18 @@ export default async function DashboardLayout({
                 )}
 
                 {isResident && (
-                    <>
-                        <Link
-                            href="/dashboard/property"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                        >
-                            <Home size={18} />
-                            <span>Mi Propiedad</span>
-                        </Link>
-                        <Link
-                            href="/dashboard/profile"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                        >
-                            <User size={18} />
-                            <span>Perfil</span>
-                        </Link>
-                    </>
+                    <Link
+                        href="/dashboard/property"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    >
+                        <Home size={18} />
+                        <span>Mi Propiedad</span>
+                    </Link>
                 )}
 
                 {showReports && (
                     <Link
-                        href="/dashboard/reports"
+                        href="/dashboard/reportes"
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <BarChart3 size={18} />
@@ -210,7 +201,7 @@ export default async function DashboardLayout({
                 {showSettings && (
                     <>
                         <Link
-                            href="/dashboard/settings/plans"
+                            href="/dashboard/configuracion/planes"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
                             <CreditCard size={18} />
@@ -224,7 +215,7 @@ export default async function DashboardLayout({
                             <span>Integraciones</span>
                         </Link>
                         <Link
-                            href="/dashboard/settings"
+                            href="/dashboard/configuracion"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
                             <Settings size={18} />
@@ -233,7 +224,14 @@ export default async function DashboardLayout({
                     </>
                 )}
             </nav>
-            <div className="p-4 border-t border-zinc-800 bg-zinc-900/30">
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900/30 space-y-1">
+                <Link
+                    href="/dashboard/perfil"
+                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                >
+                    <User size={18} />
+                    <span>Perfil</span>
+                </Link>
                 <form action={logout}>
                     <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
                         <LogOut size={18} />

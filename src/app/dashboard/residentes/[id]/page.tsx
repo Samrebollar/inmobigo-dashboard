@@ -215,7 +215,7 @@ export default function ResidentMovementsPage() {
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div className="z-10 relative">
-                        <Link href="/dashboard/residents">
+                        <Link href="/dashboard/residentes">
                             <Button variant="ghost" className="pl-0 gap-2 text-zinc-400 hover:text-white hover:bg-transparent">
                                 <ArrowLeft size={16} />
                                 Volver a Residentes

@@ -125,7 +125,7 @@ export function DashboardLayoutClient({
                                 {displayName}
                             </div>
                         </div>
-                        <Link href="/dashboard/profile" className="flex-shrink-0">
+                        <Link href="/dashboard/perfil" className="flex-shrink-0">
                             {avatarUrl ? (
                                 <img
                                     src={avatarUrl}
@@ -150,7 +150,7 @@ export function DashboardLayoutClient({
                                 </p>
                             </div>
                             <Link
-                                href="/dashboard/settings/plans"
+                                href="/dashboard/configuracion/planes"
                                 className="text-[9px] md:text-[10px] font-black uppercase tracking-widest bg-amber-500 text-black px-3 md:px-4 py-1.5 rounded hover:bg-amber-400 transition-colors flex-shrink-0"
                             >
                                 Ver Planes

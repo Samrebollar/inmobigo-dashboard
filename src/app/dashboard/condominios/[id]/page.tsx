@@ -65,11 +65,11 @@ export default function CondominiumPage() {
             if (data && (id.startsWith('demo-') || user)) {
                 setCondo(data)
             } else {
-                router.push('/dashboard/properties')
+                router.push('/dashboard/condominios')
             }
         } catch (error) {
             console.error(error)
-            router.push('/dashboard/properties')
+            router.push('/dashboard/condominios')
         } finally {
             setLoading(false)
         }
@@ -108,7 +108,7 @@ export default function CondominiumPage() {
 
                 {/* Breadcrumb / Back */}
                 <button
-                    onClick={() => router.push('/dashboard/properties')}
+                    onClick={() => router.push('/dashboard/condominios')}
                     className="relative z-10 mb-6 flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
                     <ArrowLeft className="h-4 w-4" /> Volver a Propiedades

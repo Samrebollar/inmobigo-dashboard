@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
     Wrench, 
@@ -9,38 +10,54 @@ import {
     Download, 
     Bell,
     ChevronRight,
-    Search,
-    Filter,
     MessageSquare,
-    AlertCircle
+    AlertCircle,
+    Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { Ticket } from '@/types/tickets'
+import { maintenanceService } from '@/services/maintenance-service'
+import { CreateTicketModal } from '@/components/maintenance/CreateTicketModal'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 interface ResidentMaintenanceClientProps {
     resident: any
 }
 
 export default function ResidentMaintenanceClient({ resident }: ResidentMaintenanceClientProps) {
-    const reports = [
-        {
-            id: '1',
-            title: 'Fuga en baño principal',
-            date: '15 Feb 2026',
-            status: 'En proceso',
-            statusColor: 'amber',
-            icon: 'drop' // We'll represent this with a custom visual
-        },
-        {
-            id: '2',
-            title: 'Luz del pasillo',
-            date: '10 Feb 2026',
-            status: 'Resuelto',
-            statusColor: 'emerald',
-            icon: 'light'
+    const [loading, setLoading] = useState(true)
+    const [tickets, setTickets] = useState<Ticket[]>([])
+    const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+    useEffect(() => {
+        if (resident?.id) {
+            fetchTickets()
         }
-    ]
+    }, [resident?.id])
+
+    const fetchTickets = async () => {
+        try {
+            setLoading(true)
+            const data = await maintenanceService.getByResident(resident.id)
+            setTickets(data)
+        } catch (error) {
+            console.error('Error fetching tickets:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const getStatusInfo = (status: string) => {
+        switch (status) {
+            case 'open': return { label: 'Pendiente', color: 'rose' }
+            case 'in_progress': return { label: 'En proceso', color: 'amber' }
+            case 'resolved': return { label: 'Resuelto', color: 'emerald' }
+            default: return { label: status, color: 'zinc' }
+        }
+    }
 
     return (
         <div className="mx-auto max-w-7xl space-y-10 p-6 md:p-10 animate-in fade-in duration-500">
@@ -71,7 +88,10 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                             >
-                                <Button className="bg-blue-600 hover:bg-blue-500 text-white h-24 px-16 rounded-[2.5rem] text-3xl font-black shadow-2xl shadow-blue-600/30 transition-all flex items-center gap-6 w-full sm:w-auto relative overflow-hidden group/btn">
+                                <Button 
+                                    onClick={() => setIsCreateOpen(true)}
+                                    className="bg-blue-600 hover:bg-blue-500 text-white h-24 px-16 rounded-[2.5rem] text-3xl font-black shadow-2xl shadow-blue-600/30 transition-all flex items-center gap-6 w-full sm:w-auto relative overflow-hidden group/btn"
+                                >
                                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] transition-transform" />
                                     <Plus className="h-10 w-10" />
                                     Reportar problema
@@ -91,7 +111,6 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                     <div className="relative flex-1 hidden lg:flex justify-center items-center">
                         <div className="relative z-10 scale-110">
                             <div className="relative h-64 w-80">
-                                {/* Mockup Clipboard/Tools visual */}
                                 <motion.div 
                                     animate={{ rotate: [12, 15, 12] }}
                                     transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
@@ -123,7 +142,7 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                 <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Clock className="h-6 w-6 text-indigo-400" />
-                        Mis reportes
+                        Historial de reportes
                     </h2>
                 </div>
 
@@ -131,77 +150,78 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="bg-zinc-900/40 backdrop-blur-sm border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl"
+                    className="bg-zinc-900/40 backdrop-blur-sm border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl min-h-[400px]"
                 >
-                    <div className="w-full">
-                        <div className="grid grid-cols-12 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
-                            <div className="col-span-3 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</div>
-                            <div className="col-span-5 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Problema</div>
-                            <div className="col-span-4 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</div>
+                    {loading ? (
+                        <div className="flex h-[400px] items-center justify-center">
+                            <Loader2 className="h-12 w-12 animate-spin text-indigo-500" />
                         </div>
-                        
-                        <div className="divide-y divide-zinc-800/30">
-                            {reports.map((report, i) => (
-                                <motion.div 
-                                    key={report.id}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.4 + (i * 0.1) }}
-                                    className="grid grid-cols-12 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
-                                >
-                                    <div className="col-span-3 text-zinc-400 font-medium">
-                                        {report.date}
-                                    </div>
-                                    <div className="col-span-5 flex items-center gap-6">
-                                        <div className={cn(
-                                            "h-14 w-14 rounded-2xl flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform",
-                                            report.icon === 'drop' ? "bg-rose-500/10 text-rose-400" : "bg-amber-500/10 text-amber-400"
-                                        )}>
-                                            {report.icon === 'drop' ? (
-                                                <div className="relative">
-                                                    <div className="absolute inset-0 blur-sm bg-rose-400/30 rounded-full animate-pulse" />
-                                                    <AlertCircle className="h-7 w-7 relative z-10" />
-                                                </div>
-                                            ) : (
-                                                <div className="relative">
-                                                    <div className="absolute inset-0 blur-sm bg-amber-400/30 rounded-full animate-pulse" />
+                    ) : tickets.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[400px] text-zinc-500 space-y-4">
+                            <AlertCircle className="h-16 w-16 opacity-20" />
+                            <p className="text-xl font-medium">No tienes reportes activos.</p>
+                            <Button variant="ghost" className="text-indigo-400" onClick={() => setIsCreateOpen(true)}>
+                                Crear tu primer reporte
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="w-full">
+                            <div className="grid grid-cols-12 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
+                                <div className="col-span-3 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</div>
+                                <div className="col-span-5 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Problema</div>
+                                <div className="col-span-4 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</div>
+                            </div>
+                            
+                            <div className="divide-y divide-zinc-800/30">
+                                {tickets.map((ticket, i) => {
+                                    const statusInfo = getStatusInfo(ticket.status)
+                                    return (
+                                        <motion.div 
+                                            key={ticket.id}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.1 * i }}
+                                            className="grid grid-cols-12 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
+                                        >
+                                            <div className="col-span-3 text-zinc-400 font-medium">
+                                                {format(parseISO(ticket.created_at), 'd MMM yyyy', { locale: es })}
+                                            </div>
+                                            <div className="col-span-5 flex items-center gap-6">
+                                                <div className={cn(
+                                                    "h-14 w-14 rounded-2xl flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform",
+                                                    statusInfo.color === 'rose' ? "bg-rose-500/10 text-rose-400" : 
+                                                    statusInfo.color === 'amber' ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"
+                                                )}>
                                                     <Wrench className="h-7 w-7 relative z-10" />
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="space-y-1">
-                                            <h4 className="text-xl font-black text-white group-hover:text-indigo-400 transition-colors">
-                                                {report.title}
-                                            </h4>
-                                            <div className="flex items-center gap-4 text-sm font-bold text-zinc-500">
-                                                <button className="hover:text-white transition-colors">Ver seguimiento</button>
-                                                <span className="text-zinc-800">/</span>
-                                                <button className="hover:text-white transition-colors flex items-center gap-1.5">
-                                                    <Download className="h-3.5 w-3.5" />
-                                                    Descargar PDF
-                                                </button>
+                                                <div className="space-y-1">
+                                                    <h4 className="text-xl font-black text-white group-hover:text-indigo-400 transition-colors">
+                                                        {ticket.title}
+                                                    </h4>
+                                                    <p className="text-sm text-zinc-500 line-clamp-1">{ticket.description}</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div className="col-span-4 flex justify-between items-center">
-                                        <Badge className={cn(
-                                            "px-4 py-2 rounded-xl font-bold text-sm border shadow-lg",
-                                            report.statusColor === 'amber' 
-                                                ? "bg-amber-500/10 text-amber-500 border-amber-500/20" 
-                                                : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                                        )}>
-                                            {report.status}
-                                        </Badge>
-                                        <ChevronRight className="h-5 w-5 text-zinc-700 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
-                                    </div>
-                                </motion.div>
-                            ))}
+                                            <div className="col-span-4 flex justify-between items-center">
+                                                <Badge className={cn(
+                                                    "px-4 py-2 rounded-xl font-bold text-sm border shadow-lg",
+                                                    statusInfo.color === 'rose' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                                    statusInfo.color === 'amber' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : 
+                                                    "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                                )}>
+                                                    {statusInfo.label}
+                                                </Badge>
+                                                <ChevronRight className="h-5 w-5 text-zinc-700 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
+                                            </div>
+                                        </motion.div>
+                                    )
+                                })}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </motion.div>
             </div>
 
-            {/* Bottom Tracker Section (Consistent with Dashboard/Payments) */}
+            {/* Bottom Tracker Section */}
             <motion.div 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -211,15 +231,15 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
             >
                 <div className="flex-1 w-full space-y-4 relative z-10">
                     <div className="flex justify-between items-center text-sm font-bold">
-                        <span className="text-zinc-400 text-base">Tu próximo pago vence en <span className="text-amber-500 animate-pulse">5 días</span></span>
-                        <span className="text-indigo-400">80% completado</span>
+                        <span className="text-zinc-400 text-base">Atención personalizada</span>
+                        <span className="text-indigo-400">Canal directo con el administrador</span>
                     </div>
                     <div className="h-3 w-full bg-zinc-800 rounded-full overflow-hidden shadow-inner p-1">
                         <motion.div 
                             initial={{ width: 0 }}
-                            animate={{ width: '80%' }}
+                            animate={{ width: '100%' }}
                             transition={{ duration: 1.5, ease: "easeOut", delay: 1 }}
-                            className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-indigo-400 rounded-full shadow-[0_0_15px_rgba(79,70,229,0.4)]"
+                            className="h-full bg-gradient-to-r from-emerald-600 via-indigo-500 to-indigo-400 rounded-full shadow-[0_0_15px_rgba(79,70,229,0.4)]"
                         />
                     </div>
                 </div>
@@ -227,10 +247,19 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/5 text-indigo-300 font-black h-14 rounded-2xl flex items-center gap-3 px-8 hover:bg-indigo-600 hover:text-white transition-all shadow-lg group-hover:shadow-indigo-600/20">
                         <Bell className="h-5 w-5" />
-                        Configurar recordatorio
+                        Configurar alertas
                     </Button>
                 </motion.div>
             </motion.div>
+
+            <CreateTicketModal 
+                isOpen={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+                onSuccess={fetchTickets}
+                residentId={resident?.id}
+                defaultCondominiumId={resident?.condominium_id}
+                defaultOrganizationId={resident?.organization_id}
+            />
         </div>
     )
 }

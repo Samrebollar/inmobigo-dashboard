@@ -33,6 +33,8 @@ export default function AdminMaintenanceClient() {
         if (orgUser) {
             setOrgId(orgUser.organization_id)
             fetchTickets(orgUser.organization_id)
+        } else {
+            setLoading(false)
         }
     }
 
@@ -52,11 +54,11 @@ export default function AdminMaintenanceClient() {
         <div className="h-[calc(100vh-6rem)] flex flex-col space-y-6 p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-white">Mantenimiento (Admin)</h1>
-                    <p className="text-zinc-400">Gestiona tickets y reportes de problemas.</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-white">Gestión de Mantenimiento</h1>
+                    <p className="text-zinc-400">Administra los reportes y solicitudes de los residentes.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
+                    <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors">
                         <Filter className="mr-2 h-4 w-4" /> Filtros
                     </Button>
                     <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white">

@@ -103,7 +103,7 @@ export function PropertyCard({
                             Residentes
                         </Button>
                     </Link>
-                    <Link href={`/dashboard/properties/${id}`} className="w-full">
+                    <Link href={`/dashboard/condominios/${id}`} className="w-full">
                         <Button className="w-full gap-2 bg-indigo-600 hover:bg-indigo-500 text-white border-0 transition-all h-10 text-xs">
                             Gestionar
                             <ArrowRight className="h-3.5 w-3.5" />

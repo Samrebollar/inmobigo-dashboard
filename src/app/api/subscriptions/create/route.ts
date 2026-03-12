@@ -36,6 +36,9 @@ const planMap = {
 
 export async function POST(req: Request) {
     try {
+        // 0️⃣ Obtener body primero para evitar problemas de consumo
+        const { planKey } = await req.json()
+        
         const supabase = await createClient()
 
         // 1️⃣ Obtener usuario autenticado
@@ -47,25 +50,95 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // 2️⃣ Obtener organización del usuario
-        const { data: orgUser, error: orgError } = await supabase
+        // 2️⃣ Obtener organización del usuario - Si no tiene, crear una base (Auto-Onboarding)
+        // Usamos admin client para evitar el error de recursión infinita en RLS
+        const { createAdminClient } = await import('@/utils/supabase/admin')
+        const adminSupabase = createAdminClient()
+
+        console.log('Checking existing organization for user:', user.id)
+        
+        // 1. Verificar si ya existe vinculación en organization_users
+        let { data: orgUser, error: orgError } = await adminSupabase
             .from('organization_users')
             .select('organization_id')
             .eq('user_id', user.id)
             .single()
 
+        let organizationId = orgUser?.organization_id
+
         if (orgError || !orgUser) {
-            return NextResponse.json(
-                { error: 'Usuario no pertenece a ninguna organización' },
-                { status: 400 }
-            )
+            console.log('No organization found, auto-onboarding...')
+            
+            // 2. CREACIÓN AUTOMÁTICA DE ORGANIZACIÓN
+            const orgName = 'Mi Organización'
+            
+            const { data: newOrg, error: createOrgError } = await adminSupabase
+                .from('organizations')
+                .insert({ 
+                    name: orgName,
+                    owner_id: user.id,
+                    plan: 'free',
+                    status: 'active'
+                })
+                .select()
+                .single()
+
+            if (createOrgError || !newOrg) {
+                console.error('Error creating organization:', createOrgError)
+                return NextResponse.json(
+                    { 
+                        error: 'Error al inicializar tu organización. Intenta de nuevo.',
+                        message: createOrgError?.message,
+                        details: createOrgError
+                    },
+                    { status: 500 }
+                )
+            }
+
+            console.log('New organization created:', newOrg.id)
+
+            // 3. Vincular usuario como ADMIN
+            const { error: linkUserError } = await adminSupabase
+                .from('organization_users')
+                .insert({
+                    user_id: user.id,
+                    organization_id: newOrg.id,
+                    role: 'admin',
+                    status: 'active'
+                })
+
+            if (linkUserError) {
+                console.error('Error linking user to organization:', linkUserError)
+                return NextResponse.json(
+                    { 
+                        error: 'Error al vincular usuario con la nueva organización.',
+                        message: linkUserError?.message,
+                        details: linkUserError
+                    },
+                    { status: 500 }
+                )
+            }
+
+            // 4. Actualizar perfil del usuario
+            console.log('Updating user profile with organization...')
+            const { error: updateProfileError } = await adminSupabase
+                .from('profiles')
+                .update({ 
+                    organization_id: newOrg.id,
+                    role: 'admin'
+                })
+                .eq('id', user.id)
+
+            if (updateProfileError) {
+                console.warn('Profile update warning:', updateProfileError.message)
+                // No detenemos el flujo ya que la suscripción puede continuar
+            }
+
+            organizationId = newOrg.id
+            console.log('Auto-onboarding completed successfully.')
         }
 
-        const organizationId = orgUser.organization_id
-
-        // 3️⃣ Obtener plan del body
-        const { planKey } = await req.json()
-
+        // 3️⃣ Obtener plan del body (Ya obtenido al inicio como planKey)
         const plan = planMap[planKey as keyof typeof planMap]
 
         if (!plan || !plan.preapproval_plan_id) {
@@ -197,7 +270,11 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error('Subscription Creation Error:', error)
         return NextResponse.json(
-            { error: 'Error interno del servidor' },
+            { 
+                error: 'Error interno del servidor',
+                message: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            },
             { status: 500 }
         )
     }

@@ -1,193 +1,236 @@
+'use client'
+
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Ticket } from '@/types/tickets'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { MoreHorizontal, MessageSquare, Clock, AlertCircle, Wrench, Plus } from 'lucide-react'
+import { 
+    MoreHorizontal, 
+    MessageSquare, 
+    Clock, 
+    AlertCircle, 
+    Wrench, 
+    Plus,
+    Filter,
+    CheckCircle2,
+    User,
+    Home,
+    Search
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface MaintenanceBoardProps {
     tickets: Ticket[]
     onUpdateTicket: (ticket: Ticket) => void
 }
 
+type FilterType = 'all' | 'open' | 'in_progress' | 'resolved'
+
 export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardProps) {
-    const columns = [
-        { 
-            id: 'open', 
-            label: 'Pendientes', 
-            color: 'border-l-rose-500', 
-            headerColor: 'text-rose-400',
-            bgGlow: 'group-hover/column:bg-rose-500/[0.03]',
-            cardGlow: 'bg-rose-500/10',
-            hoverGlow: 'group-hover:bg-rose-500/20',
-            border: 'hover:border-rose-500/40'
-        },
-        { 
-            id: 'in_progress', 
-            label: 'En Progreso', 
-            color: 'border-l-indigo-500', 
-            headerColor: 'text-indigo-400',
-            bgGlow: 'group-hover/column:bg-indigo-500/[0.03]',
-            cardGlow: 'bg-indigo-500/10',
-            hoverGlow: 'group-hover:bg-indigo-500/20',
-            border: 'hover:border-indigo-500/40'
-        },
-        { 
-            id: 'resolved', 
-            label: 'Resueltos', 
-            color: 'border-l-emerald-500', 
-            headerColor: 'text-emerald-400',
-            bgGlow: 'group-hover/column:bg-emerald-500/[0.03]',
-            cardGlow: 'bg-emerald-500/10',
-            hoverGlow: 'group-hover:bg-emerald-500/20',
-            border: 'hover:border-emerald-500/40'
-        }
+    const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+
+    const filters = [
+        { id: 'all', label: 'Todos', icon: Filter },
+        { id: 'open', label: 'Pendientes', icon: AlertCircle, color: 'text-rose-400', glow: 'bg-rose-500/20' },
+        { id: 'in_progress', label: 'En Progreso', icon: Clock, color: 'text-indigo-400', glow: 'bg-indigo-500/20' },
+        { id: 'resolved', label: 'Resueltos', icon: CheckCircle2, color: 'text-emerald-400', glow: 'bg-emerald-500/20' }
     ]
 
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: { staggerChildren: 0.08, delayChildren: 0.1 }
+    const filteredTickets = activeFilter === 'all' 
+        ? tickets 
+        : tickets.filter(t => t.status === activeFilter)
+
+    const getPriorityConfig = (priority: string) => {
+        switch (priority) {
+            case 'critical': return { label: 'Crítica', color: 'rose' }
+            case 'high': return { label: 'Alta', color: 'amber' }
+            case 'medium': return { label: 'Media', color: 'indigo' }
+            default: return { label: 'Baja', color: 'zinc' }
         }
     }
 
-    const itemVariants = {
-        hidden: { y: 15, opacity: 0, scale: 0.98 },
-        visible: {
-            y: 0,
-            opacity: 1,
-            scale: 1,
-            transition: { type: 'spring', stiffness: 400, damping: 25 }
+    const getStatusConfig = (status: string) => {
+        switch (status) {
+            case 'open': return { label: 'Pendiente', color: 'rose' }
+            case 'in_progress': return { label: 'En proceso', color: 'indigo' }
+            case 'resolved': return { label: 'Resuelto', color: 'emerald' }
+            default: return { label: status, color: 'zinc' }
         }
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 h-full overflow-hidden pb-6">
-            {columns.map(col => {
-                const colTickets = tickets.filter(t => t.status === col.id)
+        <div className="space-y-8 pb-10">
+            {/* Unified Status Tabs */}
+            <div className="flex flex-wrap items-center gap-3 bg-zinc-950/40 p-2 rounded-[2rem] border border-zinc-900/50 backdrop-blur-md w-fit">
+                {filters.map(f => {
+                    const isActive = activeFilter === f.id
+                    const Icon = f.icon
+                    const count = f.id === 'all' ? tickets.length : tickets.filter(t => t.status === f.id).length
 
-                return (
-                    <motion.div 
-                        key={col.id} 
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.4 }}
-                        className="flex flex-col h-full bg-zinc-950/20 rounded-[2.5rem] border border-zinc-900/50 shadow-2xl backdrop-blur-sm relative overflow-hidden group/column"
-                    >
-                        {/* Dynamic Column Background Glow */}
-                        <div className={`absolute inset-0 transition-all duration-700 opacity-0 group-hover/column:opacity-100 ${col.bgGlow}`} />
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.01] to-transparent pointer-events-none" />
-                        
-                        <div className={`p-8 border-b border-zinc-900/40 ${col.color} border-l-[6px] rounded-tl-[2.5rem] bg-zinc-900/10 flex items-center justify-between relative z-20`}>
-                            <div className="space-y-1">
-                                <h3 className={`font-black uppercase tracking-[0.2em] text-xs ${col.headerColor}`}>
-                                    {col.label}
-                                </h3>
-                                <div className="h-0.5 w-8 bg-zinc-800 rounded-full group-hover/column:w-16 transition-all duration-500" />
-                            </div>
-                            <motion.span 
-                                whileHover={{ scale: 1.1, rotate: 5 }}
-                                className="text-[11px] font-black bg-zinc-900 text-zinc-400 px-4 py-2 rounded-2xl border border-zinc-800 shadow-xl"
-                            >
-                                {colTickets.length}
-                            </motion.span>
-                        </div>
-
-                        <motion.div 
-                            variants={containerVariants}
-                            initial="hidden"
-                            animate="visible"
-                            className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-10"
+                    return (
+                        <button
+                            key={f.id}
+                            onClick={() => setActiveFilter(f.id as FilterType)}
+                            className={cn(
+                                "relative px-6 py-3 rounded-[1.5rem] flex items-center gap-3 transition-all duration-500 group overflow-hidden",
+                                isActive ? "bg-indigo-600 shadow-2xl shadow-indigo-600/20" : "hover:bg-zinc-900/50"
+                            )}
                         >
-                            <AnimatePresence mode='popLayout'>
-                                {colTickets.length === 0 ? (
-                                    <motion.div 
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="flex flex-col items-center justify-center py-32 text-zinc-800"
-                                    >
-                                        <motion.div 
-                                            animate={{ 
-                                                scale: [1, 1.05, 1],
-                                                opacity: [0.1, 0.2, 0.1]
-                                            }}
-                                            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                            className="h-24 w-24 rounded-full bg-zinc-900 flex items-center justify-center mb-6 border border-zinc-800/30 shadow-inner"
-                                        >
-                                            <Wrench className="h-10 w-10" />
-                                        </motion.div>
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30">Sección vacía</p>
-                                    </motion.div>
-                                ) : (
-                                    colTickets.map(ticket => (
-                                        <motion.div
-                                            key={ticket.id}
-                                            variants={itemVariants}
-                                            layout
-                                            whileHover={{ 
-                                                y: -8, 
-                                                scale: 1.03,
-                                                rotateZ: 0.5 
-                                            }}
-                                            whileTap={{ scale: 0.98 }}
-                                            className="group/card cursor-grab active:cursor-grabbing"
-                                        >
-                                            <Card className={`bg-zinc-900/30 border-zinc-800/80 hover:bg-zinc-900/50 transition-all duration-500 ${col.border} shadow-2xl backdrop-blur-2xl overflow-hidden relative rounded-[2rem]`}>
-                                                {/* Card Interior Glows */}
-                                                <div className={`absolute -top-10 -right-10 h-32 w-32 ${col.cardGlow} rounded-full blur-[40px] opacity-20 group-hover/card:opacity-100 transition-opacity duration-700`} />
-                                                <div className={`absolute -bottom-10 -left-10 h-24 w-24 ${col.cardGlow} rounded-full blur-[30px] opacity-0 group-hover/card:opacity-60 transition-opacity duration-700`} />
-                                                
-                                                <CardContent className="p-7 space-y-5 relative z-10">
-                                                    <div className="flex justify-between items-center">
-                                                        <Badge variant={
-                                                            ticket.priority === 'critical' ? 'destructive' :
-                                                                ticket.priority === 'high' ? 'warning' : 'default'
-                                                        } className="text-[9px] h-6 font-black uppercase tracking-[0.15em] px-3.5 rounded-xl shadow-2xl border-white/5 ring-1 ring-white/10">
-                                                            {ticket.priority === 'low' ? 'Baja' : 
-                                                             ticket.priority === 'medium' ? 'Media' :
-                                                             ticket.priority === 'high' ? 'Alta' : 'Crítica'}
-                                                        </Badge>
-                                                        <motion.button 
-                                                            whileHover={{ rotate: 90, scale: 1.1 }}
-                                                            className="h-10 w-10 rounded-2xl bg-zinc-950/40 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-indigo-600 transition-all border border-zinc-800/50 shadow-lg"
-                                                        >
-                                                            <Plus className="h-5 w-5" />
-                                                        </motion.button>
-                                                    </div>
+                            {isActive && (
+                                <motion.div 
+                                    layoutId="activeTab"
+                                    className="absolute inset-0 bg-indigo-600"
+                                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                                />
+                            )}
+                            <div className="relative z-10 flex items-center gap-3">
+                                <Icon className={cn("h-4 w-4", isActive ? "text-white" : (f.color || "text-zinc-500"))} />
+                                <span className={cn("text-sm font-black tracking-tight", isActive ? "text-white" : "text-zinc-400 group-hover:text-zinc-200")}>
+                                    {f.label}
+                                </span>
+                                <span className={cn(
+                                    "text-[10px] font-black px-2 py-0.5 rounded-lg border",
+                                    isActive ? "bg-white/20 border-white/10 text-white" : "bg-zinc-900 border-zinc-800 text-zinc-500"
+                                )}>
+                                    {count}
+                                </span>
+                            </div>
+                        </button>
+                    )
+                })}
+            </div>
 
-                                                    <div className="space-y-3">
-                                                        <h4 className="text-lg font-black text-white tracking-tight group-hover/card:text-indigo-400 transition-colors">
-                                                            {ticket.title}
-                                                        </h4>
-                                                        <p className="text-sm text-zinc-500 line-clamp-2 leading-relaxed font-medium group-hover/card:text-zinc-400 transition-colors">
-                                                            {ticket.description}
-                                                        </p>
-                                                    </div>
-
-                                                    <div className="flex items-center justify-between pt-6 border-t border-zinc-800/40">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <div className="h-2 w-2 rounded-full bg-zinc-800 group-hover/card:bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] transition-all duration-500" />
-                                                            <span className="text-[10px] font-black text-zinc-600 group-hover/card:text-zinc-400 transition-colors uppercase tracking-wider">
-                                                                {new Date(ticket.created_at).toLocaleDateString()}
-                                                            </span>
-                                                        </div>
-                                                        <div className="px-3 py-1.5 rounded-xl bg-zinc-950/50 border border-zinc-800/40 shadow-inner">
-                                                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest group-hover/card:text-indigo-400 transition-colors">
-                                                                {ticket.unit_number || 'Global'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        </motion.div>
-                                    ))
-                                )}
-                            </AnimatePresence>
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+                <AnimatePresence mode='popLayout'>
+                    {filteredTickets.length === 0 ? (
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="col-span-full py-32 flex flex-col items-center justify-center text-zinc-700 bg-zinc-950/20 rounded-[3rem] border border-zinc-900/50 border-dashed"
+                        >
+                            <div className="h-24 w-24 rounded-full bg-zinc-900/50 flex items-center justify-center mb-6 border border-zinc-800/30">
+                                <Search className="h-10 w-10 opacity-20" />
+                            </div>
+                            <h3 className="text-xl font-black text-zinc-600 tracking-tight mb-2">No se encontraron reportes</h3>
+                            <p className="text-sm font-medium text-zinc-700 uppercase tracking-widest">Intenta cambiar el filtro o crear un reporte nuevo</p>
                         </motion.div>
-                    </motion.div>
-                )
-            })}
+                    ) : (
+                        filteredTickets.map((ticket, i) => {
+                            const priority = getPriorityConfig(ticket.priority)
+                            const status = getStatusConfig(ticket.status)
+
+                            return (
+                                <motion.div
+                                    key={ticket.id}
+                                    layout
+                                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    transition={{ duration: 0.5, delay: i * 0.05 }}
+                                    whileHover={{ y: -8, scale: 1.02 }}
+                                    className="group"
+                                >
+                                    <Card className="bg-zinc-900/40 border-zinc-900 hover:border-indigo-500/40 cursor-pointer transition-all duration-500 shadow-2xl backdrop-blur-2xl rounded-[2.5rem] overflow-hidden group-hover:bg-zinc-900/60 h-full relative">
+                                        {/* Dynamic Glow background */}
+                                        <div className={cn(
+                                            "absolute top-0 right-0 h-40 w-40 rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-700 -mr-20 -mt-20",
+                                            status.color === 'rose' ? "bg-rose-600/10" : status.color === 'indigo' ? "bg-indigo-600/10" : "bg-emerald-600/10"
+                                        )} />
+
+                                        <CardContent className="p-8 space-y-8 relative z-10 flex flex-col h-full">
+                                            {/* Top Metadata */}
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "h-3 w-3 rounded-full animate-pulse",
+                                                        status.color === 'rose' ? "bg-rose-500" : status.color === 'indigo' ? "bg-indigo-500" : "bg-emerald-500"
+                                                    )} />
+                                                    <span className={cn(
+                                                        "text-[10px] font-black uppercase tracking-[0.2em]",
+                                                        status.color === 'rose' ? "text-rose-400" : status.color === 'indigo' ? "text-indigo-400" : "text-emerald-400"
+                                                    )}>
+                                                        {status.label}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <Badge className={cn(
+                                                        "px-3 py-1 rounded-xl font-black text-[10px] uppercase tracking-wider border group-hover:border-white/10 transition-colors",
+                                                        priority.color === 'rose' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                                        priority.color === 'amber' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : 
+                                                        priority.color === 'indigo' ? "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" :
+                                                        "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+                                                    )}>
+                                                        {priority.label}
+                                                    </Badge>
+                                                    <button className="h-10 w-10 rounded-2xl bg-zinc-950/40 flex items-center justify-center text-zinc-600 hover:text-white hover:bg-zinc-800 transition-all border border-zinc-900/50">
+                                                        <MoreHorizontal className="h-5 w-5" />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Body Content */}
+                                            <div className="flex-1 space-y-4">
+                                                <div className="space-y-1">
+                                                    <h4 className="text-2xl font-black text-white tracking-tight group-hover:text-indigo-400 transition-colors leading-none">
+                                                        {ticket.title}
+                                                    </h4>
+                                                    <p className="text-zinc-500 text-sm font-medium line-clamp-3 leading-relaxed group-hover:text-zinc-400 transition-colors">
+                                                        {ticket.description}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Contextual Details (Resident, Condo, Date) */}
+                                            <div className="grid grid-cols-2 gap-4 pt-8 border-t border-zinc-900/50 mt-auto">
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-3 group/sub">
+                                                        <div className="h-10 w-10 rounded-2xl bg-zinc-950/40 border border-zinc-900/50 flex items-center justify-center group-hover/sub:bg-indigo-600/10 group-hover/sub:border-indigo-500/20 transition-all">
+                                                            <User className="h-4 w-4 text-zinc-600 group-hover/sub:text-indigo-400" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Residente</span>
+                                                            <span className="text-xs font-bold text-zinc-300 line-clamp-1">{ticket.resident_name || 'Desconocido'}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-3 group/sub">
+                                                        <div className="h-10 w-10 rounded-2xl bg-zinc-950/40 border border-zinc-900/50 flex items-center justify-center group-hover/sub:bg-emerald-600/10 group-hover/sub:border-emerald-500/20 transition-all">
+                                                            <Home className="h-4 w-4 text-zinc-600 group-hover/sub:text-emerald-400" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Unidad</span>
+                                                            <span className="text-xs font-bold text-zinc-300 line-clamp-1">{ticket.unit_number || 'Global'}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Footer Info */}
+                                            <div className="flex items-center justify-between pt-6 border-t border-zinc-900/50">
+                                                <div className="flex items-center gap-2">
+                                                    <Clock className="h-3.5 w-3.5 text-zinc-700" />
+                                                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
+                                                        {new Date(ticket.created_at).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <button className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-400 transition-colors">
+                                                    Ver Detalles →
+                                                </button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
+                            )
+                        })
+                    )}
+                </AnimatePresence>
+            </div>
         </div>
     )
 }
+
 

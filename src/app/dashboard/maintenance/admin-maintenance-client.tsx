@@ -58,11 +58,8 @@ export default function AdminMaintenanceClient() {
                     <p className="text-zinc-400">Administra los reportes y solicitudes de los residentes.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors">
-                        <Filter className="mr-2 h-4 w-4" /> Filtros
-                    </Button>
-                    <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white">
-                        <Plus className="mr-2 h-4 w-4" /> Nuevo Ticket
+                    <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 rounded-2xl h-12 font-bold shadow-lg shadow-indigo-600/20 transition-all border-none">
+                        <Plus className="mr-2 h-5 w-5" /> Nuevo Ticket
                     </Button>
                 </div>
             </div>

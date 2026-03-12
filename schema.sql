@@ -119,9 +119,22 @@ create policy "Admins can view all invoices in organization"
 -- Function to handle new user signup
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  name_val text;
 begin
+  -- Combine first and last name if full_name is not provided
+  name_val := coalesce(
+    new.raw_user_meta_data->>'full_name', 
+    concat(new.raw_user_meta_data->>'first_name', ' ', new.raw_user_meta_data->>'last_name')
+  );
+
   insert into public.profiles (id, email, full_name, role)
-  values (new.id, new.email, new.raw_user_meta_data->>'full_name', 'resident');
+  values (
+    new.id, 
+    new.email, 
+    trim(name_val), 
+    coalesce(new.raw_user_meta_data->>'role', 'resident')
+  );
   return new;
 end;
 $$ language plpgsql security definer;

@@ -34,8 +34,12 @@ export default async function DashboardPage({
     .eq('id', user.id)
     .single()
 
-  const fullName = profile?.full_name || user.user_metadata?.full_name || ''
-  const firstName = fullName ? fullName.split(' ')[0] : (user.email?.split('@')[0] || 'Usuario')
+  const metaFirstName = user.user_metadata?.first_name
+  const metaLastName = user.user_metadata?.last_name
+  const metaFullName = user.user_metadata?.full_name
+  
+  const fullName = profile?.full_name || metaFullName || (metaFirstName ? `${metaFirstName} ${metaLastName || ''}` : '') || ''
+  const firstName = fullName ? fullName.trim().split(' ')[0] : (user.email?.split('@')[0] || 'Usuario')
 
   // 2. Determine Identity (Admin vs Resident)
   // Check if Admin (Owner/Staff)

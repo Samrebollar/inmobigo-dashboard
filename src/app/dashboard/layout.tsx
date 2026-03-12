@@ -39,9 +39,9 @@ export default async function DashboardLayout({
     // 3. Get Profile for Name fallback and Avatar
     const { data: profile } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url')
+        .select('full_name, avatar_url, role')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
     // Construction of Name + First Surname
     let displayName = 'Usuario'
@@ -52,14 +52,20 @@ export default async function DashboardLayout({
         displayName = `${resident.first_name} ${firstSurname}`.trim()
     } else {
         // Admin / Other
-        const rawName = profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || ''
-        if (rawName) {
-            const parts = rawName.split(' ')
+        // Priority: Profile Name -> Metadata Full Name -> Metadata First/Last -> Email parts
+        const metaFirstName = user.user_metadata?.first_name
+        const metaLastName = user.user_metadata?.last_name
+        const metaFullName = user.user_metadata?.full_name
+
+        const rawName = profile?.full_name || metaFullName || (metaFirstName ? `${metaFirstName} ${metaLastName || ''}` : '') || user.email?.split('@')[0] || ''
+        
+        if (rawName.trim()) {
+            const parts = rawName.trim().split(' ')
             if (parts.length >= 2) {
                 // Take first two words (Name and First Surname roughly)
                 displayName = `${parts[0]} ${parts[1]}`
             } else {
-                displayName = rawName
+                displayName = rawName.trim()
             }
         }
     }
@@ -69,7 +75,13 @@ export default async function DashboardLayout({
 
     if (orgUser?.role) {
         role = orgUser.role
-    } else if (resident || isMetadataResident) {
+    } else if (profile?.role && profile.role !== 'resident') {
+        // Priority to Admin/Staff from DB
+        role = profile.role
+    } else if (user.user_metadata?.role === 'admin') {
+        // Trust metadata for NEW admins if DB is not updated yet
+        role = 'admin'
+    } else if (resident || profile?.role === 'resident' || isMetadataResident) {
         role = 'resident'
     }
 

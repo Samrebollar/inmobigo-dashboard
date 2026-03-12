@@ -1,37 +1,64 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import ResidentMaintenanceView from '@/components/maintenance/resident-maintenance-view'
 import AdminMaintenanceClient from './admin-maintenance-client'
+import ResidentMaintenanceClient from '@/components/dashboard/resident-maintenance-client'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export default async function MaintenancePage() {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+
+    const {
+        data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
         redirect('/login')
     }
 
-    // Check User Role
-    const { data: profile } = await supabase
-        .from('profiles')
+    // 1. Check if Admin/Staff
+    const { data: orgUser } = await supabase
+        .from('organization_users')
         .select('role')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .single()
 
-    console.log("Maintenance Page Debug:", { userId: user.id, profile, role: profile?.role })
+    // 2. Check if Resident
+    const { data: resident } = await supabase
+        .from('residents')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-    const isResident = true // FORCED FOR DEBUGGING: profile?.role === 'resident'
+    const isMetadataResident = user.user_metadata?.role === 'resident'
+    const isResident = !!resident || isMetadataResident
 
     if (isResident) {
+        const mockResident = resident || {
+            first_name: user.user_metadata?.full_name?.split(' ')[0] || 'Residente',
+            condominiums: { name: 'Condominio Demo' },
+            units: { unit_number: 'A-101' },
+            debt_amount: 2500,
+        }
+
         return (
             <>
-                <ResidentMaintenanceView user={user} />
-                <div className="fixed bottom-0 right-0 p-1 bg-red-500/50 text-[10px] text-white z-50">
-                    Debug Role: {JSON.stringify(profile)}
+                <ResidentMaintenanceClient resident={mockResident} />
+                <div className="fixed bottom-4 right-4 z-50">
+                    <div className="bg-emerald-600 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-lg text-center">
+                        VISTA: RESIDENTE ACTIVADA
+                    </div>
                 </div>
             </>
         )
     }
 
+    // If Admin/Staff
+    if (orgUser || user.user_metadata?.role === 'admin') {
+        return <AdminMaintenanceClient />
+    }
+
+    // Default Fallback
     return <AdminMaintenanceClient />
 }

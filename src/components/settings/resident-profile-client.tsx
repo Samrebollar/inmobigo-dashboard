@@ -76,9 +76,20 @@ export default function ResidentProfileClient({ user, initialResident, profile }
 
             if (updateError) throw updateError
 
+            // ALSO update auth metadata for better sync with Layout
+            const { error: authError } = await supabase.auth.updateUser({
+                data: { avatar_url: publicUrl }
+            })
+
+            if (authError) console.error('Error updating auth metadata:', authError)
+
             setAvatarUrl(publicUrl)
-            router.refresh()
-            alert("Foto de perfil actualizada correctamente")
+            
+            // Wait a bit for DB propagation before refreshing server components
+            setTimeout(() => {
+                router.refresh()
+                alert("Foto de perfil actualizada correctamente")
+            }, 800)
         } catch (error: any) {
             console.error('Error uploading avatar:', error)
             alert(`Error al subir imagen: ${error.message || 'Error desconocido'}`)
@@ -160,6 +171,21 @@ export default function ResidentProfileClient({ user, initialResident, profile }
                 <div className="h-48 w-full bg-gradient-to-r from-indigo-900 via-purple-900 to-zinc-900 opacity-80" />
                 <div className="absolute top-0 inset-0 bg-grid-white/[0.05] bg-[length:20px_20px]" />
 
+                {/* Status Badge - Top Right */}
+                <div className="absolute top-6 right-8 z-20">
+                    <motion.div 
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.5 }}
+                        className="bg-zinc-950/40 backdrop-blur-xl border border-white/5 px-3 py-1.5 rounded-xl shadow-2xl flex items-center gap-2"
+                    >
+                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-100">
+                            Residente <span className="text-indigo-400">Verificado</span>
+                        </span>
+                    </motion.div>
+                </div>
+
                 <div className="px-8 pb-8 flex flex-col md:flex-row items-end md:items-center gap-6 -mt-12 relative z-10">
                     {/* Avatar Upload */}
                     <motion.div
@@ -193,14 +219,9 @@ export default function ResidentProfileClient({ user, initialResident, profile }
                     </motion.div>
 
                     <div className="flex-1 pb-2">
-                        <div className="flex items-center gap-3 mb-1">
-                            <h1 className="text-3xl font-bold text-white tracking-tight">
-                                {resident?.first_name ? `${resident.first_name} ${resident.last_name || ''}` : 'Residente'}
-                            </h1>
-                            <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20 transition-colors">
-                                Residente Verificado
-                            </Badge>
-                        </div>
+                        <h1 className="text-3xl font-bold text-white tracking-tight mb-1">
+                            {resident?.first_name ? `${resident.first_name} ${resident.last_name || ''}` : 'Residente'}
+                        </h1>
                         <p className="text-zinc-400 flex items-center gap-2 text-sm">
                             <Mail className="h-4 w-4" /> {user.email}
                         </p>

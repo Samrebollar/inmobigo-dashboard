@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -32,7 +32,9 @@ export default async function DashboardLayout({
         .from('residents')
         .select('id, first_name, last_name')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
+
+    const isMetadataResident = user.user_metadata?.role === 'resident'
 
     // 3. Get Profile for Name fallback and Avatar
     const { data: profile } = await supabase
@@ -67,7 +69,7 @@ export default async function DashboardLayout({
 
     if (orgUser?.role) {
         role = orgUser.role
-    } else if (resident) {
+    } else if (resident || isMetadataResident) {
         role = 'resident'
     }
 
@@ -104,6 +106,16 @@ export default async function DashboardLayout({
                 </Link>
             </div>
             <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto">
+                {user.email === 'acostasamuel947@gmail.com' && (
+                    <Link
+                        href="/owner/dashboard"
+                        className="flex items-center gap-3 rounded-md bg-indigo-500/10 px-3 py-2.5 text-sm font-bold text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all mb-4"
+                    >
+                        <LayoutDashboard size={18} />
+                        <span>Panel de Dueño</span>
+                    </Link>
+                )}
+
                 <Link
                     href="/dashboard"
                     className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
@@ -134,11 +146,11 @@ export default async function DashboardLayout({
 
                 {showFinance && (
                     <Link
-                        href="/dashboard/finance"
+                        href={isResident ? "/dashboard/payments" : "/dashboard/finance"}
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
-                        <Receipt size={18} />
-                        <span>Finanzas</span>
+                        <CreditCard size={18} />
+                        <span>{isResident ? 'Pagos' : 'Finanzas'}</span>
                     </Link>
                 )}
 
@@ -150,6 +162,25 @@ export default async function DashboardLayout({
                         <Wrench size={18} />
                         <span>Mantenimiento</span>
                     </Link>
+                )}
+
+                {isResident && (
+                    <>
+                        <Link
+                            href="/dashboard/property"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <Home size={18} />
+                            <span>Mi Propiedad</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/profile"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <User size={18} />
+                            <span>Perfil</span>
+                        </Link>
+                    </>
                 )}
 
                 {showReports && (
@@ -174,7 +205,7 @@ export default async function DashboardLayout({
                             <span>Planes</span>
                         </Link>
                         <Link
-                            href="/dashboard/payments"
+                            href="/dashboard/integrations"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
                             <Zap size={18} />
@@ -191,10 +222,6 @@ export default async function DashboardLayout({
                 )}
             </nav>
             <div className="p-4 border-t border-zinc-800 bg-zinc-900/30">
-                <Link href="/dashboard/profile" className="flex items-center gap-3 mb-4 text-sm font-medium text-zinc-400 hover:text-white transition-colors">
-                    <User size={18} />
-                    <span>Mi Perfil</span>
-                </Link>
                 <form action={logout}>
                     <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
                         <LogOut size={18} />

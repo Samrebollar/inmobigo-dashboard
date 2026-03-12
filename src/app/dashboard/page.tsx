@@ -7,8 +7,18 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Wrench } from 'lucide-react'
 import AdminDashboardClient from '@/components/dashboard/admin-dashboard-client'
+import ResidentDashboardClient from '@/components/dashboard/resident-dashboard-client'
 
-export default async function DashboardPage() {
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const params = await searchParams
+  const forceView = params.view
   const supabase = await createClient()
 
   const {
@@ -40,141 +50,43 @@ export default async function DashboardPage() {
     .from('residents')
     .select('*, condominiums(name), units(unit_number)')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
+
+  const isMetadataResident = user.user_metadata?.role === 'resident'
+  const isResident = !!resident || isMetadataResident || forceView === 'resident'
 
   // --- RESIDENT VIEW ---
-  if (resident) {
+  // If forceView=resident is present in the URL, or user is metadata resident or in residents table
+  if (isResident) {
+    const mockResident = resident || {
+      first_name: firstName,
+      last_name: '',
+      condominiums: { name: 'Condominio Demo' },
+      units: { unit_number: 'A-101' },
+      debt_amount: 2500,
+      last_payment_amount: 2500,
+      active_tickets_count: 1,
+      paid_installments_count: 10
+    }
+    
     return (
-      <div className="mx-auto max-w-7xl space-y-6 md:space-y-8 p-4 md:p-6">
-        <DashboardHeader userEmail={user.email} userName={firstName} />
-
-        <div className="grid gap-4 md:grid-gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Condominium Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-6 transition-all hover:border-indigo-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-indigo-500/10">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-indigo-500/10 blur-2xl group-hover:bg-indigo-500/20 transition-all" />
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                <Building className="h-5 w-5" />
-              </div>
-              <h3 className="text-sm font-medium text-zinc-400">Condominio</h3>
-            </div>
-            <div>
-              <div className="text-xl md:text-2xl font-bold text-white tracking-tight">
-                {resident.condominiums?.name || 'No asignado'}
-              </div>
-            </div>
+      <>
+        {/* DEBUG/DEMO FLAG */}
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+           <div className="bg-emerald-600 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-lg text-center">
+            VISTA: RESIDENTE ACTIVADA
           </div>
-
-          {/* Unit Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-6 transition-all hover:border-emerald-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-emerald-500/10">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl group-hover:bg-emerald-500/20 transition-all" />
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                <Home className="h-5 w-5" />
-              </div>
-              <h3 className="text-sm font-medium text-zinc-400">Tu Unidad</h3>
-            </div>
-            <div>
-              <div className="text-xl md:text-2xl font-bold text-white tracking-tight">
-                {resident.units?.unit_number || 'Sin asignar'}
-              </div>
-              <p className="text-xs font-medium text-emerald-500/70 mt-1 uppercase tracking-wider">
-                {resident.units?.floor ? `Piso ${resident.units.floor}` : 'Privada'}
-              </p>
-            </div>
-          </div>
-
-          {/* Debt Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-6 transition-all hover:border-rose-500/50 hover:bg-zinc-900/80 hover:shadow-lg hover:shadow-rose-500/10">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-rose-500/10 blur-2xl group-hover:bg-rose-500/20 transition-all" />
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-colors">
-                <DollarSign className="h-5 w-5" />
-              </div>
-              <h3 className="text-sm font-medium text-zinc-400">Saldo Pendiente</h3>
-            </div>
-            <div>
-              <div className={cn(
-                "text-xl md:text-2xl font-bold tracking-tight",
-                (resident.debt_amount || 0) > 0 ? "text-rose-500" : "text-emerald-500"
-              )}>
-                ${(resident.debt_amount || 0).toLocaleString()}
-              </div>
-              <p className="text-xs text-zinc-500 mt-1">
-                {(resident.debt_amount || 0) > 0 ? 'Pago requerido' : 'Al día'}
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Action - Report Problem */}
-          <div className="group relative cursor-pointer overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 md:p-6 transition-all hover:-translate-y-1 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/20">
-            <div className="flex flex-row md:flex-col items-center justify-start md:justify-center h-full gap-4 md:gap-3 text-left md:text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400 transition-all group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white shadow-inner flex-shrink-0">
-                <Wrench className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors text-sm md:text-base">Reportar Problema</h3>
-                <p className="text-xs text-zinc-500 mt-1 max-w-[120px] md:mx-auto">Notificar mantenimiento</p>
-              </div>
-            </div>
-          </div>
+          {forceView === 'resident' && (
+            <Link href="/dashboard" className="bg-zinc-800 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-lg hover:bg-zinc-700 text-center">
+              VOLVER A ADMIN
+            </Link>
+          )}
         </div>
-
-        {/* Recent Activity / Announcements Placeholder */}
-        {/* Announcements Section */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
-                <Activity className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-white">Avisos Recientes</h3>
-                <p className="text-sm text-zinc-400">Comunicados de la administración</p>
-              </div>
-            </div>
-            <Button variant="ghost" className="text-xs text-zinc-500 hover:text-white">
-              Ver historial
-            </Button>
-          </div>
-
-          <div className="space-y-4">
-            {/* Mock Announcement 1 */}
-            <div className="group flex flex-col gap-2 rounded-xl border border-zinc-800/50 bg-zinc-900/50 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-800/50">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-2 w-2 rounded-full bg-indigo-500"></span>
-                  <span className="text-xs font-medium text-indigo-400">Mantenimiento</span>
-                </div>
-                <span className="text-xs text-zinc-500">Hace 2 horas</span>
-              </div>
-              <div>
-                <h4 className="font-medium text-white group-hover:text-indigo-400 transition-colors">Limpieza de Cisterna Programada</h4>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Se realizará mantenimiento preventivo el día Jueves 20. El servicio de agua podría verse interrumpido de 10am a 2pm.
-                </p>
-              </div>
-            </div>
-
-            {/* Mock Announcement 2 */}
-            <div className="group flex flex-col gap-2 rounded-xl border border-zinc-800/50 bg-zinc-900/50 p-4 transition-all hover:border-zinc-700 hover:bg-zinc-800/50">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-2 w-2 rounded-full bg-emerald-500"></span>
-                  <span className="text-xs font-medium text-emerald-400">Administrativo</span>
-                </div>
-                <span className="text-xs text-zinc-500">Ayer</span>
-              </div>
-              <div>
-                <h4 className="font-medium text-white group-hover:text-emerald-400 transition-colors">Reunión de Condóminos</h4>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Recordatorio: La asamblea general será este fin de mes en el salón de usos múltiples.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+        <ResidentDashboardClient 
+          resident={mockResident} 
+          userName={firstName} 
+        />
+      </>
     )
   }
 

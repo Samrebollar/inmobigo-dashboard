@@ -12,9 +12,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "InmobiGo | Portal Corporativo",
-  description: "Plataforma inteligente para la administración de condominios y automatización de cobranza",
+  description:
+    "Plataforma inteligente para la administración de condominios y automatización de cobranza",
   icons: {
     icon: "/icon.png?v=4",
     apple: "/icon.png?v=4",
@@ -23,12 +24,17 @@ export const metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="es" translate="no" suppressHydrationWarning>
+      <head>
+        <meta name="google" content="notranslate" />
+      </head>
+
       <body
+        translate="no"
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}

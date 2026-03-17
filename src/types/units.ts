@@ -8,6 +8,8 @@ export interface Unit {
     type: string
     status: UnitStatus
     size_m2?: number
+    monto_mensual?: number
+    billing_day?: number
     created_at?: string
 }
 
@@ -18,6 +20,8 @@ export interface CreateUnitDTO {
     type: string
     status: UnitStatus
     size_m2?: number
+    monto_mensual?: number
+    billing_day?: number
 }
 
 export interface UpdateUnitDTO extends Partial<CreateUnitDTO> { }

@@ -4,24 +4,28 @@ import { Ticket, CreateTicketDTO, UpdateTicketDTO } from '@/types/tickets'
 export const maintenanceService = {
     async getByOrganization(organizationId: string): Promise<Ticket[]> {
         const supabase = createClient()
+        // Fetch tickets
         const { data, error } = await supabase
             .from('tickets')
             .select(`
                 *,
                 condominiums (name),
-                units (unit_number),
-                residents (first_name, last_name)
+                units (unit_number)
             `)
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
 
-        if (error) throw error
+        if (error) {
+            console.error('[maintenanceService.getByOrganization] db error:', error)
+            throw error
+        }
 
+        // We can't join directly to residents sometimes due to schema issues, so let's fetch profiles manually or omit
         return data?.map(t => ({
             ...t,
-            condominium_name: t.condominiums?.name,
-            unit_number: t.units?.unit_number,
-            resident_name: t.residents ? `${t.residents.first_name} ${t.residents.last_name}` : 'N/A'
+            condominium_name: t.condominiums?.name || 'N/A',
+            unit_number: t.units?.unit_number || 'N/A',
+            resident_name: 'Residente' // Fallback for now to prevent app crash
         })) || []
     },
 

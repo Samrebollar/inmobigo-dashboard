@@ -26,7 +26,9 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
         unit_number: '',
         floor: '',
         type: 'apartment',
-        status: 'vacant'
+        status: 'vacant',
+        monto_mensual: undefined,
+        billing_day: undefined
     })
 
     // Reset form when modal opens
@@ -37,14 +39,18 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                     unit_number: unitToEdit.unit_number,
                     floor: unitToEdit.floor,
                     type: unitToEdit.type,
-                    status: unitToEdit.status
+                    status: unitToEdit.status,
+                    monto_mensual: unitToEdit.monto_mensual,
+                    billing_day: unitToEdit.billing_day
                 })
             } else {
                 setFormData({
                     unit_number: '',
                     floor: '',
                     type: 'apartment',
-                    status: 'vacant'
+                    status: 'vacant',
+                    monto_mensual: undefined,
+                    billing_day: undefined
                 })
             }
         }
@@ -56,13 +62,13 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
 
         try {
             let result: Unit
+            const payload = formData as CreateUnitDTO
+
             if (unitToEdit) {
-                result = await unitsService.update(unitToEdit.id, {
-                    ...formData as any
-                })
+                result = await unitsService.update(unitToEdit.id, payload)
             } else {
                 result = await unitsService.create({
-                    ...formData as CreateUnitDTO,
+                    ...payload,
                     condominium_id: condominiumId
                 })
             }
@@ -127,6 +133,25 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                                         <option value="storage">Bodega</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label="Monto mensual ($ renta/cuota)"
+                                    type="number"
+                                    placeholder="Ej. 5000"
+                                    value={formData.monto_mensual || ''}
+                                    onChange={(e) => setFormData({ ...formData, monto_mensual: parseFloat(e.target.value) || undefined })}
+                                />
+                                <Input
+                                    label="Día de cobro (1-31)"
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    placeholder="Ej. 5"
+                                    value={formData.billing_day || ''}
+                                    onChange={(e) => setFormData({ ...formData, billing_day: parseInt(e.target.value) || undefined })}
+                                />
                             </div>
 
                             <div className="space-y-2">

@@ -171,18 +171,83 @@ export default async function DashboardPage({
   let totalFacturado = 0
   let totalCobrado = 0
   let facturasVencidas = 0
+  let recentActivity: any[] = []
+  let incidenciasPendientes = 0
 
   if (activeIds.length > 0) {
     const { data: invoices } = await supabase
       .from('invoices')
-      .select('amount, status')
+      .select('id, amount, status, updated_at, condominiums(name), units(unit_number), residents(first_name, last_name)')
       .in('condominium_id', activeIds)
+      .order('updated_at', { ascending: false })
 
     invoices?.forEach(inv => {
       totalFacturado += inv.amount
       if (inv.status === 'paid') totalCobrado += inv.amount
       if (inv.status === 'overdue') facturasVencidas++
     })
+
+    // Fetch Tickets
+    const { data: tickets } = await supabase
+      .from('tickets')
+      .select('id, title, status, created_at, condominiums(name), units(unit_number)')
+      .in('condominium_id', activeIds)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    // Fetch Residents
+    const { data: residents } = await supabase
+      .from('residents')
+      .select('id, first_name, last_name, created_at, condominiums(name), units(unit_number)')
+      .in('condominium_id', activeIds)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    // Combine into Unified Activity Feed
+    const aiInvoices = (invoices || [])
+      .filter(inv => inv.status === 'paid' || inv.status === 'overdue')
+      .map(inv => ({
+        id: `inv_${inv.id}`,
+        type: inv.status === 'paid' ? 'payment' : 'overdue',
+        title: inv.status === 'paid' 
+          ? `Pago recibido de ${inv.residents?.first_name || 'Residente'} ${(inv.residents as any)?.last_name || ''}` 
+          : `Pago vencido de ${inv.units?.unit_number || 'Unidad'}`,
+        subtitle: `${inv.condominiums?.name || 'Condominio'} - ${inv.units?.unit_number || 'Unidad'}`,
+        amount: inv.amount,
+        date: new Date(inv.updated_at),
+        status: inv.status
+      }))
+
+    const aiTickets = (tickets || []).map(t => ({
+      id: `tkt_${t.id}`,
+      type: 'incident',
+      title: `Nueva incidencia: ${t.title}`,
+      subtitle: `${t.condominiums?.name || 'Condominio'} - ${t.units?.unit_number || 'Unidad'}`,
+      date: new Date(t.created_at),
+      status: t.status
+    }))
+
+    const aiResidents = (residents || []).map(r => ({
+      id: `res_${r.id}`,
+      type: 'resident',
+      title: `Nuevo residente agregado: ${r.first_name} ${r.last_name}`,
+      subtitle: `${r.condominiums?.name || 'Condominio'} - ${r.units?.unit_number || 'Unidad'}`,
+      date: new Date(r.created_at),
+      status: 'active'
+    }))
+
+    recentActivity = [...aiInvoices, ...aiTickets, ...aiResidents]
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 5)
+
+    // Calculate Pending Incidents count
+    const { count: pendingTicketsCount } = await supabase
+      .from('tickets')
+      .select('*', { count: 'exact', head: true })
+      .in('condominium_id', activeIds)
+      .in('status', ['pending', 'in_progress', 'open'])
+    
+    incidenciasPendientes = pendingTicketsCount || 0
   }
 
   const tasaCobranza = totalFacturado > 0 ? ((totalCobrado / totalFacturado) * 100).toFixed(1) : '0'
@@ -197,8 +262,11 @@ export default async function DashboardPage({
         facturasVencidas,
         activeCount: activeIds.length,
         totalUnits: totalUnits,
-        tasaCobranza
+        tasaCobranza,
+        incidenciasPendientes,
+        paquetes: 0
       }}
+      recentActivity={recentActivity}
     />
   )
 }

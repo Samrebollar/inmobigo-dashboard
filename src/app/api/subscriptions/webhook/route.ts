@@ -6,7 +6,7 @@ const PLAN_LIMITS: Record<string, number> = {
     PLUS: 60,
     ELITE: 120,
     CORPORATE: 250,
-    'CORE PRUEBA': 500,
+    'CORE PRUEBA': 5,
     'CORPORATE PLUS': 1000,
 }
 

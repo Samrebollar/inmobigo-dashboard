@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { DollarSign, Building, Users, Activity, TrendingUp, Home, Wrench } from 'lucide-react'
+import { DollarSign, Building, Users, Activity, TrendingUp, Home, Wrench, AlertTriangle, Package } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -18,10 +18,13 @@ interface AdminDashboardClientProps {
         activeCount: number
         totalUnits: number
         tasaCobranza: string
+        incidenciasPendientes?: number
+        paquetes?: number
     }
+    recentActivity?: any[]
 }
 
-export default function AdminDashboardClient({ userEmail, userName, stats }: AdminDashboardClientProps) {
+export default function AdminDashboardClient({ userEmail, userName, stats, recentActivity = [] }: AdminDashboardClientProps) {
     const container = {
         hidden: { opacity: 0 },
         show: {
@@ -120,8 +123,8 @@ export default function AdminDashboardClient({ userEmail, userName, stats }: Adm
                     <motion.div variants={item} className="lg:col-span-4">
                         <Card className="h-full bg-zinc-900 border-zinc-800">
                             <CardHeader>
-                                <CardTitle>Resumen de Ingresos</CardTitle>
-                                <CardDescription>Comportamiento de cobros en los últimos 6 meses.</CardDescription>
+                                <CardTitle className="text-white">Resumen de Ingresos</CardTitle>
+                                <CardDescription className="text-zinc-400">Comportamiento de cobros en los últimos 6 meses.</CardDescription>
                             </CardHeader>
                             <CardContent className="pl-2">
                                 <div className="h-[200px] md:h-[240px] w-full flex items-end justify-between px-4 gap-1 md:gap-2">
@@ -142,29 +145,143 @@ export default function AdminDashboardClient({ userEmail, userName, stats }: Adm
                     <motion.div variants={item} className="lg:col-span-3">
                         <Card className="h-full bg-zinc-900 border-zinc-800">
                             <CardHeader>
-                                <CardTitle>Actividad Reciente</CardTitle>
-                                <CardDescription>Últimos movimientos registrados.</CardDescription>
+                                {/* Re-imported missing icons at the top of file later if needed, assuming Wrench, Users, etc. are already imported */}
+                                <CardTitle className="text-white">Actividad del condominio</CardTitle>
+                                <CardDescription className="text-zinc-400">Últimos movimientos registrados.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
-                                    {[1, 2, 3].map((i) => (
-                                        <div key={i} className="flex items-center gap-3 md:gap-4 p-3 rounded-lg hover:bg-zinc-800/50 transition-colors border border-transparent hover:border-zinc-800">
-                                            <div className="h-8 w-8 md:h-9 md:h-9 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 flex-shrink-0">
-                                                <DollarSign className="h-4 w-4" />
-                                            </div>
-                                            <div className="flex-1 min-w-0 space-y-1">
-                                                <p className="text-sm font-medium text-white truncate">Pago Recibido</p>
-                                                <p className="text-xs text-zinc-500 truncate">Torre Reforma - A-10{i}</p>
-                                            </div>
-                                            <div className="text-sm font-bold text-emerald-400">+$2,500</div>
+                                    {recentActivity && recentActivity.length > 0 ? (
+                                        recentActivity.map((activity, i) => {
+                                            // Determine styles and icons based on type
+                                            let Icon = Activity;
+                                            let colorClass = 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20';
+                                            let textClass = 'text-zinc-400';
+                                            
+                                            switch (activity.type) {
+                                                case 'payment':
+                                                    Icon = DollarSign;
+                                                    colorClass = 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
+                                                    textClass = 'text-emerald-400';
+                                                    break;
+                                                case 'overdue':
+                                                    Icon = Activity; // Or AlertCircle
+                                                    colorClass = 'bg-rose-500/10 text-rose-500 border border-rose-500/20';
+                                                    textClass = 'text-rose-400';
+                                                    break;
+                                                case 'incident':
+                                                    Icon = Wrench;
+                                                    colorClass = 'bg-amber-500/10 text-amber-500 border border-amber-500/20';
+                                                    textClass = 'text-amber-400';
+                                                    break;
+                                                case 'resident':
+                                                    Icon = Users; // Or UserPlus
+                                                    colorClass = 'bg-blue-500/10 text-blue-500 border border-blue-500/20';
+                                                    textClass = 'text-blue-400';
+                                                    break;
+                                            }
+
+                                            return (
+                                            <motion.div 
+                                                key={activity.id} 
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: i * 0.1 }}
+                                                whileHover={{ scale: 1.02, backgroundColor: 'rgba(39, 39, 42, 0.8)' }}
+                                                className="flex items-center gap-3 md:gap-4 p-3 rounded-lg border border-transparent hover:border-zinc-700/50 bg-zinc-950/30 transition-all cursor-pointer group"
+                                            >
+                                                <div className={`h-8 w-8 md:h-10 md:w-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${colorClass}`}>
+                                                    <Icon className="h-4 w-4" />
+                                                </div>
+                                                <div className="flex-1 min-w-0 space-y-1">
+                                                    <p className="text-sm font-medium text-white truncate">
+                                                        {activity.title}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500 truncate">
+                                                        {activity.subtitle}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-col items-end">
+                                                    {(activity.type === 'payment' || activity.type === 'overdue') && (
+                                                        <div className={`text-sm font-bold ${textClass}`}>
+                                                            {activity.type === 'payment' ? '+' : ''}${activity.amount?.toLocaleString()}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-[10px] text-zinc-600">
+                                                        {new Date(activity.date).toLocaleDateString()}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="text-center p-6 text-sm text-zinc-500 bg-zinc-950/30 rounded-lg border border-zinc-800/50">
+                                            No hay actividad reciente
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
-                                <Button variant="ghost" className="w-full mt-4 text-xs text-zinc-400 hover:text-white">Ver todo</Button>
+                                {recentActivity && recentActivity.length > 0 && (
+                                    <Link href="/dashboard/finance">
+                                        <Button variant="ghost" className="w-full mt-4 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800">Ver todo</Button>
+                                    </Link>
+                                )}
                             </CardContent>
                         </Card>
                     </motion.div>
                 </motion.div>
+
+                {/* Alertas Rápidas */}
+                <div className="pt-2">
+                    <h2 className="text-xl font-bold text-white mb-4">Alertas Rápidas</h2>
+                    <motion.div
+                        variants={container}
+                        initial="hidden"
+                        animate="show"
+                        className="grid gap-4 md:grid-cols-3"
+                    >
+                        <motion.div variants={item} whileHover={{ y: -5 }}>
+                            <Card className="bg-zinc-900 border-zinc-800 hover:border-amber-500/50 transition-colors">
+                                <CardContent className="p-6 flex items-center gap-4">
+                                    <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 flex-shrink-0">
+                                        <AlertTriangle className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-white">{stats.facturasVencidas}</p>
+                                        <p className="text-sm text-zinc-400">Pagos vencidos</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+
+                        <motion.div variants={item} whileHover={{ y: -5 }}>
+                            <Card className="bg-zinc-900 border-zinc-800 hover:border-blue-500/50 transition-colors">
+                                <CardContent className="p-6 flex items-center gap-4">
+                                    <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 flex-shrink-0">
+                                        <Wrench className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-white">{stats.incidenciasPendientes || 0}</p>
+                                        <p className="text-sm text-zinc-400">Incidencias pendientes</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+
+                        <motion.div variants={item} whileHover={{ y: -5 }}>
+                            <Card className="bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors">
+                                <CardContent className="p-6 flex items-center gap-4">
+                                    <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 flex-shrink-0">
+                                        <Package className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-white">{stats.paquetes || 0}</p>
+                                        <p className="text-sm text-zinc-400">Paquetes</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    </motion.div>
+                </div>
 
                 {/* Quick Actions */}
                 <motion.div

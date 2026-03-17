@@ -2,9 +2,9 @@ import { createClient } from '@/utils/supabase/client'
 import { Condominium, CreateCondominiumDTO, UpdateCondominiumDTO } from '@/types/properties'
 
 export const propertiesService = {
-    async getByOrganization(organizationId: string): Promise<Condominium[]> {
+    async getByOrganization(organizationId: string): Promise<any[]> {
         const supabase = createClient()
-        const { data, error } = await supabase
+        const { data: condos, error } = await supabase
             .from('condominiums')
             .select('*')
             .eq('organization_id', organizationId)
@@ -13,10 +13,26 @@ export const propertiesService = {
 
         if (error) {
             console.error('Error fetching condominiums by organization (RAW):', error)
-            console.error('Error fetching condominiums by organization (STR):', JSON.stringify(error, null, 2))
             throw new Error(`Error al cargar condominios: ${error.message} (${error.code})`)
         }
-        return data || []
+
+        if (!condos || condos.length === 0) return []
+
+        // Fetch residents linked to these condos to get accurate active counts
+        const condoIds = condos.map(c => c.id)
+        const { data: residents } = await supabase
+            .from('residents')
+            .select('id, condominium_id')
+            .in('condominium_id', condoIds)
+
+        // Enhance condos with the real residents count
+        return condos.map(condo => {
+            const residentsCount = residents?.filter(r => r.condominium_id === condo.id).length || 0;
+            return {
+                ...condo,
+                residents_count: residentsCount
+            }
+        })
     },
 
     async getById(id: string): Promise<Condominium | null> {

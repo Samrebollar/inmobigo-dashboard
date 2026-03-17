@@ -143,6 +143,8 @@ export function UnitsTab() {
                                 <th className="px-6 py-4 font-medium">Unidad</th>
                                 <th className="px-6 py-4 font-medium">Piso / Nivel</th>
                                 <th className="px-6 py-4 font-medium">Tipo</th>
+                                <th className="px-6 py-4 font-medium">Monto / Cuota</th>
+                                <th className="px-6 py-4 font-medium">Día Cobro</th>
                                 <th className="px-6 py-4 font-medium">Estado</th>
                                 <th className="px-6 py-4 font-medium text-right">Acciones</th>
                             </tr>
@@ -164,6 +166,12 @@ export function UnitsTab() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="capitalize text-zinc-300">{unit.type}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-zinc-300">
+                                            {unit.monto_mensual ? `$${unit.monto_mensual.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 text-zinc-300">
+                                            {unit.billing_day ? `Día ${unit.billing_day}` : '-'}
                                         </td>
                                         <td className="px-6 py-4">
                                             <Badge variant={
@@ -194,7 +202,7 @@ export function UnitsTab() {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron unidades.
                                     </td>
                                 </tr>

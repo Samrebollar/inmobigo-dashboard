@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -108,6 +108,7 @@ export default async function DashboardLayout({
     const showSettings = isAdmin
     const showMaintenance = true
     const showReports = isStaff
+    const showNotices = isStaff
 
     const sidebarContent = (
         <>
@@ -117,7 +118,7 @@ export default async function DashboardLayout({
                     <span className="text-xl font-bold tracking-tight text-white">InmobiGo</span>
                 </Link>
             </div>
-            <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto">
+            <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                 {user.email === 'acostasamuel947@gmail.com' && (
                     <Link
                         href="/owner/dashboard"
@@ -194,6 +195,25 @@ export default async function DashboardLayout({
                         <BarChart3 size={18} />
                         <span>Reportes</span>
                     </Link>
+                )}
+
+                {showNotices && (
+                    <>
+                        <Link
+                            href="/dashboard/morosos"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-rose-500/20"
+                        >
+                            <AlertTriangle size={18} className="text-rose-500/80 group-hover:text-rose-400" />
+                            <span>Morosos</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/avisos"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
+                        >
+                            <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
+                            <span>Avisos</span>
+                        </Link>
+                    </>
                 )}
 
                 <div className="my-4 border-t border-zinc-800/50"></div>

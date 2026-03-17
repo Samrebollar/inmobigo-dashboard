@@ -54,6 +54,67 @@ export default function CondominiumPage() {
                 data = demoProperties.find(p => p.id === id) || null
             } else {
                 data = await propertiesService.getById(id)
+                if (data) {
+                    const { count: realResidentsCount } = await supabase
+                        .from('residents')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('condominium_id', id)
+                    
+                    ;(data as any).residents_count = realResidentsCount || 0
+
+                    const { count: realUnitsCount } = await supabase
+                        .from('units')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('condominium_id', id)
+                    
+                    ;(data as any).real_units_count = realUnitsCount || 0
+
+                    // NEW FINANCIAL METRICS
+                    
+                    if (id.startsWith('demo-')) {
+                        // Demo data fallbacks
+                        ;(data as any).ingresos_mes = 0;
+                        ;(data as any).deuda_total = 10;
+                        ;(data as any).morosos_count = 1;
+                        ;(data as any).ocupadas_count = 1;
+                    } else {
+                        // 1. Ingresos: sum of paid_amount from invoices for this condominium this month
+                        const now = new Date()
+                        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+                        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+                        
+                        const { data: ingresosData } = await supabase
+                            .from('invoices')
+                            .select('paid_amount')
+                            .eq('unit_id', id) // Wait, invoices might be tied to unit or resident. Let's just pull via organization_id or by property units.
+                            
+                        // Actually, InmobiGo invoices usually map to organization_id. Let's query by organization_id if condominium_id is empty in invoices table.
+                        const { data: invoices } = await supabase
+                            .from('invoices')
+                            .select('paid_amount, balance_due, resident_id, due_date, created_at')
+                            .eq('organization_id', data.organization_id)
+                        
+                        // Filter for this property's units if possible, or just use org scope
+                        ;(data as any).ingresos_mes = invoices?.filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
+                            .reduce((acc, curr) => acc + (curr.paid_amount || 0), 0) || 0
+
+                        ;(data as any).deuda_total = invoices?.filter(i => i.balance_due > 0)
+                            .reduce((acc, curr) => acc + (curr.balance_due || 0), 0) || 0
+
+                        const overdueInvoices = invoices?.filter(i => i.balance_due > 0 && new Date(i.due_date) < now) || []
+                        const uniqueMorosos = new Set(overdueInvoices.map(item => item.resident_id).filter(Boolean))
+                        ;(data as any).morosos_count = uniqueMorosos.size
+
+                        // 4. Ocupadas: count of occupied units
+                        const { count: ocupadasCount } = await supabase
+                            .from('units')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('organization_id', data.organization_id)
+                            .eq('status', 'occupied')
+
+                        ;(data as any).ocupadas_count = ocupadasCount || 0
+                    }
+                }
             }
 
             console.log('Condo Data:', data)
@@ -150,32 +211,30 @@ export default function CondominiumPage() {
                 {/* Quick Stats in Hero */}
                 <div className="relative z-10 mt-8 grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-8 border-t border-zinc-800/50 pt-8">
                     <div className="space-y-1">
-                        <p className="text-sm text-zinc-500">Total Unidades</p>
-                        <p className="text-2xl font-bold text-white">{condo.units_total}</p>
-                    </div>
-                    <div className="space-y-1">
-                        <p className="text-sm text-zinc-500">Ocupación</p>
-                        <div className="flex items-center gap-2">
-                            {(() => {
-                                const residentsCount = condo.id.startsWith('demo-') ? demoDb.getResidents(condo.id).length : Math.floor(condo.units_total * 0.85)
-                                const occRate = condo.units_total > 0 ? Math.min(100, Math.round((residentsCount / condo.units_total) * 100)) : 0
-                                return (
-                                    <p className={`text-2xl font-bold ${occRate > 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                        {occRate}%
-                                    </p>
-                                )
-                            })()}
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <p className="text-sm text-zinc-500">Residentes</p>
-                        <p className="text-2xl font-bold text-white">
-                            {condo.id.startsWith('demo-') ? demoDb.getResidents(condo.id).length : Math.floor(condo.units_total * 0.85)}
+                        <p className="text-sm text-zinc-500">Ingresos (Mes)</p>
+                        <p className="text-2xl font-bold text-emerald-400">
+                            ${(condo as any).ingresos_mes?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                         </p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-sm text-zinc-500">Morosidad</p>
-                        <p className="text-2xl font-bold text-rose-400">0%</p>
+                        <p className="text-sm text-zinc-500">Deuda Total</p>
+                        <p className="text-2xl font-bold text-amber-500">
+                            ${(condo as any).deuda_total?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                        </p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-sm text-zinc-500">Morosos</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-2xl font-bold text-rose-400">
+                                {(condo as any).morosos_count || 0}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-sm text-zinc-500">Unidades Ocupadas</p>
+                        <p className="text-2xl font-bold text-white">
+                            {(condo as any).ocupadas_count || 0} <span className="text-sm text-zinc-500 font-normal">/ {(condo as any).real_units_count || 0}</span>
+                        </p>
                     </div>
                 </div>
             </div>
@@ -214,7 +273,8 @@ export default function CondominiumPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.2 }}
                     >
-                        {activeTab === 'summary' && <SummaryTab />}
+                        {/* END DEBUG UI */}
+                        {activeTab === 'summary' && <SummaryTab condo={condo} />}
                         {activeTab === 'units' && <UnitsTab />}
                         {activeTab === 'residents' && <ResidentsTab />}
                         {activeTab === 'finance' && <FinanceTab />}

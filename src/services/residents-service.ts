@@ -99,6 +99,44 @@ export const residentsService = {
             }))
             await supabase.from('vehicles').insert(vehicleInserts)
         }
+
+        // Automatic Invoice Creation for Initial Balance (Saldo Inicial)
+        if (newResident.debt_amount && newResident.debt_amount > 0) {
+            // First, get the correct organization_id for this condominium
+            const { data: condo } = await supabase
+                .from('condominiums')
+                .select('organization_id')
+                .eq('id', newResident.condominium_id)
+                .single()
+
+            const orgId = condo?.organization_id
+
+            if (orgId) {
+                const folio = `INV-${Date.now().toString().slice(-6)}`
+                const invoicePayload = {
+                    organization_id: orgId,
+                    condominium_id: newResident.condominium_id,
+                    resident_id: newResident.id,
+                    unit_id: newResident.unit_id || null, // Handle optionally empty string vs null
+                    amount: newResident.debt_amount,
+                    paid_amount: 0,
+                    balance_due: newResident.debt_amount,
+                    status: 'pending',
+                    description: 'Saldo inicial',
+                    due_date: new Date().toISOString(),
+                    folio
+                }
+
+                const { error: invoiceError } = await supabase
+                    .from('invoices')
+                    .insert(invoicePayload)
+
+                if (invoiceError) {
+                    console.error('Error creating initial balance invoice:', invoiceError)
+                }
+            }
+        }
+
         return newResident
     },
 

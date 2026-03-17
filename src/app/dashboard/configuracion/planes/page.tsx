@@ -143,9 +143,9 @@ export default function PlansPage() {
             price: '10',
             period: 'MXN / mes',
             color: 'cyan',
-            description: 'Operación de gran escala, consorcios inmobiliarios.',
+            description: 'Prueba todas las funcionalidades básicas de la plataforma.',
             features: [
-                'Más de 500 unidades',
+                'Máximo 5 unidades',
                 'Todo lo anterior',
                 'Soporte 24/7 Alta Prioridad',
                 'Infraestructura Dedicada',

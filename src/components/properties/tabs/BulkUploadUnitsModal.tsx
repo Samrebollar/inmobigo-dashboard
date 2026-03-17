@@ -97,11 +97,12 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
                     const validationErrors: string[] = []
 
                     rows.forEach((row, index) => {
-                        // Map CSV columns to DTO
-                        // Expected: Unidad, Piso, Tipo, Estado
+                        // Expected: Unidad, Piso, Tipo, Monto / Cuota, Día Cobro, Estado
                         const unitNumber = row['Unidad'] || row['unidad'] || row['Unit']
                         const floor = row['Piso'] || row['piso'] || row['Floor']
                         const typeRaw = row['Tipo'] || row['tipo'] || row['Type']
+                        const rentRaw = row['Monto / Cuota'] || row['monto'] || row['renta'] || row['Rent']
+                        const billingDayRaw = row['Día Cobro'] || row['dia cobro'] || row['día cobro'] || row['Día']
                         const statusRaw = row['Estado'] || row['estado'] || row['Status']
 
                         if (!unitNumber) {
@@ -118,12 +119,26 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
                         if (statusRaw?.toLowerCase().includes('ocupad')) status = 'occupied'
                         if (statusRaw?.toLowerCase().includes('mantenimiento')) status = 'maintenance'
 
+                        let monto_mensual: number | undefined = undefined;
+                        if (rentRaw) {
+                            const parsedRent = parseFloat(rentRaw.toString().replace(/[^0-9.-]+/g, ""));
+                            if (!isNaN(parsedRent)) monto_mensual = parsedRent;
+                        }
+
+                        let billing_day: number | undefined = undefined;
+                        if (billingDayRaw) {
+                            const parsedDay = parseInt(billingDayRaw.toString().replace(/[^0-9]+/g, ""), 10);
+                            if (!isNaN(parsedDay) && parsedDay >= 1 && parsedDay <= 31) billing_day = parsedDay;
+                        }
+
                         validUnits.push({
                             condominium_id: condominiumId,
                             unit_number: unitNumber,
                             floor: floor || '1',
                             type,
-                            status
+                            status,
+                            monto_mensual,
+                            billing_day
                         })
                     })
 
@@ -159,7 +174,7 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
     }
 
     const downloadTemplate = () => {
-        const csvContent = "data:text/csv;charset=utf-8,Unidad,Piso,Tipo,Estado\nA-101,1,Departamento,Disponible\nB-202,2,Casa,Ocupada\nC-001,PB,Local,Mantenimiento"
+        const csvContent = "data:text/csv;charset=utf-8,Unidad,Piso,Tipo,Monto / Cuota,Día Cobro,Estado\nA-101,1,Departamento,5000.00,5,Disponible\nB-202,2,Casa,8500.00,1,Ocupada\nC-001,PB,Local,,15,Mantenimiento"
         const encodedUri = encodeURI(csvContent)
         const link = document.createElement("a")
         link.setAttribute("href", encodedUri)

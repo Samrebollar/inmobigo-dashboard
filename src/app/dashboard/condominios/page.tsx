@@ -86,13 +86,12 @@ export default function PropiedadesPage() {
   const totalCondos = properties.length
   const totalUnits = properties.reduce((acc, curr) => acc + (curr.units_total || 0), 0)
 
-  // En modo demo, obtenemos los totales reales de lo que se ha creado
-  const demoResidentsCount = isDemo ? demoDb.getResidents().length : 0
-  const demoUnitsCount = isDemo ? demoDb.getUnits().length : 0
+  // Sum all residents across properties (real data from service)
+  const totalResidents = isDemo 
+    ? demoDb.getResidents().length 
+    : properties.reduce((acc, curr: any) => acc + (curr.residents_count || 0), 0)
 
-  // Mock data for occupancy and residents since it requires joining resident table
-  // Pero lo mejoramos para que si hay datos demo, los use
-  const totalResidents = isDemo ? demoResidentsCount : Math.floor(totalUnits * 1.5)
+  // Real Occupancy rate based on total residents vs total units capacity
   const occupancyRate = totalUnits > 0 ? Math.min(100, Math.round((totalResidents / totalUnits) * 100)) : 0
 
   const handleDelete = async (id: string, name: string) => {
@@ -143,27 +142,27 @@ export default function PropiedadesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
+           initial={{ opacity: 0, x: -20 }}
+           animate={{ opacity: 1, x: 0 }}
         >
           <h1 className="text-3xl font-bold tracking-tight text-white">Propiedades</h1>
           <p className="text-zinc-400">Gestiona tus condominios activos y monitorea su rendimiento.</p>
         </motion.div>
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3"
+           initial={{ opacity: 0, x: 20 }}
+           animate={{ opacity: 1, x: 0 }}
+           className="flex items-center gap-3"
         >
           <div className="flex items-center rounded-lg bg-zinc-900 border border-zinc-800 p-1">
             <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+               onClick={() => setViewMode('grid')}
+               className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+               onClick={() => setViewMode('list')}
+               className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
               <List className="h-4 w-4" />
             </button>
@@ -185,13 +184,13 @@ export default function PropiedadesPage() {
 
       {/* Grid */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+         initial={{ opacity: 0, y: 20 }}
+         animate={{ opacity: 1, y: 0 }}
+         transition={{ delay: 0.2 }}
+         className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
-        {properties.map((condo) => {
-          const condoResidentsCount = isDemo ? demoDb.getResidents(condo.id).length : Math.floor(condo.units_total * 1.5)
+        {properties.map((condo: any) => {
+          const condoResidentsCount = isDemo ? demoDb.getResidents(condo.id).length : (condo.residents_count || 0)
           const condoOccupancyRate = condo.units_total > 0 ? Math.min(100, Math.round((condoResidentsCount / condo.units_total) * 100)) : 0
 
           return (

@@ -83,34 +83,30 @@ export default function CondominiumPage() {
                         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
                         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
                         
-                        const { data: ingresosData } = await supabase
-                            .from('invoices')
-                            .select('paid_amount')
-                            .eq('unit_id', id) // Wait, invoices might be tied to unit or resident. Let's just pull via organization_id or by property units.
-                            
-                        // Actually, InmobiGo invoices usually map to organization_id. Let's query by organization_id if condominium_id is empty in invoices table.
+                        // Select all invoices for this condominium
                         const { data: invoices } = await supabase
                             .from('invoices')
-                            .select('paid_amount, balance_due, resident_id, due_date, created_at')
-                            .eq('organization_id', data.organization_id)
+                            .select('amount, paid_amount, balance_due, resident_id, status, created_at')
+                            .eq('condominium_id', id)
                         
-                        // Filter for this property's units if possible, or just use org scope
+                        // Ingresos: sum(paid_amount) where created_at is this month
                         ;(data as any).ingresos_mes = invoices?.filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
                             .reduce((acc, curr) => acc + (curr.paid_amount || 0), 0) || 0
 
-                        ;(data as any).deuda_total = invoices?.filter(i => i.balance_due > 0)
-                            .reduce((acc, curr) => acc + (curr.balance_due || 0), 0) || 0
+                        // Deuda Total: sum(balance_due or amount if pending)
+                        ;(data as any).deuda_total = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due || 0) > 0)
+                            .reduce((acc, curr) => acc + (curr.balance_due && curr.balance_due > 0 ? curr.balance_due : (curr.amount || 0)), 0) || 0
 
-                        const overdueInvoices = invoices?.filter(i => i.balance_due > 0 && new Date(i.due_date) < now) || []
+                        // Residentes Morosos: count(distinct resident_id) with pending/overdue invoices (saldo pendiente)
+                        const overdueInvoices = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due || 0) > 0) || []
                         const uniqueMorosos = new Set(overdueInvoices.map(item => item.resident_id).filter(Boolean))
                         ;(data as any).morosos_count = uniqueMorosos.size
 
-                        // 4. Ocupadas: count of occupied units
+                        // Ocupadas: total de unidades creadas (a solicitud del usuario: "pon el total de unidades creadas que hasta el momento solo llevamos una")
                         const { count: ocupadasCount } = await supabase
                             .from('units')
                             .select('*', { count: 'exact', head: true })
-                            .eq('organization_id', data.organization_id)
-                            .eq('status', 'occupied')
+                            .eq('condominium_id', id)
 
                         ;(data as any).ocupadas_count = ocupadasCount || 0
                     }
@@ -233,7 +229,7 @@ export default function CondominiumPage() {
                     <div className="space-y-1">
                         <p className="text-sm text-zinc-500">Unidades Ocupadas</p>
                         <p className="text-2xl font-bold text-white">
-                            {(condo as any).ocupadas_count || 0} <span className="text-sm text-zinc-500 font-normal">/ {(condo as any).real_units_count || 0}</span>
+                            {(condo as any).ocupadas_count || 0}
                         </p>
                     </div>
                 </div>

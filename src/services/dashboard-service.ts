@@ -47,5 +47,17 @@ export const dashboardService = {
             totalOverdue,
             occupancyRate: 85 // Mocked for now until residents link is robust
         }
+    },
+
+    async getDeudaTotal() {
+        const supabase = createClient()
+        const { data, error } = await supabase.rpc('get_total_deuda').single()
+
+        if (error) {
+            console.error('Error fetching total deuda:', error)
+            throw error
+        }
+
+        return { total_deuda: Number(data?.total_deuda || 0) }
     }
 }

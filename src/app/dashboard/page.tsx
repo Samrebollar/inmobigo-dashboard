@@ -170,7 +170,6 @@ export default async function DashboardPage({
   // Finances
   let totalFacturado = 0
   let totalCobrado = 0
-  let facturasVencidas = 0
   let recentActivity: any[] = []
   let incidenciasPendientes = 0
 
@@ -184,7 +183,6 @@ export default async function DashboardPage({
     invoices?.forEach(inv => {
       totalFacturado += inv.amount
       if (inv.status === 'paid') totalCobrado += inv.amount
-      if (inv.status === 'overdue') facturasVencidas++
     })
 
     // Fetch Tickets
@@ -250,7 +248,7 @@ export default async function DashboardPage({
     incidenciasPendientes = pendingTicketsCount || 0
   }
 
-  const tasaCobranza = totalFacturado > 0 ? ((totalCobrado / totalFacturado) * 100).toFixed(1) : '0'
+  // const tasaCobranza = totalFacturado > 0 ? ((totalCobrado / totalFacturado) * 100).toFixed(1) : '0'
 
   return (
     <AdminDashboardClient
@@ -259,12 +257,10 @@ export default async function DashboardPage({
       stats={{
         totalFacturado,
         totalCobrado,
-        facturasVencidas,
         activeCount: activeIds.length,
         totalUnits: totalUnits,
-        tasaCobranza,
         incidenciasPendientes,
-        paquetes: 0
+        anuncios: 0
       }}
       recentActivity={recentActivity}
     />

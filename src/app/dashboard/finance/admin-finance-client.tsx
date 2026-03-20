@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { KPICards } from '@/components/finance/kpi-cards'
 import { RevenueChart } from '@/components/finance/revenue-chart'
-import { DelinquencyCenter } from '@/components/finance/delinquency-center'
 import { ReportsGeneratorModal } from '@/components/finance/reports-generator'
 import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
 import { FileText, Download, ArrowRight, Plus } from 'lucide-react'
@@ -47,16 +46,9 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
             <KPICards />
 
             {/* Main Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-3 min-h-[400px]">
-                {/* Revenue Chart - Taking up 2/3 space */}
-                <div className="lg:col-span-2 order-2 lg:order-1">
-                    <RevenueChart />
-                </div>
-
-                {/* Delinquency Center - Taking up 1/3 space */}
-                <div className="lg:col-span-1 order-1 lg:order-2">
-                    <DelinquencyCenter condominiumId={condominiumId} />
-                </div>
+            <div className="min-h-[400px]">
+                {/* Revenue Chart - Taking up full space now */}
+                <RevenueChart />
             </div>
 
             {/* Quick Link to Detailed Billing */}

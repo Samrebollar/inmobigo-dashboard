@@ -148,11 +148,8 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
                         return
                     }
 
-                    let successCount = 0
-                    for (const unit of validUnits) {
-                        await unitsService.create(unit)
-                        successCount++
-                    }
+                    await unitsService.bulkCreate(validUnits)
+                    let successCount = validUnits.length
 
                     setLoading(false)
                     setSuccessMessage(`¡Carga completada! ✅ ${successCount} unidades agregadas.`)
@@ -167,8 +164,7 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
                 }
             })
         } catch (err: any) {
-            console.error(err)
-            setError('Ocurrió un error al subir las unidades: ' + err.message)
+            setError(err.message || 'Ocurrió un error inesperado al procesar el archivo.')
             setLoading(false)
         }
     }
@@ -296,6 +292,21 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
                                     </div>
                                 </div>
                             )}
+
+                            {/* Error Message */}
+                            <AnimatePresence>
+                                {error && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="rounded-lg bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 flex items-start gap-3"
+                                    >
+                                        <X className="h-5 w-5 shrink-0 text-red-500" />
+                                        <p className="leading-relaxed">{error}</p>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
                             {/* Success Message */}
                             {successMessage && (

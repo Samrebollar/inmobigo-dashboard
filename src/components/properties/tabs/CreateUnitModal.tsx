@@ -20,6 +20,7 @@ interface CreateUnitModalProps {
 
 export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, unitToEdit }: CreateUnitModalProps) {
     const [loading, setLoading] = useState(false)
+    const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const { isDemo } = useDemoMode()
 
     const [formData, setFormData] = useState<Partial<CreateUnitDTO>>({
@@ -59,6 +60,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
+        setErrorMsg(null)
 
         try {
             let result: Unit
@@ -75,8 +77,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
             onSuccess(result)
             onClose()
         } catch (error: any) {
-            console.error('CreateUnitModal Error (RAW):', error)
-            alert(`Error al guardar unidad: ${error.message || 'Error desconocido'}`)
+            setErrorMsg(error.message || 'Ocurrió un error inesperado al guardar la unidad.')
         } finally {
             setLoading(false)
         }
@@ -102,6 +103,20 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            <AnimatePresence>
+                                {errorMsg && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 flex items-start gap-3"
+                                    >
+                                        <X className="h-5 w-5 shrink-0 text-red-500" />
+                                        <p className="leading-relaxed">{errorMsg}</p>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
                             <Input
                                 label="Número / Nombre de Unidad"
                                 placeholder="Ej. A-101"

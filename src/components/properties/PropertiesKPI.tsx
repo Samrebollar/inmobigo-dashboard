@@ -7,10 +7,12 @@ interface KPIProps {
     totalCondos: number
     totalUnits: number
     totalResidents: number
+    delinquentResidents?: number
     occupancyRate: number
+    unitsLimit?: number
 }
 
-export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, occupancyRate }: KPIProps) {
+export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinquentResidents = 0, occupancyRate, unitsLimit = 0 }: KPIProps) {
     const stats = [
         {
             label: 'Total Condominios',
@@ -33,7 +35,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, occupan
             hoverBorder: 'hover:border-purple-500/50'
         },
         {
-            label: 'Residentes Activos',
+            label: 'Residentes al corriente',
             value: totalResidents,
             icon: Users,
             color: 'text-emerald-400',
@@ -43,12 +45,22 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, occupan
             hoverBorder: 'hover:border-emerald-500/50'
         },
         {
-            label: 'Ocupación Promedio',
+            label: 'Residentes con morosidad',
+            value: delinquentResidents,
+            icon: AlertCircle,
+            color: 'text-rose-400',
+            bg: 'bg-rose-500/10',
+            trend: 'Requiere atención',
+            trendColor: 'text-rose-400',
+            hoverBorder: 'hover:border-rose-500/50'
+        },
+        {
+            label: 'Nivel de ocupación',
             value: `${occupancyRate}%`,
             icon: TrendingUp,
             color: 'text-amber-400',
             bg: 'bg-amber-500/10',
-            trend: '2% vacante',
+            trend: unitsLimit > 0 ? `${totalUnits} de ${unitsLimit} creadas` : 'Plan sin límite',
             trendColor: 'text-amber-400',
             hoverBorder: 'hover:border-amber-500/50'
         }
@@ -74,7 +86,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, occupan
             variants={container}
             initial="hidden"
             animate="show"
-            className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+            className="grid gap-4 md:grid-cols-3 xl:grid-cols-5 lg:grid-cols-4"
         >
             {stats.map((stat, i) => (
                 <motion.div
@@ -87,7 +99,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, occupan
                         <div className={`rounded-lg p-2 ${stat.bg}`}>
                             <stat.icon className={`h-5 w-5 ${stat.color}`} />
                         </div>
-                        {i === 3 && occupancyRate < 50 && (
+                        {(i === 4 && occupancyRate < 50) && (
                             <div className="flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
                                 <AlertCircle className="h-3 w-3" />
                                 Baja

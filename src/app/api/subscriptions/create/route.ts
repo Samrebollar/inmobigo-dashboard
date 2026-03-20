@@ -24,7 +24,7 @@ const planMap = {
     },
     'CORE PRUEBA': {
         price: 10,
-        unit_limit: 500,
+        unit_limit: 5,
         preapproval_plan_id: process.env.MP_COREPRUEBA_ID,
     },
     'CORPORATE PLUS': {

@@ -211,6 +211,8 @@ export default function ResidentsPage() {
     return (
         <div className="mx-auto max-w-7xl space-y-6 md:space-y-8 p-4 md:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                {/* Forced recompile console log */}
+                {console.log('Rendering residents page (cache busted)')}
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Residentes</h1>
                     <p className="text-sm md:text-base text-zinc-400">Directorio global de residentes por condominio.</p>
@@ -367,7 +369,7 @@ export default function ResidentsPage() {
 
                                     {/* Right: Actions */}
                                     <div className="p-5 md:p-8 lg:w-[260px] flex flex-col xs:flex-row lg:flex-col gap-3 justify-center bg-zinc-950/30">
-                                        <Link href={`/dashboard/residents/${resident.id}`} className="flex-1 lg:flex-none">
+                                        <Link href={`/dashboard/residentes/${resident.id}`} className="flex-1 lg:flex-none">
                                             <motion.button
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}

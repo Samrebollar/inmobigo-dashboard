@@ -340,5 +340,80 @@ export const financeService = {
             condominium_name: inv.condominiums?.name,
             unit_number: inv.units?.unit_number
         })) || []
+    },
+
+    async getTotalIngresos(): Promise<number> {
+        const supabase = createClient()
+        const { data, error } = await supabase.rpc('get_total_ingresos')
+        
+        if (error) {
+            console.error('[financeService.getTotalIngresos] error:', error)
+            return 0
+        }
+        
+        // El RPC retorna: [{ total_ingresos: number }]
+        const total = data && data.length > 0 ? data[0].total_ingresos : 0
+        return Number(total) || 0
+    },
+
+    async getTasaCobranza(): Promise<number> {
+        const supabase = createClient()
+        const { data, error } = await supabase.rpc('get_tasa_cobranza')
+        
+        if (error) {
+            console.error('[financeService.getTasaCobranza] error:', error)
+            return 0
+        }
+        
+        const total = data && data.length > 0 ? data[0].tasa_cobranza : 0
+        return Number(total) || 0
+    },
+
+    async getMorosidad(): Promise<{ total_facturas_vencidas: number, monto_vencido: number }> {
+        const supabase = createClient()
+        const { data, error } = await supabase.rpc('get_morosidad').single()
+        
+        if (error) {
+            console.error('[financeService.getMorosidad] error:', error)
+            return { total_facturas_vencidas: 0, monto_vencido: 0 }
+        }
+        
+        return {
+            total_facturas_vencidas: Number(data?.total_facturas_vencidas || 0),
+            monto_vencido: Number(data?.monto_vencido || 0)
+        }
+    },
+
+    async getIncomeSummary(): Promise<Array<{ month: string, total_facturado: number, total_cobrado: number }>> {
+        const supabase = createClient()
+        const { data, error } = await supabase.rpc('get_income_summary_6_months')
+        
+        if (error) {
+            console.error('[financeService.getIncomeSummary] error:', error)
+            return []
+        }
+        
+        return data?.map((item: any) => ({
+            month: item.month,
+            total_facturado: Number(item.total_facturado || 0),
+            total_cobrado: Number(item.total_cobrado || 0)
+        })) || []
+    },
+
+    async getIncomeSummaryYear(condominiumId?: string): Promise<Array<{ month: string, total_cobrado: number, total_pendiente: number }>> {
+        const supabase = createClient()
+        // If condominiumId is not defined, supabase handles it as null which matches our RPC default
+        const { data, error } = await supabase.rpc('get_income_summary_year', condominiumId ? { p_condominium_id: condominiumId } : {})
+        
+        if (error) {
+            console.error('[financeService.getIncomeSummaryYear] error:', error)
+            return []
+        }
+        
+        return data?.map((item: any) => ({
+            month: item.month,
+            total_cobrado: Number(item.total_cobrado || 0),
+            total_pendiente: Number(item.total_pendiente || 0)
+        })) || []
     }
 }

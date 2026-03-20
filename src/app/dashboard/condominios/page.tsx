@@ -1,5 +1,4 @@
 'use client'
-// Force refresh
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -18,10 +17,26 @@ import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
 
 export default function PropiedadesPage() {
-  console.log('Mounting PropiedadesPage')
   const supabase = createClient()
   const { loading, properties, fetchProperties, deleteProperty, createProperty, updateProperty } = useProperties()
   const [orgId, setOrgId] = useState<string | null>(null)
+
+  // Estado para las unidades traídas por RPC
+  const [rpcTotalUnits, setRpcTotalUnits] = useState<number>(0)
+  const [isLoadingUnits, setIsLoadingUnits] = useState<boolean>(true)
+
+  // Estado para los residentes traídos por RPC
+  const [rpcTotalResidents, setRpcTotalResidents] = useState<number>(0)
+  const [isLoadingResidents, setIsLoadingResidents] = useState<boolean>(true)
+
+  // Estado para los residentes morosos
+  const [rpcTotalDelinquent, setRpcTotalDelinquent] = useState<number>(0)
+  const [isLoadingDelinquent, setIsLoadingDelinquent] = useState<boolean>(true)
+
+  // Estado para unidades ocupadas / limite
+  const [rpcOccupiedUnits, setRpcOccupiedUnits] = useState<number>(0)
+  const [isLoadingOccupied, setIsLoadingOccupied] = useState<boolean>(true)
+  const [unitsLimit, setUnitsLimit] = useState<number>(0)
 
   // Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -38,7 +53,77 @@ export default function PropiedadesPage() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        setIsLoadingUnits(false)
+        return
+      }
+
+      // 0. Fetch Total Units and Residents via RPC
+      if (!isDemo) {
+        setIsLoadingUnits(true)
+        setIsLoadingResidents(true)
+        setIsLoadingDelinquent(true)
+        setIsLoadingOccupied(true)
+
+        // Fetch Units
+        // La función SQL no requiere parámetros porque usa auth.uid() directamente por seguridad
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_total_units')
+        
+        if (rpcError) {
+          console.error('Error fetching RPC get_total_units:', rpcError)
+          setRpcTotalUnits(0)
+        } else {
+          // rpcData retorna un array de objetos, ej: [{ total_unidades: 5 }]
+          const unitsValue = rpcData && rpcData.length > 0 ? rpcData[0].total_unidades : 0
+          setRpcTotalUnits(Number(unitsValue) || 0)
+        }
+        setIsLoadingUnits(false)
+
+        // Fetch Residents
+        const { data: rpcResData, error: rpcResError } = await supabase.rpc('get_total_residents')
+        
+        if (rpcResError) {
+          console.error('Error fetching RPC get_total_residents:', rpcResError)
+          setRpcTotalResidents(0)
+        } else {
+          // rpcResData retorna un array de objetos, ej: [{ total_residentes: 10 }]
+          const resValue = rpcResData && rpcResData.length > 0 ? rpcResData[0].total_residentes : 0
+          setRpcTotalResidents(Number(resValue) || 0)
+        }
+        setIsLoadingResidents(false)
+
+        // Fetch Delinquent Residents
+        const { data: rpcDelqData, error: rpcDelqError } = await supabase.rpc('get_total_delinquent_residents')
+        
+        if (rpcDelqError) {
+          console.error('Error fetching RPC get_total_delinquent_residents:', rpcDelqError)
+          setRpcTotalDelinquent(0)
+        } else {
+          const delqValue = rpcDelqData && rpcDelqData.length > 0 ? rpcDelqData[0].total_morosos : 0
+          setRpcTotalDelinquent(Number(delqValue) || 0)
+        }
+        setIsLoadingDelinquent(false)
+
+        // Fetch Occupied Units
+        const { data: rpcOccData, error: rpcOccError } = await supabase.rpc('get_total_occupied_units')
+        if (rpcOccError) {
+          console.error('Error fetching RPC get_total_occupied_units:', rpcOccError)
+          setRpcOccupiedUnits(0)
+        } else {
+          const occValue = rpcOccData && rpcOccData.length > 0 ? rpcOccData[0].total_ocupadas : 0
+          setRpcOccupiedUnits(Number(occValue) || 0)
+        }
+        setIsLoadingOccupied(false)
+
+      } else {
+        setIsLoadingUnits(false)
+        setIsLoadingResidents(false)
+        setIsLoadingDelinquent(false)
+        setIsLoadingOccupied(false)
+      }
+
+      // Determinar orgId para cargar propiedades y limites
+      let currentOrgId = null;
 
       // 1. Try to get org from organization_users (RBAC table)
       const { data: orgUser } = await supabase
@@ -48,51 +133,84 @@ export default function PropiedadesPage() {
         .single()
 
       if (orgUser) {
-        console.log('Org found via organization_users:', orgUser.organization_id)
-        setOrgId(orgUser.organization_id)
-        fetchProperties(orgUser.organization_id)
-        return
+        currentOrgId = orgUser.organization_id;
+      } else {
+        // 2. Fallback: Try to get org owned by user (Legacy/Initial table)
+        const { data: ownedOrg } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('owner_id', user.id)
+          .limit(1)
+          .single()
+
+        if (ownedOrg) {
+          currentOrgId = ownedOrg.id;
+        }
       }
-      console.log('No orgUser found in checkUserAndFetch')
 
-      // 2. Fallback: Try to get org owned by user (Legacy/Initial table)
-      const { data: ownedOrg } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('owner_id', user.id)
-        .limit(1)
-        .single()
+      if (currentOrgId) {
+        setOrgId(currentOrgId)
+        fetchProperties(currentOrgId)
+        
+        // Fetch units limit del plan de la organización
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('units_limit, plan')
+          .eq('id', currentOrgId)
+          .single()
+          
+        const PLAN_LIMITS: Record<string, number> = {
+            'CORE': 20,
+            'PLUS': 60,
+            'ELITE': 120,
+            'CORPORATE': 250,
+            'CORE PRUEBA': 5,
+            'CORPORATE PLUS': 1000,
+            'FREE': 5
+        }
 
-      if (ownedOrg) {
-        console.log('Org found via owner_id fallback:', ownedOrg.id)
-        setOrgId(ownedOrg.id)
-        fetchProperties(ownedOrg.id)
+        const dbLimit = orgData?.units_limit || 0;
+        const rawPlanName = orgData?.plan ? orgData.plan.trim().toUpperCase() : 'FREE';
+        const mappedLimit = PLAN_LIMITS[rawPlanName] || 5; 
+        
+        console.log("Org Límite SQL:", dbLimit, " | Org Plan SQL:", rawPlanName, " | Mapped:", mappedLimit);
+
+        const resolvedLimit = dbLimit > 0 ? dbLimit : mappedLimit;
+
+        setUnitsLimit(resolvedLimit)
       } else if (isDemo) {
-        // En modo demo sin organización, proveemos una ficticia para que funcione la creación
-        console.log('Modo Demo: Usando organización ficticia')
         setOrgId('demo-org-id')
+        setUnitsLimit(5) // Demo fallback limit
       } else {
         console.error('No organization found for this user.')
       }
     } catch (err) {
       if (isDemo) {
         setOrgId('demo-org-id')
+        setUnitsLimit(5)
       }
       console.error('Error in checkUserAndFetch:', err)
+      setIsLoadingUnits(false)
     }
   }
 
   // Calculate KPIs
   const totalCondos = properties.length
-  const totalUnits = properties.reduce((acc, curr) => acc + (curr.units_total || 0), 0)
+  
+  // Calcular total de unidades basado en modo Demo o RPC real
+  const computedDemoUnits = properties.reduce((acc, curr) => acc + (curr.units_total || 0), 0)
+  const totalUnits = isDemo ? computedDemoUnits : rpcTotalUnits
 
   // Sum all residents across properties (real data from service)
+  const computedDemoResidents = properties.reduce((acc, curr: any) => acc + (curr.residents_count || 0), 0)
   const totalResidents = isDemo 
-    ? demoDb.getResidents().length 
-    : properties.reduce((acc, curr: any) => acc + (curr.residents_count || 0), 0)
+    ? (demoDb.getResidents().length || computedDemoResidents)
+    : rpcTotalResidents
 
-  // Real Occupancy rate based on total residents vs total units capacity
-  const occupancyRate = totalUnits > 0 ? Math.min(100, Math.round((totalResidents / totalUnits) * 100)) : 0
+  const totalDelinquent = isDemo ? 0 : rpcTotalDelinquent
+
+  // Ocupacion de Plan: totalUnits creadas vs el máximo del plan (unitsLimit)
+  const occupancyRate = unitsLimit > 0 ? Math.min(100, Math.round((totalUnits / unitsLimit) * 100)) : 0
 
   const handleDelete = async (id: string, name: string) => {
     checkAction(async () => {
@@ -108,7 +226,7 @@ export default function PropiedadesPage() {
     })
   }
 
-  if (loading) {
+  if (loading || ((isLoadingUnits || isLoadingResidents || isLoadingDelinquent || isLoadingOccupied) && !isDemo)) {
     return (
       <div className="mx-auto max-w-7xl space-y-8 p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -179,7 +297,9 @@ export default function PropiedadesPage() {
         totalCondos={totalCondos}
         totalUnits={totalUnits}
         totalResidents={totalResidents}
+        delinquentResidents={totalDelinquent}
         occupancyRate={occupancyRate}
+        unitsLimit={unitsLimit}
       />
 
       {/* Grid */}

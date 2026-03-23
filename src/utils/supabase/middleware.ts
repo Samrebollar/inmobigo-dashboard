@@ -41,9 +41,9 @@ export async function updateSession(request: NextRequest) {
         !request.nextUrl.pathname.startsWith('/api/debug-limits')
     ) {
         // no user, potentially respond by redirecting the user to the login page
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        return NextResponse.redirect(url)
+        // const url = request.nextUrl.clone()
+        // url.pathname = '/login'
+        // return NextResponse.redirect(url)
     }
 
     // If user is logged in and trying to access login page, redirect to dashboard
@@ -82,8 +82,8 @@ export async function updateSession(request: NextRequest) {
 
         // RESTRICTED ROUTES FOR RESIDENTS & VIEWERS
         if (isResident || role === 'viewer') {
-            if (path.startsWith('/dashboard/properties') ||
-                path.startsWith('/dashboard/residents') ||
+            if (path.startsWith('/dashboard/condominios') ||
+                path.startsWith('/dashboard/residentes') ||
                 path.startsWith('/dashboard/settings') ||
                 path.startsWith('/dashboard/reports')) {
                 console.log(`Middleware: Redirecting ${role} from ${path} to /dashboard`)

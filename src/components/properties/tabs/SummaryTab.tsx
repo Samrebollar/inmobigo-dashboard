@@ -9,6 +9,7 @@ import { motion } from 'framer-motion'
 
 interface SummaryTabProps {
     condo: Condominium
+    revenueData?: any[]
 }
 
 // Mock Data for Charts
@@ -23,7 +24,7 @@ const revenueData = [
     { name: 'Jun', value: 25000 },
 ]
 
-export function SummaryTab({ condo }: SummaryTabProps) {
+export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
     const isDemo = condo.id.startsWith('demo-')
     
     // Calculate Occupancy
@@ -99,7 +100,7 @@ export function SummaryTab({ condo }: SummaryTabProps) {
                         <CardTitle className="text-lg font-medium text-white">Histórico de Ingresos</CardTitle>
                     </CardHeader>
                     <CardContent className="pl-2">
-                        <RevenueChart />
+                        <RevenueChart data={isDemo ? null : revenueData.length > 0 ? revenueData : null} />
                     </CardContent>
                 </Card>
             </div>
@@ -110,24 +111,32 @@ export function SummaryTab({ condo }: SummaryTabProps) {
                     <CardHeader>
                         <CardTitle className="text-lg font-medium text-white">Alertas Morosidad</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        {isDemo ? (
-                            <div className="space-y-4">
-                                {[1, 2, 3].map((i) => (
-                                    <div key={i} className="flex items-start gap-4 rounded-lg bg-zinc-950/50 p-3 border border-zinc-800/50">
-                                        <div className="mt-1 rounded-full bg-rose-500/10 p-2 text-rose-500">
-                                            <AlertTriangle className="h-4 w-4" />
+                    <CardContent className="px-3 pb-3 pt-0">
+                        {((condo as any).alerts && (condo as any).alerts.length > 0) ? (
+                            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                                {(condo as any).alerts.map((alert: any) => (
+                                    <div key={alert.id} className="flex items-center justify-between gap-4 rounded-xl bg-zinc-950/50 p-4 border border-zinc-800/50 hover:bg-zinc-900/80 transition-colors shadow-sm">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-rose-500/10 text-rose-500">
+                                                <AlertTriangle className="h-5 w-5" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-white truncate">{alert.title}</p>
+                                                <p className="text-xs font-medium text-zinc-500 truncate mt-0.5">{alert.name}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-white">Pago Vencido - Unidad A-10{i}</p>
-                                            <p className="text-xs text-zinc-500">Hace 2 horas</p>
+                                        <div className="text-right flex-shrink-0">
+                                            <p className="text-base font-bold text-rose-400">
+                                                ${Number(alert.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </p>
+                                            <p className="text-xs font-medium text-zinc-500 mt-0.5">{alert.timeText}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-zinc-800">
-                                <span className="text-sm text-zinc-500">No hay alertas de morosidad</span>
+                            <div className="flex h-32 items-center justify-center rounded-xl border-2 border-dashed border-zinc-800/80 bg-zinc-900/20">
+                                <span className="text-sm text-zinc-500 font-medium">No hay alertas de morosidad</span>
                             </div>
                         )}
                     </CardContent>
@@ -137,24 +146,32 @@ export function SummaryTab({ condo }: SummaryTabProps) {
                     <CardHeader>
                         <CardTitle className="text-lg font-medium text-white">Actividad Reciente</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        {isDemo ? (
-                            <div className="space-y-4">
-                                {[1, 2, 3].map((i) => (
-                                    <div key={i} className="flex items-start gap-4 rounded-lg bg-zinc-950/50 p-3 border border-zinc-800/50">
-                                        <div className="mt-1 rounded-full bg-emerald-500/10 p-2 text-emerald-500">
-                                            <CheckCircle2 className="h-4 w-4" />
+                    <CardContent className="px-3 pb-3 pt-0">
+                        {((condo as any).recent_activity && (condo as any).recent_activity.length > 0) ? (
+                            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                                {(condo as any).recent_activity.map((activity: any) => (
+                                    <div key={activity.id} className="flex items-center justify-between gap-4 rounded-xl bg-zinc-950/50 p-4 border border-zinc-800/50 hover:bg-zinc-900/80 transition-colors shadow-sm">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-emerald-500/10 text-emerald-500">
+                                                <CheckCircle2 className="h-5 w-5" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-white truncate">{activity.title}</p>
+                                                <p className="text-xs font-medium text-zinc-500 truncate mt-0.5">{activity.name}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-white">Pago Recibido - Unidad B-20{i}</p>
-                                            <p className="text-xs text-zinc-500">Hace {i * 5} minutos</p>
+                                        <div className="text-right flex-shrink-0">
+                                            <p className="text-base font-bold text-emerald-400">
+                                                ${Number(activity.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </p>
+                                            <p className="text-xs font-medium text-zinc-500 mt-0.5">{activity.timeText}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-zinc-800">
-                                <span className="text-sm text-zinc-500">No hay actividad reciente</span>
+                            <div className="flex h-32 items-center justify-center rounded-xl border-2 border-dashed border-zinc-800/80 bg-zinc-900/20">
+                                <span className="text-sm text-zinc-500 font-medium">No hay actividad reciente</span>
                             </div>
                         )}
                     </CardContent>

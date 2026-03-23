@@ -97,7 +97,7 @@ export function PropertyCard({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                    <Link href={`/dashboard/residents?condoId=${id}`} className="w-full">
+                    <Link href={`/dashboard/residentes?condoId=${id}`} className="w-full">
                         <Button variant="outline" className="w-full gap-2 border-zinc-800 hover:bg-zinc-800 text-zinc-300 h-10 text-xs">
                             <Users className="h-3.5 w-3.5" />
                             Residentes

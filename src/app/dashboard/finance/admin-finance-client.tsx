@@ -43,12 +43,12 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
             </div>
 
             {/* KPI Cards */}
-            <KPICards />
+            <KPICards condominiumId={condominiumId} />
 
             {/* Main Content Grid */}
             <div className="min-h-[400px]">
                 {/* Revenue Chart - Taking up full space now */}
-                <RevenueChart />
+                <RevenueChart condominiumId={condominiumId} />
             </div>
 
             {/* Quick Link to Detailed Billing */}

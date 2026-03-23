@@ -18,7 +18,7 @@ import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
 import { CommunicationLog } from '@/types/residents'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function ResidentMovementsPage() {
     const params = useParams()
@@ -33,6 +33,8 @@ export default function ResidentMovementsPage() {
     const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false)
     const [sendingReminder, setSendingReminder] = useState(false)
     const [organizationId, setOrganizationId] = useState('')
+    const [condominiumName, setCondominiumName] = useState('')
+    const [status, setStatus] = useState<{ type: 'success' | 'warning' | 'error', message: string } | null>(null)
 
     // Stats
     const [stats, setStats] = useState({
@@ -61,7 +63,10 @@ export default function ResidentMovementsPage() {
 
             if (residentData?.condominium_id) {
                 const condo = await propertiesService.getById(residentData.condominium_id)
-                if (condo) setOrganizationId(condo.organization_id)
+                if (condo) {
+                    setOrganizationId(condo.organization_id)
+                    setCondominiumName(condo.name)
+                }
             }
 
             if (residentData?.unit_id) {
@@ -110,22 +115,39 @@ export default function ResidentMovementsPage() {
     }
 
     const handleSmartReminder = async () => {
-        if (!resident) return
+        if (!resident || invoices.length === 0) return
+        
+        // Find overdue or pending invoices
+        const unpaidInvoices = invoices.filter(inv => inv.status === 'overdue' || inv.status === 'pending')
+        
+        if (unpaidInvoices.length === 0) {
+            setStatus({ type: 'warning', message: '⚠️ No hay facturas pendientes para recordar.' })
+            return
+        }
+
+        // Get the oldest unpaid invoice
+        const targetInvoice = unpaidInvoices.reduce((a, b) => new Date(a.due_date) < new Date(b.due_date) ? a : b)
+
         setSendingReminder(true)
         try {
-            const result = await notificationsService.sendSmartReminder(resident, invoices)
-            if (result.success) {
-                alert(`✅ Éxito: ${result.message}`)
-                // Refresh logs
-                const newLogs = await notificationsService.getHistory(resident.id)
-                setLogs(newLogs)
+            const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invoice_id: targetInvoice.id })
+            })
+
+            if (res.ok) {
+                setStatus({ type: 'success', message: '✅ Recordatorio enviado por WhatsApp' })
+                // Refresh data if needed
+                fetchData(resident.id)
             } else {
-                alert(`⚠️ Atención: ${result.message}`)
+                setStatus({ type: 'error', message: '❌ Error al enviar el recordatorio por WhatsApp' })
             }
         } catch (e) {
-            alert('Error al procesar la solicitud')
+            setStatus({ type: 'error', message: '❌ Error: Hubo un problema al procesar la solicitud' })
         } finally {
             setSendingReminder(false)
+            setTimeout(() => setStatus(null), 4000)
         }
     }
 
@@ -211,6 +233,23 @@ export default function ResidentMovementsPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6">
+            <AnimatePresence>
+                {status && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className={`p-4 mb-4 rounded-xl border flex items-center gap-3 shadow-lg ${
+                            status.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 
+                            status.type === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
+                            'bg-red-500/10 border-red-500/20 text-red-400'
+                        }`}
+                    >
+                        {status.message}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header Area */}
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -224,7 +263,7 @@ export default function ResidentMovementsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="text-zinc-500 text-sm flex items-center gap-1">
-                            <Building size={14} /> {resident.condominium_id ? 'Plaza Moll' : ''} {/* Mock name if not joined */}
+                            <Building size={14} /> {condominiumName || (resident.condominium_id ? 'Propiedad Las Palmas' : '')}
                         </span>
                     </div>
                 </div>

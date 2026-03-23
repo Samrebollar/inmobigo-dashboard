@@ -28,10 +28,11 @@ import { Invoice } from '@/types/finance'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { CreateResidentModal } from '@/components/residents/CreateResidentModal'
+import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
 import { BulkUploadResidentsModal } from '@/components/residents/BulkUploadResidentsModal'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
 import { unitsService } from '@/services/units-service'
@@ -46,6 +47,7 @@ interface ResidentWithFinance extends Resident {
     overdueCount: number
     lastPaymentDate?: string
     maxDaysOverdue: number
+    oldestPendingInvoiceId?: string
 }
 
 
@@ -59,10 +61,14 @@ export default function ResidentsPage() {
     const [condominiums, setCondominiums] = useState<Condominium[]>([])
     const [selectedCondo, setSelectedCondo] = useState<string>('')
     const [search, setSearch] = useState('')
+    const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
+    const [status, setStatus] = useState<{ type: 'success' | 'warning' | 'error', message: string } | null>(null)
+    const [organizationId, setOrganizationId] = useState<string>('')
 
     // Modal State
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isBulkOpen, setIsBulkOpen] = useState(false)
+    const [invoiceModalResident, setInvoiceModalResident] = useState<ResidentWithFinance | null>(null)
     const [units, setUnits] = useState<any[]>([])
     const { checkAction, isDemo, loading: loadingDemo } = useDemoMode()
     const searchParams = useSearchParams()
@@ -95,6 +101,7 @@ export default function ResidentsPage() {
 
             if (!orgUser) {
                 if (isDemo) {
+                    setOrganizationId('demo-org-id')
                     const demoCondos = demoDb.getProperties()
                     setCondominiums(demoCondos.map(c => ({ id: c.id, name: c.name })))
                     if (demoCondos.length > 0) {
@@ -104,6 +111,8 @@ export default function ResidentsPage() {
                 setLoading(false)
                 return
             }
+
+            setOrganizationId(orgUser.organization_id)
 
             const { data: condos } = await supabase
                 .from('condominiums')
@@ -169,11 +178,19 @@ export default function ResidentsPage() {
                 const lastPayment = paidInvoices.length > 0 ? paidInvoices[0].paid_at : undefined
 
                 let maxDays = 0
+                let oldestPendingInvoiceId = undefined
+
                 if (overdueInvoices.length > 0) {
                     const oldest = overdueInvoices.reduce((prev, curr) =>
                         new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
                     )
                     maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
+                    oldestPendingInvoiceId = oldest.id
+                } else if (pendingInvoices.length > 0) {
+                    const oldest = pendingInvoices.reduce((prev, curr) =>
+                        new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
+                    )
+                    oldestPendingInvoiceId = oldest.id
                 }
 
                 return {
@@ -181,7 +198,8 @@ export default function ResidentsPage() {
                     calculatedDebt: debt,
                     overdueCount: overdueInvoices.length,
                     lastPaymentDate: lastPayment,
-                    maxDaysOverdue: maxDays
+                    maxDaysOverdue: maxDays,
+                    oldestPendingInvoiceId
                 }
             })
 
@@ -203,13 +221,64 @@ export default function ResidentsPage() {
         return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount)
     }
 
+    const handleSendReminder = async (residentId: string) => {
+        checkAction(async () => {
+            const resident = residents.find(r => r.id === residentId)
+            if (!resident || !resident.oldestPendingInvoiceId) {
+                setStatus({ type: 'warning', message: '⚠️ No hay facturas pendientes para recordar.' })
+                return
+            }
+            
+            setSendingReminderId(residentId)
+            try {
+                const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ invoice_id: resident.oldestPendingInvoiceId })
+                })
+
+                if (res.ok) {
+                    setStatus({ type: 'success', message: '✅ Recordatorio enviado por WhatsApp' })
+                } else {
+                    setStatus({ type: 'error', message: '❌ Error al enviar el recordatorio por WhatsApp' })
+                }
+            } catch (e) {
+                setStatus({ type: 'error', message: '❌ Error: Hubo un problema de conexión' })
+            } finally {
+                setSendingReminderId(null)
+                setTimeout(() => setStatus(null), 4000)
+            }
+        })
+    }
+
     // Helper actions (mock)
     const handleViewMovements = (id: string) => alert('Ver movimientos: ' + id)
-    const handleSendReminder = (id: string) => checkAction(() => alert('Enviar recordatorio: ' + id))
-    const handleCreateInvoice = (id: string) => checkAction(() => alert('Crear factura: ' + id))
+    const handleCreateInvoice = (id: string) => checkAction(() => {
+        const resident = residents.find(r => r.id === id)
+        if (resident) {
+            setInvoiceModalResident(resident)
+        }
+    })
 
     return (
         <div className="mx-auto max-w-7xl space-y-6 md:space-y-8 p-4 md:p-6">
+            <AnimatePresence>
+                {status && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className={`p-4 mb-4 rounded-xl border flex items-center gap-3 shadow-lg ${
+                            status.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 
+                            status.type === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
+                            'bg-red-500/10 border-red-500/20 text-red-400'
+                        }`}
+                    >
+                        {status.message}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 {/* Forced recompile console log */}
                 {console.log('Rendering residents page (cache busted)')}
@@ -385,11 +454,16 @@ export default function ResidentsPage() {
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => handleSendReminder(resident.id)}
+                                            disabled={sendingReminderId === resident.id}
                                             className="flex-1 lg:flex-none w-full flex items-center justify-center lg:justify-start px-4 py-3 rounded-lg text-xs md:text-sm font-semibold transition-all
-                                            bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 shadow-lg shadow-emerald-900/5 h-11 md:h-12"
+                                            bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/30 shadow-lg shadow-emerald-900/5 h-11 md:h-12 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            <svg className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" viewBox="0 0 448 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.2-8.5-44.2-27.1-16.4-14.6-27.4-32.6-30.6-38.1-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.2 3.7-5.5 5.5-9.2 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.6 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
-                                            <span className="lg:hidden xl:inline">Recordatorio</span><span className="hidden lg:inline xl:hidden">Avisar</span>
+                                            {sendingReminderId === resident.id ? (
+                                                <div className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                                            ) : (
+                                                <svg className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" viewBox="0 0 448 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-5.5-2.8-23.2-8.5-44.2-27.1-16.4-14.6-27.4-32.6-30.6-38.1-3.2-5.6-.3-8.6 2.5-11.4 2.5-2.5 5.5-6.5 8.3-9.7 2.8-3.2 3.7-5.5 5.5-9.2 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 13.2 5.8 23.5 9.2 31.6 11.8 13.3 4.2 25.4 3.6 35 2.2 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+                                            )}
+                                            <span className="lg:hidden xl:inline">{sendingReminderId === resident.id ? 'Enviando...' : 'Recordatorio'}</span><span className="hidden lg:inline xl:hidden">Avisar</span>
                                         </motion.button>
 
                                         <motion.button
@@ -455,6 +529,20 @@ export default function ResidentsPage() {
                     onClose={() => setIsBulkOpen(false)}
                     onSuccess={() => fetchData(selectedCondo)}
                     condominiumId={selectedCondo}
+                />
+            )}
+
+            {invoiceModalResident && (
+                <CreateInvoiceModal
+                    isOpen={true}
+                    onClose={() => setInvoiceModalResident(null)}
+                    condominiumId={invoiceModalResident.condominium_id || selectedCondo}
+                    organizationId={organizationId}
+                    defaultResident={invoiceModalResident}
+                    onSuccess={() => {
+                        setInvoiceModalResident(null)
+                        fetchData(selectedCondo)
+                    }}
                 />
             )}
         </div>

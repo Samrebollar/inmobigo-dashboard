@@ -244,7 +244,7 @@ export function CreatePropertyModal({ isOpen, onClose, onSuccess, orgId, createP
                                                 onChange={(e) => setFormData({ ...formData, units_total: parseInt(e.target.value) || 0 })}
                                             />
                                             <div>
-                                                <label className="mb-2 block text-sm font-medium text-zinc-400">Día de Corte (Facturación)</label>
+                                                <label className="mb-2 block text-sm font-medium text-zinc-400">Fecha limite de pago mensual</label>
                                                 <div className="flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
                                                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-400">
                                                         <CalendarIcon className="h-5 w-5" />

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { cn } from '@/lib/utils'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
@@ -35,7 +36,7 @@ export function Button({
 
     return (
         <button
-            className={`${baseStyles} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${className}`}
+            className={cn(baseStyles, variants[variant] || variants.primary, sizes[size] || sizes.md, className)}
             disabled={isLoading || props.disabled}
             {...props}
         >

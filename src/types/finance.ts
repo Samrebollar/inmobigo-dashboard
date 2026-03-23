@@ -12,11 +12,17 @@ export interface Invoice {
     description: string
     created_at: string
     paid_at?: string
+    
+    // Automation flags
+    recargo_aplicado?: boolean
+    recargo_monto?: number
+
     // Linked data
     unit_number?: string
     condominium_name?: string
     condominium_address?: string
     condominium_logo_url?: string
+    resident_name?: string
 }
 
 export interface CreateInvoiceDTO {

@@ -164,8 +164,8 @@ export function EditCondominiumModal({ isOpen, onClose, onSuccess, condominium, 
                                             <Input type="number" name="units_total" value={formData.units_total} onChange={handleChange} className="bg-zinc-950 border-zinc-800" />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-xs font-medium text-zinc-400">Día de Corte</label>
-                                            <div className="relative">
+                                            <label className="text-xs font-medium text-zinc-400">Fecha limite de pago mensual</label>
+                                            <div className="relative mt-2">
                                                 <Input type="number" name="billing_day" min={1} max={31} value={formData.billing_day || 1} onChange={handleChange} className="bg-zinc-950 border-zinc-800 pl-8" />
                                                 <Check className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
                                             </div>

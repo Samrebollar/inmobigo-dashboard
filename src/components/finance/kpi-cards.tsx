@@ -23,13 +23,34 @@ interface KPI {
     data: number[] // sparkline 7 days
 }
 
-export function KPICards() {
-    // Mock Data - Replace with real data in production
+export function KPICards({ condominiumId }: { condominiumId?: string }) {
+    const [metrics, setMetrics] = useState<any>(null)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchMetrics = async () => {
+            try {
+                setIsLoading(true)
+                const url = condominiumId ? `/api/finance/metrics?condominium_id=${condominiumId}` : '/api/finance/metrics'
+                const res = await fetch(url)
+                if (res.ok) {
+                    const data = await res.json()
+                    setMetrics(data)
+                }
+            } catch (e) {
+                console.error('Error fetching finance metrics:', e)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchMetrics()
+    }, [condominiumId])
+
     const kpis: KPI[] = [
         {
             id: 'income',
             title: 'Ingresos del Mes',
-            value: 125400,
+            value: metrics?.ingresos_mes || 0,
             prefix: '$',
             change: 12.5,
             trend: 'up',
@@ -39,8 +60,8 @@ export function KPICards() {
         },
         {
             id: 'invoiced',
-            title: 'Total Facturado',
-            value: 148000,
+            title: 'Total por cobrar del periodo',
+            value: metrics?.total_por_cobrar || 0,
             prefix: '$',
             change: 8.2,
             trend: 'up',
@@ -51,7 +72,7 @@ export function KPICards() {
         {
             id: 'overdue',
             title: 'Cartera Vencida',
-            value: 22600,
+            value: metrics?.cartera_vencida || 0,
             prefix: '$',
             change: -2.4, // Negative is good for overdue, but we handle color logic
             trend: 'down',
@@ -62,7 +83,7 @@ export function KPICards() {
         {
             id: 'collection',
             title: 'Eficacia de Cobro',
-            value: 84.5,
+            value: metrics?.eficacia_cobro || 0,
             suffix: '%',
             change: 5.1,
             trend: 'up',

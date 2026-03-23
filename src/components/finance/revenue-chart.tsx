@@ -2,19 +2,39 @@
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 
-const data = [
-    { name: 'Ene', income: 40000, invoiced: 45000, pending: 5000 },
-    { name: 'Feb', income: 35000, invoiced: 42000, pending: 7000 },
-    { name: 'Mar', income: 48000, invoiced: 50000, pending: 2000 },
-    { name: 'Abr', income: 42000, invoiced: 48000, pending: 6000 },
-    { name: 'May', income: 52000, invoiced: 55000, pending: 3000 },
-    { name: 'Jun', income: 58000, invoiced: 60000, pending: 2000 },
+// Fallback skeleton
+const defaultData = [
+    { mes: 'Ene', facturado: 0, cobrado: 0, pendiente: 0 },
+    { mes: 'Feb', facturado: 0, cobrado: 0, pendiente: 0 },
+    { mes: 'Mar', facturado: 0, cobrado: 0, pendiente: 0 },
 ]
 
-export function RevenueChart() {
+export function RevenueChart({ condominiumId }: { condominiumId?: string }) {
     const [filter, setFilter] = useState<'monthly' | 'quarterly'>('monthly')
+    const [chartData, setChartData] = useState<any[] | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchChartData = async () => {
+            try {
+                setIsLoading(true)
+                const url = condominiumId ? `/api/finance/revenue-chart?condominium_id=${condominiumId}` : '/api/finance/revenue-chart'
+                const res = await fetch(url)
+                if (res.ok) {
+                    const data = await res.json()
+                    setChartData(data)
+                }
+            } catch (e) {
+                console.error('Error fetching revenue chart data', e)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchChartData()
+    }, [condominiumId])
 
     return (
         <motion.div
@@ -46,12 +66,17 @@ export function RevenueChart() {
                 </div>
             </div>
 
-            <div className="h-[350px] w-full">
+            <div className="h-[350px] w-full relative">
+                {isLoading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-900/50 backdrop-blur-sm rounded-lg">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                    </div>
+                )}
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <BarChart data={chartData || defaultData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                         <XAxis
-                            dataKey="name"
+                            dataKey="mes"
                             stroke="#71717a"
                             fontSize={12}
                             tickLine={false}
@@ -84,7 +109,7 @@ export function RevenueChart() {
                             wrapperStyle={{ paddingBottom: '20px', fontSize: '12px', color: '#a1a1aa' }}
                         />
                         <Bar
-                            dataKey="invoiced"
+                            dataKey="facturado"
                             name="Facturado"
                             fill="#3b82f6"
                             radius={[4, 4, 0, 0]}
@@ -92,7 +117,7 @@ export function RevenueChart() {
                             fillOpacity={0.8}
                         />
                         <Bar
-                            dataKey="income"
+                            dataKey="cobrado"
                             name="Cobrado"
                             fill="#10b981"
                             radius={[4, 4, 0, 0]}
@@ -100,7 +125,7 @@ export function RevenueChart() {
                             fillOpacity={0.8}
                         />
                         <Bar
-                            dataKey="pending"
+                            dataKey="pendiente"
                             name="Pendiente"
                             fill="#f43f5e"
                             radius={[4, 4, 0, 0]}

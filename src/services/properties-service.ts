@@ -62,6 +62,36 @@ export const propertiesService = {
         return data
     },
 
+    async getSettings(condominiumId: string): Promise<any> {
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('settings_condominio')
+            .select('*')
+            .eq('condominio_id', condominiumId)
+            .single()
+
+        if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching settings_condominio:', error)
+            return null
+        }
+        return data
+    },
+
+    async updateSettings(condominiumId: string, settings: any): Promise<void> {
+        const supabase = createClient()
+        const { error } = await supabase
+            .from('settings_condominio')
+            .upsert({ 
+                condominio_id: condominiumId,
+                ...settings 
+            }, { onConflict: 'condominio_id' })
+
+        if (error) {
+            console.error('Error updating settings_condominio:', error)
+            throw new Error(`Error al guardar configuración: ${error.message} (${error.code})`)
+        }
+    },
+
     async update(id: string, updates: Partial<UpdateCondominiumDTO>): Promise<Condominium> {
         const supabase = createClient()
         const { data, error } = await supabase

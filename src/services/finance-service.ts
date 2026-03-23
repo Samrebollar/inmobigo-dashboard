@@ -125,14 +125,84 @@ export const financeService = {
         // Generate simple folio if not provided (mock logic, ideally DB function)
         const folio = `INV-${Date.now().toString().slice(-6)}`
 
+        if (!invoice.unit_id) {
+            throw new Error('unit_id es obligatorio para crear una factura')
+        }
+
+        const { data: residentData, error: residentError } = await supabase
+            .from('residents')
+            .select('id')
+            .eq('unit_id', invoice.unit_id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+        if (residentError) {
+            console.error('Error fetching active resident:', residentError.message)
+            throw new Error('Error al validar el residente de la unidad')
+        }
+
+        if (!residentData?.id) {
+            throw new Error('No existe residente activo para esta unidad')
+        }
+
+        const assignedResidentId = residentData.id
+
+        console.log(`[Invoice Creation] unit_id: ${invoice.unit_id} | resident_id: ${assignedResidentId} | date: ${new Date().toISOString()}`)
+
+        const payloadToInsert = { 
+            ...invoice, 
+            folio,
+            resident_id: assignedResidentId
+        }
+
         const { data, error } = await supabase
             .from('invoices')
-            .insert({ ...invoice, folio })
+            .insert(payloadToInsert)
             .select()
             .single()
 
         if (error) throw error
         return data
+    },
+
+    async update(id: string, updates: Partial<Invoice>): Promise<Invoice> {
+        if (id.startsWith('demo-')) {
+            throw new Error('No se pueden editar facturas de demostración.')
+        }
+
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('invoices')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('[financeService.update] error:', error)
+            throw new Error('Error al actualizar la factura')
+        }
+
+        return data
+    },
+
+    async delete(id: string): Promise<void> {
+        if (id.startsWith('demo-')) {
+            throw new Error('No se pueden eliminar facturas de demostración.')
+        }
+
+        const supabase = createClient()
+        const { error } = await supabase
+            .from('invoices')
+            .delete()
+            .eq('id', id)
+
+        if (error) {
+            console.error('[financeService.delete] error:', error)
+            throw new Error('Error al eliminar la factura')
+        }
     },
 
     async getGlobalInvoices(organizationId: string): Promise<Invoice[]> {
@@ -150,6 +220,7 @@ export const financeService = {
                     condominium_id: 'demo-condo-1',
                     condominium_name: 'Torre Altura',
                     unit_number: 'A-101',
+                    resident_name: 'Juan Pérez',
                     amount: 2500,
                     status: 'paid',
                     due_date: getRelativeDate(5),
@@ -163,6 +234,7 @@ export const financeService = {
                     condominium_id: 'demo-condo-1',
                     condominium_name: 'Torre Altura',
                     unit_number: 'B-202',
+                    resident_name: 'María García',
                     amount: 1800,
                     status: 'pending',
                     due_date: getRelativeDate(-5), // 5 days in future
@@ -176,6 +248,7 @@ export const financeService = {
                     condominium_id: 'demo-condo-2',
                     condominium_name: 'Residencial del Valle',
                     unit_number: '14-C',
+                    resident_name: 'Carlos Rodríguez',
                     amount: 3200,
                     status: 'overdue',
                     due_date: getRelativeDate(15),
@@ -189,6 +262,7 @@ export const financeService = {
                     condominium_id: 'demo-condo-1',
                     condominium_name: 'Torre Altura',
                     unit_number: 'C-305',
+                    resident_name: 'Ana López',
                     amount: 4500,
                     status: 'paid',
                     due_date: getRelativeDate(20),
@@ -202,6 +276,7 @@ export const financeService = {
                     condominium_id: 'demo-condo-2',
                     condominium_name: 'Residencial del Valle',
                     unit_number: '05-B',
+                    resident_name: 'Luis Martínez',
                     amount: 1500,
                     status: 'paid',
                     due_date: getRelativeDate(30),
@@ -270,18 +345,33 @@ export const financeService = {
             .select(`
                 *,
                 condominiums (name),
-                units (unit_number)
+                units (
+                    unit_number,
+                    residents (first_name, last_name)
+                ),
+                residents (first_name, last_name)
             `)
             .in('condominium_id', condoIds)
             .order('created_at', { ascending: false })
 
         if (error) throw error
 
-        return data?.map(inv => ({
-            ...inv,
-            condominium_name: inv.condominiums?.name,
-            unit_number: inv.units?.unit_number
-        })) || []
+        return data?.map(inv => {
+            let res = (inv as any).residents;
+            if (!res || (Array.isArray(res) && res.length === 0)) {
+                res = inv.units?.residents;
+            }
+            if (Array.isArray(res) && res.length > 0) res = res[0];
+
+            const rName = res ? `${res.first_name || ''} ${res.last_name || ''}`.trim() : null
+
+            return {
+                ...inv,
+                condominium_name: inv.condominiums?.name,
+                unit_number: inv.units?.unit_number,
+                resident_name: rName || null
+            }
+        }) || []
     },
 
     async getInvoiceById(id: string): Promise<Invoice | null> {
@@ -325,7 +415,11 @@ export const financeService = {
             .select(`
                 *,
                 condominiums (name),
-                units (unit_number)
+                units (
+                    unit_number,
+                    residents (first_name, last_name)
+                ),
+                residents (first_name, last_name)
             `)
             .eq('unit_id', unitId)
             .order('created_at', { ascending: false })
@@ -335,11 +429,22 @@ export const financeService = {
             return []
         }
 
-        return data?.map(inv => ({
-            ...inv,
-            condominium_name: inv.condominiums?.name,
-            unit_number: inv.units?.unit_number
-        })) || []
+        return data?.map(inv => {
+            let res = (inv as any).residents;
+            if (!res || (Array.isArray(res) && res.length === 0)) {
+                res = inv.units?.residents;
+            }
+            if (Array.isArray(res) && res.length > 0) res = res[0];
+
+            const rName = res ? `${res.first_name || ''} ${res.last_name || ''}`.trim() : null
+            
+            return {
+                ...inv,
+                condominium_name: inv.condominiums?.name,
+                unit_number: inv.units?.unit_number,
+                resident_name: rName || null
+            }
+        }) || []
     },
 
     async getTotalIngresos(): Promise<number> {

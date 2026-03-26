@@ -7,9 +7,12 @@ export interface Invoice {
     unit_id?: string
     folio: string
     amount: number
+    paid_amount?: number
+    balance_due?: number
     status: InvoiceStatus
     due_date: string
     description: string
+    payment_link?: string
     created_at: string
     paid_at?: string
     

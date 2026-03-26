@@ -18,7 +18,16 @@ interface Debtor {
     avatar: string
 }
 
-export function DelinquencyCenter({ condominiumId }: { condominiumId: string }) {
+export function DelinquencyCenter({ 
+    condominiumId, 
+    onStatsUpdate 
+}: { 
+    condominiumId: string,
+    onStatsUpdate?: (stats: any) => void
+}) {
+    const [scope, setScope] = useState<string>('all')
+    const [availableCondos, setAvailableCondos] = useState<{id: string, name: string}[]>([])
+    const [activeCondoIds, setActiveCondoIds] = useState<string[]>([])
     const [showReport, setShowReport] = useState(false)
     const [debtors, setDebtors] = useState<Debtor[]>([])
     const [totalDebt, setTotalDebt] = useState(0)
@@ -40,7 +49,39 @@ export function DelinquencyCenter({ condominiumId }: { condominiumId: string }) 
         }
 
         const fetchDebtors = async () => {
+            setLoading(true)
             try {
+                let queryCondoIds = scope === 'all' ? [condominiumId] : [scope]
+                let fetchedCondos = availableCondos
+
+                // Fetch organization condos if not fetched yet or empty
+                if (fetchedCondos.length === 0) {
+                    const { data: orgLookup } = await supabase
+                        .from('condominiums')
+                        .select('organization_id')
+                        .eq('id', condominiumId)
+                        .maybeSingle()
+
+                    if (orgLookup?.organization_id) {
+                        const { data: orgCondos } = await supabase
+                            .from('condominiums')
+                            .select('id, name')
+                            .eq('organization_id', orgLookup.organization_id)
+                            .order('name')
+
+                        if (orgCondos) {
+                            fetchedCondos = orgCondos
+                            setAvailableCondos(orgCondos)
+                        }
+                    }
+                }
+
+                if (scope === 'all' && fetchedCondos.length > 0) {
+                    queryCondoIds = fetchedCondos.map(c => c.id)
+                }
+                
+                setActiveCondoIds(queryCondoIds)
+
                 const { data, error } = await supabase
                     .from('invoices')
                     .select(`
@@ -49,6 +90,7 @@ export function DelinquencyCenter({ condominiumId }: { condominiumId: string }) 
                         balance_due,
                         due_date,
                         status,
+                        condominiums!inner ( name ),
                         residents!invoices_resident_id_fkey (
                             id,
                             first_name,
@@ -58,7 +100,7 @@ export function DelinquencyCenter({ condominiumId }: { condominiumId: string }) 
                             unit_number
                         )
                     `)
-                    .eq('condominium_id', condominiumId)
+                    .in('condominium_id', queryCondoIds)
                     .or('status.eq.pending,status.eq.overdue,balance_due.gt.0')
 
                 if (error) throw error
@@ -87,10 +129,15 @@ export function DelinquencyCenter({ condominiumId }: { condominiumId: string }) 
                             const fullName = `${firstName} ${lastName}`.trim()
                             const avatar = firstName.charAt(0) + (lastName ? lastName.charAt(0) : '')
 
+                            let condoStr = ''
+                            if (scope === 'all' && inv.condominiums?.name) {
+                                condoStr = `${inv.condominiums.name} - `
+                            }
+
                             residentDebts[residentId] = {
                                 id: residentId,
                                 name: fullName,
-                                unit: inv.units?.unit_number || 'S/N',
+                                unit: `${condoStr}Unidad ${inv.units?.unit_number || 'S/N'}`,
                                 debt: 0,
                                 days: diffDays,
                                 avatar: avatar.toUpperCase() || '👤'
@@ -125,71 +172,17 @@ export function DelinquencyCenter({ condominiumId }: { condominiumId: string }) 
         }
 
         fetchDebtors()
-    }, [condominiumId, supabase])
+    }, [condominiumId, scope, supabase])
 
     return (
-        <>
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 flex flex-col h-full"
-            >
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                        <AlertCircle className="text-rose-500" size={20} />
-                        Centro de Morosidad
-                    </h3>
-                    <span className="text-xs font-medium px-2 py-1 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                        Total: ${totalDebt.toLocaleString()}
-                    </span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                    {loading ? (
-                        <div className="text-sm text-zinc-500 text-center py-4">Cargando datos...</div>
-                    ) : debtors.length === 0 ? (
-                        <div className="text-sm text-zinc-500 text-center py-4">No hay residentes morosos actualmente.</div>
-                    ) : (
-                        debtors.map((debtor, i) => (
-                            <div key={debtor.id} className="flex items-center justify-between group p-2 hover:bg-zinc-800/50 rounded-lg transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 flex-shrink-0 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 group-hover:bg-rose-500/10 group-hover:text-rose-400 transition-colors">
-                                        {debtor.avatar}
-                                    </div>
-                                    <div className="min-w-0 pr-4">
-                                        <div className="text-sm font-medium text-white truncate max-w-[140px]">{debtor.name}</div>
-                                        <div className="text-xs text-zinc-500 truncate">
-                                            Unidad {debtor.unit} • {debtor.days === 0 ? 'Al día o fecha pendiente' : `${debtor.days} días vencido`}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                    <div className="text-sm font-bold text-rose-400">${debtor.debt.toLocaleString()}</div>
-                                    <button className="text-[10px] text-zinc-500 hover:text-white flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
-                                        Gestionar <ArrowRight size={10} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-zinc-800">
-                    <button
-                        onClick={() => setShowReport(true)}
-                        className="w-full py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                    >
-                        Ver reporte completo
-                    </button>
-                </div>
-            </motion.div>
-
+        <div className="w-full h-full">
             <DelinquencyReportModal
-                isOpen={showReport}
-                onClose={() => setShowReport(false)}
-                condominiumId={condominiumId}
+                isOpen={true}
+                onClose={() => {}}
+                condominiumIds={activeCondoIds}
+                availableCondos={availableCondos}
+                onStatsUpdate={onStatsUpdate}
             />
-        </>
+        </div>
     )
 }

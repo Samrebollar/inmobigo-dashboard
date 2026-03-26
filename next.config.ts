@@ -22,6 +22,21 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: '/dashboard/reports',
+        destination: '/dashboard/reportes',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/settings',
+        destination: '/dashboard/configuracion',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/profile',
+        destination: '/dashboard/perfil',
+        permanent: true,
+      },
+      {
         source: '/dashboard/residents',
         destination: '/dashboard/residentes',
         permanent: true,

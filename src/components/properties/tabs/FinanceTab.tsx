@@ -447,10 +447,24 @@ export function FinanceTab() {
                                                             onClick={async () => {
                                                                 setSendingReminderId(inv.id)
                                                                 try {
-                                                                    const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+                                                                    const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+                                                                    console.log('Enviando recordatorio a:', webhookUrl)
+
+                                                                    const payload = {
+                                                                        "tipo": "recordatorio",
+                                                                        "first_name": "Residente", // Name not directly in inv object, could be improved
+                                                                        "phone": inv.telefono || '',
+                                                                        "amount": inv.monto,
+                                                                        "due_date": inv.due_date,
+                                                                        "payment_link": null, // Not easily available here
+                                                                        "condominium": "", // Not easily available here
+                                                                        "unit": inv.unidad || 'S/N'
+                                                                    }
+
+                                                                    const res = await fetch(webhookUrl, {
                                                                         method: 'POST',
                                                                         headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({ invoice_id: inv.id })
+                                                                        body: JSON.stringify(payload)
                                                                     })
                                                                     
                                                                     if (res.ok) {

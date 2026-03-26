@@ -231,10 +231,27 @@ export default function ResidentsPage() {
             
             setSendingReminderId(residentId)
             try {
-                const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+                const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+                console.log('Enviando recordatorio a:', webhookUrl)
+
+                const payload = {
+                    "tipo": "recordatorio",
+                    "first_name": `${resident.first_name} ${resident.last_name}`,
+                    "phone": resident.phone || '',
+                    "amount": resident.calculatedDebt,
+                    "due_date": residents.find(r => r.id === residentId)?.lastPaymentDate || '', // Note: This might need more logic but keeping it simple as per request
+                    "payment_link": null, // Not easily available here without more fetching
+                    "condominium": condominiums.find(c => c.id === selectedCondo)?.name || '',
+                    "unit": resident.unit_number || 'S/N'
+                }
+
+                // If we want more precise data, we'd need to fetch the invoice here, 
+                // but since the user provided a generic structure, I'll use available data.
+
+                const res = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ invoice_id: resident.oldestPendingInvoiceId })
+                    body: JSON.stringify(payload)
                 })
 
                 if (res.ok) {

@@ -1,14 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { AlertTriangle, UserX, Receipt, Mail, Loader2, ArrowUpRight } from 'lucide-react'
+import { AlertTriangle, UserX, Receipt, Mail, Loader2, ArrowUpRight, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
 import { DelinquencyCenter } from '@/components/finance/delinquency-center'
-import { AgingSummary } from '@/components/finance/aging-summary'
 import { motion } from 'framer-motion'
 
 export default function MorososPage() {
@@ -20,7 +19,10 @@ export default function MorososPage() {
   const [stats, setStats] = useState({
     totalMorosos: 0,
     deudaTotal: 0,
-    facturasVencidas: 0
+    facturasVencidas: 0,
+    topRiskCount: 0,
+    topRiskLevel: 'low' as 'low' | 'medium' | 'critical',
+    maxDaysOverdue: 0
   })
 
   useEffect(() => {
@@ -70,79 +72,37 @@ export default function MorososPage() {
           setCondominiumId(demoCondos.length > 0 ? demoCondos[0].id : 'demo-condo-1')
         }
 
+        setLoading(false)
       } catch (err) {
         console.error('Error init MorososPage:', err)
+        setLoading(false)
       }
     }
 
     if (!demoLoading) init()
   }, [demoLoading, isDemo])
 
-  // Fetch KPI data when condominiumId is set
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (!condominiumId) {
-        setLoading(false)
-        return
+  const handleStatsUpdate = useCallback((newStats: { 
+    totalMorosos: number, 
+    deudaTotal: number, 
+    facturasVencidas: number,
+    topRiskCount: number,
+    topRiskLevel: 'low' | 'medium' | 'critical',
+    maxDaysOverdue: number 
+  }) => {
+    setStats(prev => {
+      // Only update if values actually changed to prevent loops
+      if (prev.totalMorosos === newStats.totalMorosos && 
+          prev.deudaTotal === newStats.deudaTotal && 
+          prev.facturasVencidas === newStats.facturasVencidas &&
+          prev.topRiskCount === newStats.topRiskCount &&
+          prev.topRiskLevel === newStats.topRiskLevel &&
+          prev.maxDaysOverdue === newStats.maxDaysOverdue) {
+        return prev
       }
-
-      try {
-        if (condominiumId.startsWith('demo-')) {
-          setStats({
-            totalMorosos: 5,
-            deudaTotal: 25000,
-            facturasVencidas: 12
-          })
-          setLoading(false)
-          return
-        }
-
-        const { data: invoices, error } = await supabase
-          .from('invoices')
-          .select('id, amount, balance_due, due_date, status, resident_id')
-          .eq('condominium_id', condominiumId)
-          .or('status.eq.pending,status.eq.overdue,balance_due.gt.0')
-
-        if (error) throw error
-
-        let uniqueResidents = new Set<string>()
-        let totalDebt = 0
-        let overdueCount = 0
-        const now = new Date()
-
-        if (invoices) {
-          invoices.forEach(inv => {
-            const amount = inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0)
-            if (amount <= 0) return
-
-            if (inv.resident_id) {
-              uniqueResidents.add(inv.resident_id)
-            }
-            
-            totalDebt += amount
-
-            const dueDate = inv.due_date ? new Date(inv.due_date) : now
-            if (inv.status === 'overdue' || (inv.status === 'pending' && dueDate < now)) {
-              overdueCount++
-            }
-          })
-        }
-
-        setStats({
-          totalMorosos: uniqueResidents.size,
-          deudaTotal: totalDebt,
-          facturasVencidas: overdueCount
-        })
-
-      } catch (err) {
-        console.error('Error fetching Morosos stats:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchStats()
-  }, [condominiumId, supabase])
+      return newStats
+    })
+  }, [])
 
   if (loading || demoLoading) {
     return (
@@ -229,30 +189,51 @@ export default function MorososPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.5 }}
             whileHover={{ scale: 1.02 }}
-            className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg transition-all hover:shadow-indigo-500/20 hover:border-indigo-500/50"
+            className={`group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg transition-all 
+              ${stats.topRiskLevel === 'critical' ? 'hover:shadow-rose-500/20 hover:border-rose-500/50' : 
+                stats.topRiskLevel === 'medium' ? 'hover:shadow-amber-500/20 hover:border-amber-500/50' : 
+                'hover:shadow-indigo-500/20 hover:border-indigo-500/50'}`}
         >
-          <div className="absolute inset-x-0 -top-px h-px w-full bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+          <div className={`absolute inset-x-0 -top-px h-px w-full bg-gradient-to-r from-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100
+              ${stats.topRiskLevel === 'critical' ? 'via-rose-500/50' : 
+                stats.topRiskLevel === 'medium' ? 'via-amber-500/50' : 
+                'via-indigo-500/50'}`} />
           <div className="p-6">
             <div className="flex flex-row items-center justify-between pb-4">
-              <h3 className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">Facturas Vencidas</h3>
-              <div className="rounded-full bg-indigo-500/10 p-2 text-indigo-500 transition-colors group-hover:bg-indigo-500/20">
-                <Receipt className="h-4 w-4" />
+              <h3 className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">Morosidad Crítica</h3>
+              <div className={`rounded-full p-2 transition-colors 
+                  ${stats.topRiskLevel === 'critical' ? 'bg-rose-500/10 text-rose-500 group-hover:bg-rose-500/20' : 
+                    stats.topRiskLevel === 'medium' ? 'bg-amber-500/10 text-amber-500 group-hover:bg-amber-500/20' : 
+                    'bg-indigo-500/10 text-indigo-500 group-hover:bg-indigo-500/20'}`}>
+                <Zap className="h-4 w-4" />
               </div>
             </div>
-            <div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-bold tracking-tight text-white">{stats.facturasVencidas}</div>
+            <div className="space-y-1">
+              <div className="text-3xl font-bold tracking-tight text-white">
+                {stats.topRiskCount} {stats.topRiskCount === 1 ? 'residente' : 'residentes'}
               </div>
-              <p className="text-xs text-zinc-500 mt-2 font-medium">Registradas este mes</p>
+              <div className="text-xs font-medium text-zinc-500 mt-2">
+                {stats.topRiskLevel === 'low' ? '+7' : stats.topRiskLevel === 'medium' ? '+15' : `+${stats.maxDaysOverdue}`} días de atraso
+              </div>
+            </div>
+            
+            <div className={`mt-4 pt-4 border-t border-zinc-800/50 text-xs font-bold
+                ${stats.topRiskLevel === 'critical' ? 'text-rose-500' : 
+                  stats.topRiskLevel === 'medium' ? 'text-amber-500' : 'text-emerald-500'}`}>
+              {stats.topRiskLevel === 'critical' ? '¡Requiere atención inmediata!' : 
+               stats.topRiskLevel === 'medium' ? 'Atención prioritaria' : 
+               stats.totalMorosos > 0 ? 'Atención programada' : 'Sin residentes morosos'}
             </div>
           </div>
         </motion.div>
       </div>
 
-      {/* Split layout for Delinquency Center and Aging Summary */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2 h-[500px]">
-        <DelinquencyCenter condominiumId={condominiumId} />
-        <AgingSummary condominiumId={condominiumId} />
+      {/* Main layout for Delinquency Center */}
+      <div className="h-[500px]">
+        <DelinquencyCenter 
+          condominiumId={condominiumId} 
+          onStatsUpdate={handleStatsUpdate}
+        />
       </div>
     </div>
   )

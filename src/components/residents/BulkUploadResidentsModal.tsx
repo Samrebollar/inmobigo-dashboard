@@ -113,52 +113,62 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
                     const unitMap = new Map(units.map(u => [u.unit_number.toLowerCase(), u.id]))
 
                     rows.forEach((row, index) => {
-                        // Expected: Nombre, Apellido, Email, Telefono, Unidad, Estado, Saldo Pendiente, [Vehicles]
-                        const firstName = row['Nombre'] || row['nombre']
-                        const lastName = row['Apellido'] || row['apellido']
-                        const email = row['Email'] || row['email']
-                        const phone = row['Telefono'] || row['telefono'] || row['Phone']
+                        // Expected new: Nombre, Unidad, Contacto, Vehiculos, Estado, Saldo Pendiente
+                        let firstName = row['Nombre'] || row['nombre'] || ''
+                        let lastName = row['Apellido'] || row['apellido'] || ''
+                        let email = row['Email'] || row['email'] || ''
+                        let phone = row['Telefono'] || row['telefono'] || row['Phone'] || ''
+
+                        // Handle 'Nombre' containing full name if 'Apellido' is missing
+                        if (!row['Apellido'] && firstName.trim().includes(' ')) {
+                            const nameParts = firstName.trim().split(' ')
+                            firstName = nameParts[0]
+                            lastName = nameParts.slice(1).join(' ')
+                        }
+
+                        // Fallback handle for 'Contacto' if someone uses the older template
+                        const contacto = row['Contacto'] || row['contacto']
+                        if (contacto && !email && !phone) {
+                            const emailMatch = contacto.match(/[\w.-]+@[\w.-]+\.\w+/)
+                            if (emailMatch) email = emailMatch[0]
+                            
+                            const phoneMatch = contacto.replace(email || '', '').match(/[0-9\+\-\(\)\s]{7,}/)
+                            if (phoneMatch) phone = phoneMatch[0].trim()
+                        }
+
                         const unitRaw = row['Unidad'] || row['unidad']
                         const statusRaw = row['Estado'] || row['estado']
                         const debtRaw = row['Saldo Pendiente'] || row['saldo pendiente'] || row['Saldo'] || '0'
 
                         // Vehicle mapping
-                        const vPlate = row['Vehiculo_Placas'] || row['vehiculo_placas'] || row['Placas']
-                        const vBrand = row['Vehiculo_Marca'] || row['vehiculo_marca'] || row['Marca']
-                        const vColor = row['Vehiculo_Color'] || row['vehiculo_color'] || row['Color']
-
-                        if (!firstName || !email) {
-                            validationErrors.push(`Fila ${index + 1}: Falta nombre o email.`)
-                            return
-                        }
-
-                        // Map Status
-                        let status: 'active' | 'inactive' | 'delinquent' = 'active'
-                        if (statusRaw?.toLowerCase().includes('inactivo')) status = 'inactive'
-                        if (statusRaw?.toLowerCase().includes('moroso')) status = 'delinquent'
-
-                        // Map Unit
-                        let unitId = undefined
-                        if (unitRaw) {
-                            const foundId = unitMap.get(unitRaw.toString().toLowerCase())
-                            if (foundId) {
-                                unitId = foundId
-                            } else {
-                                console.warn(`Unidad no encontrada: ${unitRaw}`)
+                        const vehicles = []
+                        const vehiculosRaw = row['Vehiculos'] || row['vehiculos']
+                        
+                        if (vehiculosRaw && vehiculosRaw.toLowerCase() !== 'sin vehículos' && vehiculosRaw.toLowerCase() !== 'sin vehiculos') {
+                            // Extract first word as plate, rest as brand
+                            const vParts = vehiculosRaw.trim().split(' ')
+                            vehicles.push({
+                                plate: vParts[0],
+                                brand: vParts.slice(1).join(' ') || '',
+                                color: ''
+                            })
+                        } else if (!vehiculosRaw) {
+                            // Fallback to old format if used
+                            const vPlate = row['Vehiculo_Placas'] || row['vehiculo_placas'] || row['Placas']
+                            const vBrand = row['Vehiculo_Marca'] || row['vehiculo_marca'] || row['Marca']
+                            const vColor = row['Vehiculo_Color'] || row['vehiculo_color'] || row['Color']
+                            if (vPlate) {
+                                vehicles.push({
+                                    plate: vPlate,
+                                    brand: vBrand || '',
+                                    color: vColor || ''
+                                })
                             }
                         }
 
-                        // Parse Debt
-                        const debtAmount = parseFloat(debtRaw.replace(/[^0-9.-]+/g, "")) || 0
-
-                        // Parse Vehicles
-                        const vehicles = []
-                        if (vPlate) {
-                            vehicles.push({
-                                plate: vPlate,
-                                brand: vBrand || '',
-                                color: vColor || ''
-                            })
+                        if (!firstName || !email) {
+                            validationErrors.push(`Fila ${index + 1}: Falta nombre o email (revisa la columna de Contacto).`)
+                            return
                         }
 
                         validResidents.push({
@@ -231,7 +241,7 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
 
     const downloadTemplate = () => {
         // Add BOM for Excel UTF-8 support
-        const csvContent = "\uFEFFNombre,Apellido,Email,Telefono,Unidad,Estado,Saldo Pendiente,Vehiculo_Placas,Vehiculo_Marca,Vehiculo_Color\nJuan,Pérez,juan@ejemplo.com,555-0101,A-101,Activo,0,ABC-123,Toyota,Rojo\nMaría,López,maria@ejemplo.com,555-0202,B-202,Moroso,1500.50,XYZ-987,Honda,Azul\nPedro,Ramírez,pedro@ejemplo.com,,C-001,Inactivo,0,,,\n"
+        const csvContent = "\uFEFFNombre,Unidad,Email,Telefono,Vehiculos,Estado,Saldo Pendiente\nClara Licona,1,clara@gmail.com,5219982338624,Sin vehículos,Activo,10\nSantiago Marin,2,santiago@ejemplo.com,5550202,UUA-320-W Ford,Activo,0\n"
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
         const link = document.createElement("a")

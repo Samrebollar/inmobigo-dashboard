@@ -93,7 +93,7 @@ export default async function DashboardLayout({
         .eq('subscription_status', 'active')
         .maybeSingle()
 
-    const isDemoMode = !activeSub
+    const isDemoMode = !activeSub && role !== 'resident'
     // Metadata is IGNORED for authorization to prevent "Self-declared Admins"
 
     const isResident = role === 'resident'

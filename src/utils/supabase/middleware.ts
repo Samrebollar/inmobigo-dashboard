@@ -84,15 +84,15 @@ export async function updateSession(request: NextRequest) {
         if (isResident || role === 'viewer') {
             if (path.startsWith('/dashboard/condominios') ||
                 path.startsWith('/dashboard/residentes') ||
-                path.startsWith('/dashboard/settings') ||
-                path.startsWith('/dashboard/reports')) {
+                path.startsWith('/dashboard/configuracion') ||
+                path.startsWith('/dashboard/reportes')) {
                 console.log(`Middleware: Redirecting ${role} from ${path} to /dashboard`)
                 return NextResponse.redirect(new URL('/dashboard', request.url))
             }
         }
 
         // Settings (Org): Owner, Admin Only
-        if (path.startsWith('/dashboard/settings') && !['owner', 'admin'].includes(role)) {
+        if (path.startsWith('/dashboard/configuracion') && !['owner', 'admin'].includes(role)) {
             return NextResponse.redirect(new URL('/dashboard', request.url))
         }
 
@@ -104,8 +104,8 @@ export async function updateSession(request: NextRequest) {
         // --- Subscription Protection ---
         // Block access to core dashboard if subscription is not active
         // Exemptions: plans page (to subscribe), profile (to logout/manage account)
-        const isPlansPage = path.startsWith('/dashboard/settings/plans')
-        const isProfilePage = path.startsWith('/dashboard/profile')
+        const isPlansPage = path.startsWith('/dashboard/configuracion/planes')
+        const isProfilePage = path.startsWith('/dashboard/perfil')
 
         if (!isPlansPage && !isProfilePage) {
             const { data: subscription } = await supabase

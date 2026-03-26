@@ -537,7 +537,7 @@ export default function AdminDashboardClient({ userEmail, userName, stats, recen
                         </motion.div>
                     </Link>
 
-                    <Link href="/dashboard/settings">
+                    <Link href="/dashboard/configuracion">
                         <motion.div variants={item} whileHover={{ y: -5 }} className="h-full">
                             <Card className="h-full bg-zinc-900 border-zinc-800 hover:border-blue-500/50 transition-colors cursor-pointer group">
                                 <CardContent className="flex flex-col items-center justify-center p-6 gap-4 text-center h-full">
@@ -553,7 +553,7 @@ export default function AdminDashboardClient({ userEmail, userName, stats, recen
                         </motion.div>
                     </Link>
 
-                    <Link href="/dashboard/reports">
+                    <Link href="/dashboard/reportes">
                         <motion.div variants={item} whileHover={{ y: -5 }} className="h-full">
                             <Card className="h-full bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer group">
                                 <CardContent className="flex flex-col items-center justify-center p-6 gap-4 text-center h-full">

@@ -25,6 +25,31 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Custom Scrollbar for a modern SaaS look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Firefox scrollbar support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
 @layer utilities {
   .animate-aurora-1 {
     animation: aurora1 15s ease-in-out infinite;

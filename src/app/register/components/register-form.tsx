@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import { residentsService } from '@/services/residents-service'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Mail, Lock, Loader2, ArrowRight, Building2, Home, User, Phone, Briefcase } from 'lucide-react'
@@ -37,9 +38,23 @@ function RegisterFormContent() {
         setError('')
 
         const supabase = createClient()
+        setError('')
 
         try {
-            // 1. Sign Up with Supabase Auth
+            // 1. Pre-validation for Residents (Closed Access)
+            if (userType === 'resident') {
+                const { exists, registered } = await residentsService.checkPreApproval(formData.email)
+                
+                if (!exists) {
+                    throw new Error('No estás registrado como residente. Por favor contacta a la administración.')
+                }
+                
+                if (registered) {
+                    throw new Error('Este correo ya está registrado. Por favor inicia sesión.')
+                }
+            }
+
+            // 2. Sign Up with Supabase Auth
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: formData.email,
                 password: formData.password,
@@ -48,7 +63,7 @@ function RegisterFormContent() {
                         first_name: formData.firstName,
                         last_name: formData.lastName,
                         phone: formData.phone,
-                        role: userType // Store role in metadata for easy access
+                        role: userType
                     }
                 }
             })
@@ -72,8 +87,13 @@ function RegisterFormContent() {
             router.push('/dashboard')
 
         } catch (err: any) {
-            console.error('Registration Error (Raw):', err)
-            console.error('Registration Error (JSON):', JSON.stringify(err, null, 2))
+            console.error('Registration Error (Detailed):', {
+                message: err.message,
+                code: err.code,
+                status: err.status,
+                details: err.details,
+                hint: err.hint
+            })
             setError(err.message || 'Error al registrar usuario.')
         } finally {
             setLoading(false)

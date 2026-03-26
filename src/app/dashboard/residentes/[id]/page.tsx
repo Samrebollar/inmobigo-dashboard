@@ -130,15 +130,28 @@ export default function ResidentMovementsPage() {
 
         setSendingReminder(true)
         try {
-            const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+            const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+            console.log('Enviando recordatorio a:', webhookUrl)
+
+            const payload = {
+                "tipo": "recordatorio",
+                "first_name": `${resident.first_name} ${resident.last_name}`,
+                "phone": resident.phone || '',
+                "amount": targetInvoice.amount,
+                "due_date": targetInvoice.due_date,
+                "payment_link": targetInvoice.payment_link || null,
+                "condominium": condominiumName || '',
+                "unit": resident.unit_number || 'S/N'
+            }
+
+            const res = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ invoice_id: targetInvoice.id })
+                body: JSON.stringify(payload)
             })
 
             if (res.ok) {
                 setStatus({ type: 'success', message: '✅ Recordatorio enviado por WhatsApp' })
-                // Refresh data if needed
                 fetchData(resident.id)
             } else {
                 setStatus({ type: 'error', message: '❌ Error al enviar el recordatorio por WhatsApp' })

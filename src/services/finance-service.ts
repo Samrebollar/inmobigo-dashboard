@@ -84,6 +84,28 @@ export const financeService = {
         })) || []
     },
 
+    async getByCondominiums(condominiumIds: string[]): Promise<Invoice[]> {
+        if (condominiumIds.length === 0) return []
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('invoices')
+            .select(`
+        *,
+        units (
+          unit_number
+        )
+      `)
+            .in('condominium_id', condominiumIds)
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        return data?.map(inv => ({
+            ...inv,
+            unit_number: inv.units?.unit_number
+        })) || []
+    },
+
     async getFinancialSummary(condominiumId: string): Promise<FinancialSummary> {
         const invoices = await this.getByCondominium(condominiumId)
 
@@ -368,6 +390,129 @@ export const financeService = {
             return {
                 ...inv,
                 condominium_name: inv.condominiums?.name,
+                unit_number: inv.units?.unit_number,
+                resident_name: rName || null
+            }
+        }) || []
+    },
+
+    async getInvoicesForReport(organizationId: string, condominiumId: string | 'all', startDate: string, endDate: string): Promise<Invoice[]> {
+        if (organizationId === 'demo-org-id') {
+            // Return some mock data for demo
+            return await this.getGlobalInvoices(organizationId)
+        }
+
+        const supabase = createClient()
+        
+        let condoIds: string[] = []
+        if (condominiumId && condominiumId !== 'all') {
+            condoIds = [condominiumId]
+        } else {
+            // Fetch all active condos for org
+            const { data: condos } = await supabase
+                .from('condominiums')
+                .select('id')
+                .eq('organization_id', organizationId)
+                // .eq('status', 'active') // Keep it simple, fetch all org condos
+            condoIds = condos?.map(c => c.id) || []
+        }
+
+        if (condoIds.length === 0) return []
+
+        const { data, error } = await supabase
+            .from('invoices')
+            .select(`
+                *,
+                condominiums (name, logo_url),
+                units (
+                    unit_number,
+                    residents (first_name, last_name)
+                ),
+                residents (first_name, last_name)
+            `)
+            .in('condominium_id', condoIds)
+            .gte('due_date', startDate)
+            .lte('due_date', endDate)
+            .order('due_date', { ascending: true })
+
+        if (error) {
+            console.error('Error fetching invoices for report:', error)
+            throw error
+        }
+
+        return data?.map(inv => {
+            let res = (inv as any).residents;
+            if (!res || (Array.isArray(res) && res.length === 0)) {
+                res = inv.units?.residents;
+            }
+            if (Array.isArray(res) && res.length > 0) res = res[0];
+
+            const rName = res ? `${res.first_name || ''} ${res.last_name || ''}`.trim() : null
+
+            return {
+                ...inv,
+                condominium_name: inv.condominiums?.name,
+                condominium_logo_url: inv.condominiums?.logo_url,
+                unit_number: inv.units?.unit_number,
+                resident_name: rName || null
+            }
+        }) || []
+    },
+
+    async getDelinquentInvoices(organizationId: string, condominiumId: string | 'all'): Promise<Invoice[]> {
+        if (organizationId === 'demo-org-id') {
+            const all = await this.getGlobalInvoices(organizationId)
+            return all.filter(inv => inv.status === 'overdue' || inv.status === 'pending')
+        }
+
+        const supabase = createClient()
+        
+        let condoIds: string[] = []
+        if (condominiumId && condominiumId !== 'all') {
+            condoIds = [condominiumId]
+        } else {
+            const { data: condos } = await supabase
+                .from('condominiums')
+                .select('id')
+                .eq('organization_id', organizationId)
+            condoIds = condos?.map(c => c.id) || []
+        }
+
+        if (condoIds.length === 0) return []
+
+        const { data, error } = await supabase
+            .from('invoices')
+            .select(`
+                *,
+                condominiums (name, logo_url),
+                units (
+                    unit_number,
+                    residents (first_name, last_name)
+                ),
+                residents (first_name, last_name)
+            `)
+            .in('condominium_id', condoIds)
+            .eq('status', 'overdue')
+            // No limit or date range padding, getting all historical overdue
+
+        if (error) {
+            console.error('Error fetching delinquent invoices:', error)
+            throw error
+        }
+
+        return data?.map(inv => {
+            let res = (inv as any).residents;
+            if (!res || (Array.isArray(res) && res.length === 0)) {
+                res = inv.units?.residents;
+            }
+            if (Array.isArray(res) && res.length > 0) res = res[0];
+
+            const rName = res ? `${res.first_name || ''} ${res.last_name || ''}`.trim() : null
+
+            return {
+                ...inv,
+                condominium_name: inv.condominiums?.name,
+                condominium_logo_url: inv.condominiums?.logo_url,
                 unit_number: inv.units?.unit_number,
                 resident_name: rName || null
             }

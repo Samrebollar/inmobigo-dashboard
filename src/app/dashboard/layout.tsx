@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -178,13 +178,22 @@ export default async function DashboardLayout({
                 )}
 
                 {isResident && (
-                    <Link
-                        href="/dashboard/property"
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                    >
-                        <Home size={18} />
-                        <span>Mi Propiedad</span>
-                    </Link>
+                    <>
+                        <Link
+                            href="/dashboard/amenidades"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <LayoutDashboard size={18} />
+                            <span>Amenidades</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/servicios"
+                            className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <Smartphone size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                            <span>Servicios</span>
+                        </Link>
+                    </>
                 )}
 
                 {showReports && (

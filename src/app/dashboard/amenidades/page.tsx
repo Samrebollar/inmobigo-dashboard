@@ -1,11 +1,11 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import ResidentPropertyClient from '@/components/dashboard/resident-property-client'
+import ResidentAmenidadesClient from '@/components/dashboard/resident-amenidades-client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export default async function PropertyPage() {
+export default async function AmenidadesPage() {
     const supabase = await createClient()
 
     const {
@@ -23,19 +23,28 @@ export default async function PropertyPage() {
         .eq('user_id', user.id)
         .maybeSingle()
 
+    // Get organization_users to ensure we have organization_id
+    const { data: orgUser } = await supabase
+        .from('organization_users')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
     const isMetadataResident = user.user_metadata?.role === 'resident'
     const isResident = !!resident || isMetadataResident
 
-    // If for some reason an admin lands here, we should ideally show something or redirect
-    // But as per request, we are tailoring this route for the resident experience
-    
-    const mockResident = resident || {
+    const mockResident = resident ? { 
+        ...resident, 
+        organization_id: orgUser?.organization_id 
+    } : {
+        user_id: user.id,
         first_name: user.user_metadata?.full_name?.split(' ')[0] || 'Residente',
-        condominiums: { name: 'Torre Reforma' },
-        units: { unit_number: 'A-101' },
+        condominiums: { name: 'Tu Condominio' },
+        units: { unit_number: 'N/A' },
+        organization_id: orgUser?.organization_id,
     }
 
     return (
-        <ResidentPropertyClient resident={mockResident} />
+        <ResidentAmenidadesClient resident={mockResident} />
     )
 }

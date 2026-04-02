@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createClient } from '@/utils/supabase/client'
 import { 
     Bell, 
     Package, 
@@ -25,9 +26,13 @@ import {
     Trash2,
     Dumbbell,
     PartyPopper,
-    Waves
+    Waves,
+    Check,
+    AlertCircle,
+    Flame
 } from 'lucide-react'
-import { useRef } from 'react'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -73,13 +78,117 @@ interface AccessCode {
     qrCode: string
 }
 
-export function AvisosClient() {
+export function AvisosClient({ admin }: { admin?: any }) {
+    const supabase = createClient()
     const [activeTab, setActiveTab] = useState<TabType>('announcements')
     const [showNewModal, setShowNewModal] = useState(false)
     const [showQRModal, setShowQRModal] = useState<string | null>(null)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [toastMessage, setToastMessage] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const [amenityReservations, setAmenityReservations] = useState<any[]>([])
+    const [loadingAmenities, setLoadingAmenities] = useState(false)
+
+    useEffect(() => {
+        if (admin && admin.organization_id && activeTab === 'amenities') {
+            fetchAmenityReservations()
+
+            const channel = supabase
+                .channel('admin-amenity-reservations')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'amenity_reservations',
+                        filter: `organization_id=eq.${admin.organization_id}`
+                    },
+                    (payload) => {
+                        console.log('Realtime Event (Admin):', payload)
+                        fetchAmenityReservations()
+                    }
+                )
+                .subscribe()
+
+            return () => {
+                supabase.removeChannel(channel)
+            }
+        }
+    }, [activeTab, admin])
+
+    const fetchAmenityReservations = async () => {
+        setLoadingAmenities(true)
+        try {
+            console.log('Fetching reservations for org_id:', admin?.organization_id);
+            if (!admin?.organization_id) {
+                setLoadingAmenities(false)
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('amenity_reservations')
+                .select('*, amenities(*), profiles:resident_id(*)')
+                .eq('organization_id', admin.organization_id)
+                .order('reservation_date', { ascending: false })
+
+            console.log('Query result:', { data, error });
+
+            if (error) {
+                console.error('Error fetching reservations:', error);
+            } else if (data) {
+                // Fetch resident details for all unique residents to securely get unit and property
+                const residentIds = [...new Set(data.filter(r => r.resident_id).map(r => r.resident_id))]
+                if (residentIds.length > 0) {
+                    const { data: residentsData } = await supabase
+                        .from('residents')
+                        .select('user_id, first_name, last_name, units(unit_number), condominiums(name)')
+                        .in('user_id', residentIds)
+                    
+                    if (residentsData) {
+                        const residentMap = residentsData.reduce((acc: any, r: any) => {
+                            acc[r.user_id] = r
+                            return acc
+                        }, {})
+                        
+                        data.forEach((res: any) => {
+                            res.residentInfo = residentMap[res.resident_id]
+                        })
+                    }
+                }
+                setAmenityReservations(data)
+            }
+        } catch (error) {
+            console.error('Exception fetching reservations:', error)
+        } finally {
+            setLoadingAmenities(false)
+        }
+    }
+
+    const handleUpdateReservation = async (id: string, status: string) => {
+        try {
+            const { error } = await supabase
+                .from('amenity_reservations')
+                .update({ 
+                    status,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+            
+            if (error) throw error
+            
+            setAmenityReservations(prev => prev.map(r => 
+                r.id === id ? { ...r, status } : r
+            ))
+            
+            setToastMessage(`Reserva ${status === 'approved' ? 'aprobada' : 'cancelada'} correctamente`)
+            setTimeout(() => setToastMessage(null), 3000)
+        } catch (error) {
+            console.error('Error updating reservation:', error)
+            alert('Error al actualizar reserva')
+        }
+    }
 
     // Form States
     const [newTitle, setNewTitle] = useState('')
@@ -153,11 +262,7 @@ export function AvisosClient() {
         { id: '2', guest: 'Limpieza Pro', type: 'Servicio', validUntil: 'mañana, 05:00 PM', qrCode: 'ACC-SP112' }
     ]
 
-    const amenityReservations: AmenityReservation[] = [
-        { id: '1', resident: 'Carlos Mendoza', unit: 'C-204', amenity: 'Salón de Fiestas', date: '28 Mar, 2024', time: '16:00 - 22:00', status: 'Confirmado', price: '$1,500' },
-        { id: '2', resident: 'Ana Sofía Ruiz', unit: 'A-102', amenity: 'Alberca / BBQ', date: '27 Mar, 2024', time: '11:00 - 15:00', status: 'Pendiente', price: '$500' },
-        { id: '3', resident: 'Roberto Gómez', unit: 'B-501', amenity: 'Gimnasio (Privado)', date: 'Hoy', time: '18:00 - 19:30', status: 'Confirmado' },
-    ]
+
 
     const tabs = [
         { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
@@ -178,6 +283,21 @@ export function AvisosClient() {
                         Central de comunicación residente, gestión de paquetería segura y control de accesos inteligentes mediante códigos QR.
                     </p>
                 </div>
+                
+                {/* Toast Notification */}
+                <AnimatePresence>
+                    {toastMessage && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="fixed top-8 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-zinc-900 border border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] text-white px-5 py-3 rounded-full font-bold text-sm"
+                        >
+                            <CheckCircle2 size={16} className="text-emerald-500" />
+                            {toastMessage}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 <div className="flex items-center gap-3">
                     <div className="relative group hidden sm:block">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 h-4 w-4 transition-colors group-hover:text-zinc-400" />
@@ -298,139 +418,183 @@ export function AvisosClient() {
                                     </Card>
                                 </motion.div>
                             ))}
-
-                            {/* Amenities Reservations Grid */}
-                            {activeTab === 'amenities' && amenityReservations.map((res, index) => (
-                                <motion.div
-                                    key={res.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                >
-                                    <Card className="bg-zinc-900/40 border-zinc-800 hover:border-emerald-500/50 transition-all duration-300 group overflow-hidden">
-                                        <CardContent className="p-0">
-                                            <div className="p-6">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div className="h-12 w-12 bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 group-hover:bg-emerald-500/10 group-hover:text-emerald-500 transition-all">
-                                                        {res.amenity === 'Salón de Fiestas' ? <PartyPopper size={24} /> : 
-                                                         res.amenity.includes('Alberca') ? <Waves size={24} /> : 
-                                                         <Dumbbell size={24} />}
-                                                    </div>
-                                                    <Badge className={`px-2.5 py-1 rounded-lg border-0 font-bold text-[10px] uppercase tracking-tighter ${
-                                                        res.status === 'Confirmado' ? 'bg-emerald-500/20 text-emerald-500' :
-                                                        res.status === 'Pendiente' ? 'bg-amber-500/20 text-amber-500' :
-                                                        'bg-zinc-800 text-zinc-500'
-                                                    }`}>
-                                                        {res.status}
-                                                    </Badge>
-                                                </div>
-                                                
-                                                <h3 className="text-lg font-bold text-white mb-1 group-hover:text-emerald-400 transition-colors">{res.amenity}</h3>
-                                                <div className="flex items-center gap-2 text-zinc-500 text-xs mb-4 font-medium">
-                                                    <Calendar size={12} /> {res.date} • <Clock size={12} /> {res.time}
-                                                </div>
-
-                                                <div className="flex items-center gap-3 p-3 bg-zinc-950/50 rounded-xl border border-zinc-800/50">
-                                                    <div className="h-8 w-8 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] font-bold text-zinc-400">
-                                                        {res.resident.split(' ').map(n=>n[0]).join('')}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-bold text-zinc-300">{res.resident}</p>
-                                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{res.unit}</p>
-                                                    </div>
-                                                    {res.price && (
-                                                        <div className="ml-auto text-xs font-black text-emerald-500">
-                                                            {res.price}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="px-6 py-3 bg-zinc-800/20 border-t border-zinc-800/50 flex justify-between items-center">
-                                                <button className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors tracking-tighter">
-                                                    Ver Detalles
-                                                </button>
-                                                <div className="flex gap-2">
-                                                    <button className="h-7 w-7 bg-zinc-800 rounded-md flex items-center justify-center text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all">
-                                                        <CheckCircle2 size={14} />
-                                                    </button>
-                                                    <button className="h-7 w-7 bg-zinc-800 rounded-md flex items-center justify-center text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            ))}
                         </div>
                     )}
 
+                    {/* Amenities Reservations Grid */}
                     {activeTab === 'amenities' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {amenityReservations.map((res, index) => (
+                        <div className="space-y-6">
+                            {/* Pending Counter KPI */}
+                            <div className="flex items-center gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl w-fit">
+                                <div className="h-10 w-10 bg-amber-500/10 text-amber-500 flex items-center justify-center rounded-xl">
+                                    <Clock size={20} />
+                                </div>
+                                <div className="pr-4">
+                                    <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Atención Requerida</p>
+                                    <p className="text-xl font-bold text-white leading-tight">
+                                        {amenityReservations.filter(r => r.status === 'pending').length} <span className="text-sm font-medium text-zinc-500">pendientes</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                                {loadingAmenities ? (
+                                    <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-10 text-zinc-500 font-bold animate-pulse">
+                                        Cargando reservas...
+                                    </div>
+                                ) : amenityReservations.length === 0 ? (
+                                    <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-20 flex flex-col items-center">
+                                        <Calendar size={48} className="text-zinc-800 mb-4" />
+                                        <p className="text-zinc-500 font-bold">No hay reservas registradas en este condominio.</p>
+                                    </div>
+                                ) : amenityReservations.map((res, index) => {
+                                const amenityName = res.amenities?.name || 'Amenidad'
+                                const residentName = res.residentInfo?.first_name 
+                                    ? `${res.residentInfo.first_name} ${res.residentInfo.last_name || ''}`.trim() 
+                                    : res.profiles?.full_name || 'Residente'
+                                const unitInfo = res.residentInfo?.units?.unit_number ? `${res.residentInfo.units.unit_number}` : 'N/A'
+                                const propInfo = res.residentInfo?.condominiums?.name || 'Comunidad General'
+                                
+                                const dateFormatted = format(new Date(res.reservation_date), 'd MMM, yyyy', { locale: es })
+                                const price = res.amenities?.base_price > 0 ? `$${res.amenities.base_price}` : 'Gratis'
+                                
+                                const statusStyles: any = {
+                                    pending: { 
+                                        label: 'Revisión Pendiente', 
+                                        glowBg: 'bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600',
+                                        border: 'border-zinc-800/80 group-hover:border-amber-500/50',
+                                        bg: 'bg-zinc-950/90',
+                                        iconBg: 'bg-amber-500/10 text-amber-500 group-hover:scale-110 group-hover:bg-amber-500/20',
+                                        badge: 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.2)]',
+                                        price: 'text-amber-400 bg-amber-500/10 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.1)]'
+                                    },
+                                    approved: { 
+                                        label: 'Reserva Confirmada', 
+                                        glowBg: 'bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600',
+                                        border: 'border-emerald-500/50 shadow-[inset_0_0_20px_rgba(16,185,129,0.1)]',
+                                        bg: 'bg-zinc-950/90',
+                                        iconBg: 'bg-emerald-500/10 text-emerald-500 group-hover:scale-110 group-hover:bg-emerald-500/20',
+                                        badge: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]',
+                                        price: 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                                    },
+                                    cancelled: { 
+                                        label: 'Reserva Cancelada', 
+                                        glowBg: 'bg-gradient-to-r from-rose-600 via-pink-500 to-rose-600',
+                                        border: 'border-zinc-800/80 group-hover:border-rose-500/50',
+                                        bg: 'bg-zinc-950/90',
+                                        iconBg: 'bg-rose-500/10 text-rose-500 group-hover:scale-110 group-hover:bg-rose-500/20',
+                                        badge: 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.2)]',
+                                        price: 'text-rose-400 bg-rose-500/10 border border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]'
+                                    }
+                                }
+                                const currentStatus = statusStyles[res.status] || statusStyles['pending']
+
+                                return (
                                 <motion.div
                                     key={res.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
+                                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    transition={{ delay: index * 0.1, duration: 0.4, type: "spring", stiffness: 100 }}
+                                    className="h-full relative group"
                                 >
-                                    <Card className="bg-zinc-900/40 border-zinc-800 hover:border-emerald-500/50 transition-all duration-300 group overflow-hidden shadow-2xl shadow-emerald-950/5">
-                                        <CardContent className="p-0">
-                                            <div className="p-6">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div className="h-12 w-12 bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 group-hover:bg-emerald-500/10 group-hover:text-emerald-500 transition-all">
-                                                        {res.amenity === 'Salón de Fiestas' ? <PartyPopper size={24} /> : 
-                                                         res.amenity.includes('Alberca') ? <Waves size={24} /> : 
-                                                         <Dumbbell size={24} />}
-                                                    </div>
-                                                    <Badge className={`px-2.5 py-1 rounded-lg border-0 font-bold text-[10px] uppercase tracking-tighter ${
-                                                        res.status === 'Confirmado' ? 'bg-emerald-500/20 text-emerald-500' :
-                                                        res.status === 'Pendiente' ? 'bg-amber-500/20 text-amber-500' :
-                                                        'bg-zinc-800 text-zinc-500'
-                                                    }`}>
-                                                        {res.status}
-                                                    </Badge>
-                                                </div>
-                                                
-                                                <h3 className="text-lg font-bold text-white mb-1 group-hover:text-emerald-400 transition-colors">{res.amenity}</h3>
-                                                <div className="flex items-center gap-2 text-zinc-500 text-xs mb-4 font-medium">
-                                                    <Calendar size={12} /> {res.date} • <Clock size={12} /> {res.time}
-                                                </div>
+                                    {/* Animated Color Glow Behind the Card */}
+                                    <div className={`absolute -inset-[1px] rounded-[2.2rem] opacity-[0.15] group-hover:opacity-[0.35] blur-xl transition duration-1000 group-hover:duration-300 animate-[pulse_4s_cubic-bezier(0.4,0,0.6,1)_infinite] ${currentStatus.glowBg}`} />
 
-                                                <div className="flex items-center gap-3 p-3 bg-zinc-950/50 rounded-xl border border-zinc-800/50 group-hover:bg-zinc-900 transition-colors">
-                                                    <div className="h-8 w-8 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] font-bold text-zinc-400 border border-zinc-700">
-                                                        {res.resident.split(' ').map(n=>n[0]).join('')}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-bold text-zinc-300">{res.resident}</p>
-                                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{res.unit}</p>
-                                                    </div>
-                                                    {res.price && (
-                                                        <div className="ml-auto text-xs font-black text-emerald-500">
-                                                            {res.price}
-                                                        </div>
-                                                    )}
+                                    <div className={`relative h-full flex flex-col rounded-[2rem] border backdrop-blur-3xl transition-all duration-300 overflow-hidden ${currentStatus.bg} ${currentStatus.border}`}>
+                                        
+                                        {/* Dynamic glassmorphism highlight */}
+                                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        
+                                        <div className="p-7 flex-1 flex flex-col">
+                                            {/* Header */}
+                                            <div className="flex justify-between items-start mb-6">
+                                                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-inner ${currentStatus.iconBg}`}>
+                                                    {amenityName.includes('Salón') ? <PartyPopper size={28} strokeWidth={1.5} /> : 
+                                                     amenityName.includes('Alberca') || amenityName.includes('Piscina') ? <Waves size={28} strokeWidth={1.5} /> : 
+                                                     amenityName.includes('Asador') ? <Flame size={28} strokeWidth={1.5} /> :
+                                                     <Dumbbell size={28} strokeWidth={1.5} />}
                                                 </div>
+                                                <Badge className={`px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-[0.15em] ${currentStatus.badge}`}>
+                                                    {currentStatus.label}
+                                                </Badge>
                                             </div>
                                             
-                                            <div className="px-6 py-4 bg-zinc-800/20 border-t border-zinc-800/50 flex justify-between items-center group-hover:bg-zinc-800/40 transition-colors">
-                                                <button className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors tracking-tighter flex items-center gap-1.5 group/btn">
-                                                    Ver Detalles <ArrowRight size={10} className="group-hover/btn:translate-x-0.5 transition-transform" />
-                                                </button>
-                                                <div className="flex gap-2">
-                                                    <button className="h-8 w-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all border border-zinc-700 hover:border-emerald-500/30 shadow-lg">
-                                                        <CheckCircle2 size={15} />
-                                                    </button>
-                                                    <button className="h-8 w-8 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all border border-zinc-700 hover:border-rose-500/30 shadow-lg">
-                                                        <X size={15} />
-                                                    </button>
+                                            {/* Title & Date */}
+                                            <div className="mb-6 flex-1">
+                                                <h3 className="text-2xl font-black text-white mb-2 leading-tight tracking-tight drop-shadow-md">
+                                                    {amenityName}
+                                                </h3>
+                                                <div className="flex items-center gap-2.5 text-zinc-400 text-sm font-medium">
+                                                    <div className="p-1.5 bg-zinc-800/50 rounded-md text-zinc-300">
+                                                        <Calendar size={14} />
+                                                    </div>
+                                                    <span>{dateFormatted}</span>
+                                                    <span className="text-zinc-600">•</span>
+                                                    <div className="flex items-center gap-1 text-zinc-400">
+                                                        <Clock size={14} className="opacity-70" /> {res.amenities?.use_hours || 'Turno Único'}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+
+                                            {/* Resident Identity Block */}
+                                            <div className="relative p-4 rounded-2xl bg-black/40 border border-white/5 backdrop-blur-md overflow-hidden group-hover:bg-black/60 transition-colors">
+                                                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                <div className="relative flex items-center gap-4">
+                                                    <div className="h-11 w-11 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-black text-white shadow-lg shadow-indigo-500/20 shrink-0 border border-white/10">
+                                                        {residentName.substring(0,2).toUpperCase()}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-sm font-bold text-white truncate drop-shadow-sm">{residentName}</p>
+                                                        <div className="flex flex-col mt-1 space-y-0.5">
+                                                            <div className="flex items-center gap-1.5 opacity-80">
+                                                                <MapPin size={10} className="text-zinc-400" />
+                                                                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest truncate">{propInfo}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <ShieldCheck size={10} className="text-indigo-400" />
+                                                                <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest">{unitInfo}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`px-3 py-1.5 rounded-lg text-xs font-black self-start backdrop-blur-md shrink-0 ${currentStatus.price}`}>
+                                                        {price}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Action Footer */}
+                                        <div className="px-7 py-5 bg-black/40 border-t border-white/5 flex gap-3 justify-center items-center mt-auto">
+                                            {res.status === 'pending' && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleUpdateReservation(res.id, 'cancelled')}
+                                                        className="flex-1 sm:flex-none h-11 px-5 rounded-xl flex items-center justify-center gap-2 text-rose-400 hover:text-white bg-rose-500/5 hover:bg-rose-500 border border-rose-500/20 hover:border-rose-500 transition-all font-bold text-xs uppercase tracking-widest hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]"
+                                                    >
+                                                        <X size={15} strokeWidth={2.5} /> Denegar
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleUpdateReservation(res.id, 'approved')}
+                                                        className="flex-1 sm:flex-none h-11 px-5 rounded-xl flex items-center justify-center gap-2 text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/20 hover:border-emerald-500 transition-all font-bold text-xs uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.15)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+                                                    >
+                                                        <Check size={15} strokeWidth={2.5} /> Aprobar
+                                                    </button>
+                                                </>
+                                            )}
+                                            {res.status !== 'pending' && (
+                                                <button 
+                                                    disabled
+                                                    className="w-full h-11 px-6 rounded-xl flex items-center justify-center text-zinc-600 bg-zinc-900 border border-zinc-800 font-bold text-[10px] uppercase tracking-widest cursor-not-allowed opacity-50"
+                                                >
+                                                    Acción Procesada
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </motion.div>
-                            ))}
+                                )
+                            })}
+                        </div>
                         </div>
                     )}
 

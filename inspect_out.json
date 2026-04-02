@@ -1,0 +1,35 @@
+{
+  "residents": [
+    "id",
+    "phone",
+    "email",
+    "status",
+    "balance",
+    "created_at",
+    "unit_id",
+    "property_id",
+    "move_in_date",
+    "resident_type",
+    "vehicles_count",
+    "is_active",
+    "condominium_id",
+    "user_id",
+    "role",
+    "first_name",
+    "last_name",
+    "debt_amount",
+    "is_registered"
+  ],
+  "passes": {
+    "code": "PGRST205",
+    "details": null,
+    "hint": "Perhaps you meant the table 'public.visits'",
+    "message": "Could not find the table 'public.visitor_passes' in the schema cache"
+  },
+  "packages": {
+    "code": "PGRST205",
+    "details": null,
+    "hint": "Perhaps you meant the table 'public.amenities'",
+    "message": "Could not find the table 'public.package_notices' in the schema cache"
+  }
+}

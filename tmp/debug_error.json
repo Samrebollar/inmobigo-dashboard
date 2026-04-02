@@ -1,0 +1,6 @@
+{
+  "code": "PGRST204",
+  "details": null,
+  "hint": null,
+  "message": "Could not find the 'base_price' column of 'amenities' in the schema cache"
+}

@@ -15,9 +15,22 @@ export default async function AvisosPage() {
     redirect('/login')
   }
 
+  const { data: orgUser } = await supabase
+    .from('organization_users')
+    .select('organization_id, role')
+    .eq('user_id', user.id)
+    .single()
+
+  // For visual backwards compatibility with AvisosClient, construct a unified "admin" object
+  const admin = {
+    ...user,
+    organization_id: orgUser?.organization_id,
+    role: orgUser?.role
+  }
+
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">
-      <AvisosClient />
+      <AvisosClient admin={admin} />
     </div>
   )
 }

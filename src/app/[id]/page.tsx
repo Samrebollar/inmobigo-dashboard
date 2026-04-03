@@ -44,20 +44,31 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
 
     // 2. VALIDACIÓN DE EXPIRACIÓN AUTOMÁTICA EN TIEMPO REAL
     const now = new Date()
-    // Aseguramos formato ISO para la comparación
-    const visitDateTime = new Date(`${visita.visit_date}T${visita.end_time}`)
+    // Forzamos el offset de México (UTC-6) para evitar problemas con la hora del servidor (UTC)
+    const visitDateTime = new Date(`${visita.visit_date}T${visita.end_time}-06:00`)
     
     let currentStatus = visita.status
-    if (now > visitDateTime && currentStatus === 'pending') {
-        // Actualizar en DB a expirado de forma silenciosa
+    const isActuallyExpired = now > visitDateTime
+
+    // Lógica Inteligente de Estado:
+    if (isActuallyExpired && currentStatus === 'pending') {
+        // Marcar como expirado solo si el tiempo real ya pasó
         await supabase
             .from('visitor_passes')
             .update({ status: 'expired' })
             .eq('id', visita.id)
         currentStatus = 'expired'
+    } else if (!isActuallyExpired && currentStatus === 'expired') {
+        // AUTO-RESTAURACIÓN: Si el sistema lo marcó como expirado por error (zona horaria del servidor),
+        // lo restauramos a PENDING porque aún tiene tiempo válido.
+        await supabase
+            .from('visitor_passes')
+            .update({ status: 'pending' })
+            .eq('id', visita.id)
+        currentStatus = 'pending'
     }
 
-    // 3. VALIDACIONES DE ESTADOS DE ERROR (used, expired, cancelled)
+    // 3. VALIDACIONES DE ESTADOS DE ERROR
     if (currentStatus !== 'pending') {
         const isUsed = currentStatus === 'used'
         const isCancelled = currentStatus === 'cancelled'

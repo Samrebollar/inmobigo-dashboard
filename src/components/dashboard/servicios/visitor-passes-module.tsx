@@ -58,8 +58,42 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     const [viewDate, setViewDate] = useState(new Date())
 
     useEffect(() => {
+        if (!resident?.user_id) return
+
         fetchPasses()
-    }, [])
+
+        // Real-time subscription for visitor status updates
+        const channel = supabase
+            .channel(`resident-passes-${resident.user_id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'visitor_passes',
+                    filter: `resident_id=eq.${resident.user_id}`
+                },
+                (payload) => {
+                    const updatedPass = payload.new as any
+                    const oldPass = payload.old as any
+
+                    // If status changed to 'used' (REGISTRADO)
+                    if (updatedPass.status === 'used' && oldPass.status !== 'used') {
+                        toast.success(`✨ ¡Tu invitado ${updatedPass.visitor_name} ha ingresado!`, {
+                            description: `Acceso registrado a las ${format(new Date(), 'HH:mm')} hs`,
+                            duration: 5000,
+                        })
+                    }
+                    
+                    fetchPasses()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [resident?.user_id])
 
     const calculateEndTime = (startTime: string, accessType: string) => {
         if (accessType === 'Evento') return '23:59:59'

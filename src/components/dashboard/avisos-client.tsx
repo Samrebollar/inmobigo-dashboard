@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { QRCodeDisplay } from '@/components/ui/qr-code-display'
+import { VisitorPassesAdmin } from './servicios/visitor-passes-admin'
 
 type TabType = 'announcements' | 'packages' | 'access' | 'amenities'
 
@@ -70,15 +71,8 @@ interface PackageDelivery {
     qrCode: string
 }
 
-interface AccessCode {
-    id: string
-    guest: string
-    type: 'Invitado' | 'Servicio' | 'Delivery'
-    validUntil: string
-    qrCode: string
-}
 
-export function AvisosClient({ admin }: { admin?: any }) {
+export function AvisosClient({ admin, initialPasses = [] }: { admin?: any, initialPasses?: any[] }) {
     const supabase = createClient()
     const [activeTab, setActiveTab] = useState<TabType>('announcements')
     const [showNewModal, setShowNewModal] = useState(false)
@@ -257,10 +251,6 @@ export function AvisosClient({ admin }: { admin?: any }) {
         { id: '2', resident: 'María García', unit: 'B-304', carrier: 'Mercado Libre', date: 'hoy, 11:15 AM', status: 'Entregado', qrCode: 'PKG-789012' }
     ]
 
-    const accessCodes: AccessCode[] = [
-        { id: '1', guest: 'Carlos Rodríguez', type: 'Invitado', validUntil: 'hoy, 11:59 PM', qrCode: 'ACC-VO782' },
-        { id: '2', guest: 'Limpieza Pro', type: 'Servicio', validUntil: 'mañana, 05:00 PM', qrCode: 'ACC-SP112' }
-    ]
 
 
 
@@ -653,40 +643,7 @@ export function AvisosClient({ admin }: { admin?: any }) {
                     )}
 
                     {activeTab === 'access' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {accessCodes.map((code) => (
-                                <Card key={code.id} className="bg-zinc-950/40 border-zinc-800/80 hover:border-emerald-500/40 transition-all group relative overflow-hidden ring-1 ring-zinc-900">
-                                    <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    <CardContent className="p-6">
-                                        <div className="flex items-start justify-between mb-6">
-                                            <div className="h-10 w-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20">
-                                                <Users size={18} />
-                                            </div>
-                                            <Badge className="bg-emerald-500/10 text-emerald-500 border-0 font-bold text-[10px] tracking-widest uppercase px-3 py-1 rounded-full">
-                                                {code.type}
-                                            </Badge>
-                                        </div>
-                                        <h4 className="text-xl font-bold text-white mb-1 group-hover:text-emerald-400 transition-colors">{code.guest}</h4>
-                                        <div className="flex items-center gap-2 text-zinc-500 text-xs font-medium mb-6">
-                                            <Calendar size={12} className="text-emerald-500/60" /> Válido hasta: <span className="text-zinc-300 font-bold">{code.validUntil}</span>
-                                        </div>
-                                        
-                                        <div className="pt-5 border-t border-zinc-900 flex justify-between items-center">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] text-zinc-600 font-black uppercase">Clave Única</span>
-                                                <span className="text-zinc-300 font-mono font-bold tracking-widest">{code.qrCode}</span>
-                                            </div>
-                                            <Button 
-                                                onClick={() => setShowQRModal(code.qrCode)}
-                                                className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg h-10 w-10 p-0 shadow-lg shadow-emerald-950"
-                                            >
-                                                <QrCode size={18} />
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
+                        <VisitorPassesAdmin admin={admin} initialPasses={initialPasses} />
                     )}
                 </motion.div>
             </AnimatePresence>

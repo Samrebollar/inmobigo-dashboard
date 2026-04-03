@@ -44,15 +44,14 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         try {
             setLoading(true)
             const { data, error } = await supabase
-                .from('visitor_passes')
+                .from('visitas')
                 .select('*')
                 .eq('resident_id', resident.user_id)
                 .order('created_at', { ascending: false })
 
             if (error) {
-                // Si la tabla no existe aún, ignoramos el error para no romper la app en dev
                 if (error.code === '42P01') {
-                    console.log('La tabla visitor_passes no ha sido creada.')
+                    console.log('La tabla visitas no ha sido creada aún.')
                 } else {
                     console.error('Error fetching passes:', error)
                 }
@@ -69,7 +68,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     const handleCreatePass = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!formData.visitorName || !formData.visitDate || !formData.startTime) {
-            toast.error('Nombre, Fecha y Hora de inicio son obligatorios')
+            toast.error('Nombre, Fecha y Hora son obligatorios')
             return
         }
 
@@ -80,34 +79,34 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
 
             const newPass = {
                 organization_id: orgId,
-                unit_id: resident.unit_id,
                 resident_id: resident.user_id,
-                visitor_name: formData.visitorName,
-                visit_date: formData.visitDate,
-                start_time: formData.startTime,
-                end_time: formData.endTime || null,
-                notes: formData.notes || null,
-                status: 'pending' // Asegura que quede pending
+                unit_number: resident.units?.unit_number || 'S/D',
+                nombre_visitante: formData.visitorName,
+                nombre_residente: resident.profiles?.full_name || resident.first_name || 'Residente',
+                fecha: formData.visitDate,
+                hora: formData.startTime,
+                estado: 'pendiente',
+                qr_usado: false
             }
 
             const { data, error } = await supabase
-                .from('visitor_passes')
+                .from('visitas')
                 .insert(newPass)
                 .select()
                 .single()
 
             if (error) throw error
 
-            toast.success('Pase de visitante creado exitosamente')
+            toast.success('Visita registrada exitosamente')
             setIsCreateModalOpen(false)
             setFormData({
                 visitorName: '', visitDate: format(new Date(), 'yyyy-MM-dd'), startTime: '08:00', endTime: '', notes: ''
             })
             fetchPasses()
-            setSelectedPass(data) // Abre el modal del ticket generado
+            setSelectedPass(data)
         } catch (error: any) {
             console.error(error)
-            toast.error('Hubo un error al generar el pase.')
+            toast.error('Hubo un error al guardar la visita.')
         } finally {
             setIsGenerating(false)
         }
@@ -116,8 +115,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     const handleCancelPass = async (id: string) => {
         try {
             const { error } = await supabase
-                .from('visitor_passes')
-                .update({ status: 'cancelled' })
+                .from('visitas')
+                .update({ estado: 'cancelado' })
                 .eq('id', id)
             
             if (error) throw error
@@ -129,24 +128,24 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         }
     }
 
-    const activePasses = passes.filter(p => p.status === 'pending')
-    const historyPasses = passes.filter(p => p.status !== 'pending')
+    const activePasses = passes.filter(p => p.estado === 'pendiente')
+    const historyPasses = passes.filter(p => p.estado !== 'pendiente')
 
     const getStatusStyle = (status: string) => {
         switch(status) {
-            case 'pending': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-            case 'used': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
-            case 'expired': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-            case 'cancelled': return 'bg-red-500/10 text-red-400 border-red-500/20'
+            case 'pendiente': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+            case 'usado': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            case 'expirado': return 'bg-red-500/10 text-red-500 border-red-500/20'
+            case 'cancelado': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
             default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
         }
     }
     const getStatusText = (status: string) => {
         switch(status) {
-            case 'pending': return 'ACTIVO'
-            case 'used': return 'UTILIZADO'
-            case 'expired': return 'EXPIRADO'
-            case 'cancelled': return 'CANCELADO'
+            case 'pendiente': return 'PENDIENTE'
+            case 'usado': return 'USADO'
+            case 'expirado': return 'EXPIRADO'
+            case 'cancelado': return 'CANCELADO'
             default: return status
         }
     }
@@ -218,18 +217,18 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400 font-bold group-hover:bg-indigo-500/20 group-hover:scale-105 transition-all">
-                                                {pass.visitor_name.charAt(0).toUpperCase()}
+                                                {pass.nombre_visitante.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="text-white font-bold">{pass.visitor_name}</h4>
+                                                <h4 className="text-white font-bold">{pass.nombre_visitante}</h4>
                                                 <p className="text-xs text-zinc-400 flex items-center gap-1 mt-1">
-                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.visit_date), 'd MMM yyyy', {locale:es})} a las {pass.start_time.substring(0,5)} hs
+                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.fecha), 'd MMM yyyy', {locale:es})} a las {pass.hora.substring(0,5)} hs
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${getStatusStyle(pass.status)}`}>
-                                                {getStatusText(pass.status)}
+                                            <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${getStatusStyle(pass.estado)}`}>
+                                                {getStatusText(pass.estado)}
                                             </span>
                                             <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
                                         </div>
@@ -251,17 +250,17 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 font-bold">
-                                                {pass.visitor_name.charAt(0).toUpperCase()}
+                                                {pass.nombre_visitante.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="text-zinc-300 font-semibold">{pass.visitor_name}</h4>
+                                                <h4 className="text-zinc-300 font-semibold">{pass.nombre_visitante}</h4>
                                                 <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.visit_date), 'd MMM yyyy', {locale:es})}
+                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.fecha), 'd MMM yyyy', {locale:es})}
                                                 </p>
                                             </div>
                                         </div>
-                                        <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border ${getStatusStyle(pass.status)}`}>
-                                            {getStatusText(pass.status)}
+                                        <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border ${getStatusStyle(pass.estado)}`}>
+                                            {getStatusText(pass.estado)}
                                         </span>
                                     </div>
                                 ))
@@ -395,7 +394,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                             </button>
 
                             <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] overflow-hidden shadow-2xl relative">
-                                {selectedPass.status === 'pending' ? (
+                                {selectedPass.estado === 'pendiente' ? (
                                     <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 blur-[50px] rounded-full pointer-events-none" />
                                 ) : (
                                     <div className="absolute top-0 right-0 w-48 h-48 bg-zinc-500/10 blur-[50px] rounded-full pointer-events-none" />
@@ -404,20 +403,21 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                 {/* Header Ticket */}
                                 <div className="px-6 py-8 flex flex-col items-center border-b border-zinc-800/80 relative">
                                     <h3 className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mb-1">Pase Oficial</h3>
-                                    <h2 className="text-2xl font-black text-white text-center mb-1 leading-tight">{selectedPass.visitor_name}</h2>
-                                    <p className="text-zinc-400 text-sm font-medium">Destino: Unidad {resident.units?.unit_number || 'S/D'}</p>
+                                    <h2 className="text-2xl font-black text-white text-center mb-1 leading-tight">{selectedPass.nombre_visitante}</h2>
+                                    <p className="text-zinc-400 text-sm font-medium">Destino: {resident.condominiums?.name || 'InmobiGo'}, Unidad {resident.units?.unit_number || 'S/D'}</p>
                                 </div>
 
                                 {/* QR Section */}
                                 <div className="p-8 flex flex-col items-center bg-black/20">
-                                    <div className={`p-4 rounded-3xl shadow-xl relative ${selectedPass.status === 'pending' ? 'bg-white' : 'bg-zinc-800 opacity-50 grayscale'}`}>
-                                        <QRCode value={`https://app.inmobigo.net/visit/${selectedPass.qr_token}`} size={180} fgColor="#09090b" bgColor="transparent" />
+                                    <div className={`p-4 rounded-3xl shadow-xl relative ${selectedPass.estado === 'pendiente' ? 'bg-white' : 'bg-zinc-800 opacity-50 grayscale'}`}>
+                                        {/* NUEVA URL SOLICITADA POR EL USUARIO EN LA RAIZ */}
+                                        <QRCode value={`https://acceso.inmobigo.mx/${selectedPass.id}`} size={180} fgColor="#09090b" bgColor="transparent" />
                                         
                                         {/* Overlay for non-pending */}
-                                        {selectedPass.status !== 'pending' && (
+                                        {selectedPass.estado !== 'pendiente' && (
                                             <div className="absolute inset-0 flex items-center justify-center">
                                                 <div className="bg-black/80 backdrop-blur-sm p-3 rounded-2xl border border-zinc-700 shadow-2xl rotate-12">
-                                                    <span className="text-xl font-black text-white px-2 py-1 uppercase tracking-widest">{getStatusText(selectedPass.status)}</span>
+                                                    <span className="text-xl font-black text-white px-2 py-1 uppercase tracking-widest">{getStatusText(selectedPass.estado)}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -426,24 +426,18 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     <div className="w-full mt-8 space-y-4">
                                         <div className="flex justify-between items-center text-sm">
                                             <span className="text-zinc-500 font-bold uppercase text-[10px] tracking-widest">Fecha autorizada</span>
-                                            <span className="text-white font-medium">{format(parseISO(selectedPass.visit_date), 'EEEE, d MMM yyyy', {locale:es})}</span>
+                                            <span className="text-white font-medium">{format(parseISO(selectedPass.fecha), 'EEEE, d MMM yyyy', {locale:es})}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-sm border-t border-zinc-800/50 pt-3">
                                             <span className="text-zinc-500 font-bold uppercase text-[10px] tracking-widest">Horario</span>
-                                            <span className="text-white font-medium">{selectedPass.start_time.substring(0,5)} {selectedPass.end_time ? `- ${selectedPass.end_time.substring(0,5)}` : ''}</span>
+                                            <span className="text-white font-medium">{selectedPass.hora.substring(0,5)}</span>
                                         </div>
-                                        {selectedPass.notes && (
-                                            <div className="pt-3 border-t border-zinc-800/50">
-                                                 <span className="text-zinc-500 font-bold uppercase text-[10px] tracking-widest block mb-1">Notas</span>
-                                                 <p className="text-zinc-300 text-sm">{selectedPass.notes}</p>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             </div>
 
                             {/* Actions Ticket */}
-                            {selectedPass.status === 'pending' && (
+                            {selectedPass.estado === 'pendiente' && (
                                 <div className="mt-4 flex gap-3">
                                     <Button onClick={downloadQR} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl shadow-lg border-zinc-700">
                                         <Download className="w-4 h-4 mr-2" /> Guardar

@@ -29,21 +29,35 @@ export async function updateSession(request: NextRequest) {
         }
     )
 
+    const { pathname, hostname } = request.nextUrl
+
+    // 🔥 DETECTAR SUBDOMINIO CORRECTAMENTE (Bypass de Autenticación)
+    if (hostname === "acceso.inmobigo.mx" && pathname !== "/") {
+        return NextResponse.next()
+    }
+
     const {
         data: { user },
     } = await supabase.auth.getUser()
 
-    if (
-        !user &&
-        !request.nextUrl.pathname.startsWith('/login') &&
-        !request.nextUrl.pathname.startsWith('/auth') &&
-        !request.nextUrl.pathname.startsWith('/register') &&
-        !request.nextUrl.pathname.startsWith('/api/debug-limits')
-    ) {
-        // no user, potentially respond by redirecting the user to the login page
-        // const url = request.nextUrl.clone()
-        // url.pathname = '/login'
-        // return NextResponse.redirect(url)
+    // REQUISITO: Permitir acceso público a rutas tipo /abc123 o /uuid-1234... en cualquier dominio (fallback)
+    const isVisitRoute = pathname !== '/' && /^\/[a-zA-Z0-9-]+$/.test(pathname)
+
+    // Rutas estáticas o auth que siempre deben ser públicas
+    const isPublicStaticOrAuth = 
+        pathname.startsWith('/_next') || 
+        pathname.startsWith('/favicon.ico') || 
+        pathname.startsWith('/login') || 
+        pathname.startsWith('/auth') || 
+        pathname.startsWith('/register') || 
+        pathname.startsWith('/api/debug-limits') ||
+        pathname.includes('.')
+
+    if (!user && !isVisitRoute && !isPublicStaticOrAuth) {
+        // Redirección obligatoria al login si no tiene sesión y NO es un acceso de visita pública
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        return NextResponse.redirect(url)
     }
 
     // If user is logged in and trying to access login page, redirect to dashboard

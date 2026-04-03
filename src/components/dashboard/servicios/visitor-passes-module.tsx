@@ -188,8 +188,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         }
     }
 
-    const activePasses = passes.filter(p => p.status === 'pending')
-    const historyPasses = passes.filter(p => p.status !== 'pending')
+    const activePasses = passes.filter(p => p.status === 'pending' || p.status === 'used')
+    const historyPasses = passes.filter(p => p.status !== 'pending' && p.status !== 'used')
 
     const getStatusStyle = (status: string) => {
         switch(status) {
@@ -203,7 +203,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     const getStatusText = (status: string) => {
         switch(status) {
             case 'pending': return 'PENDIENTE'
-            case 'used': return 'USADO'
+            case 'used': return 'REGISTRADO'
             case 'expired': return 'EXPIRADO'
             case 'cancelled': return 'CANCELADO'
             default: return status.toUpperCase()

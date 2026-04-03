@@ -16,9 +16,11 @@ import { es } from 'date-fns/locale'
 import {
     QrCode, UserPlus, Clock, X, CheckCircle2, History,
     ShieldAlert, Calendar, FileText, ChevronRight, Share2, 
-    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift
+    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift, Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDeleteModal } from './confirm-delete-modal'
+import { deleteVisitorPassAction } from '@/app/actions/visitor-actions'
 
 export function VisitorPassesModule({ resident }: { resident: any }) {
     const supabase = createClient()
@@ -29,6 +31,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     const [isGenerating, setIsGenerating] = useState(false)
     const [loading, setLoading] = useState(true)
     const [mounted, setMounted] = useState(false)
+    const [passToDelete, setPassToDelete] = useState<any | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
     
     useEffect(() => {
         setMounted(true)
@@ -62,33 +66,38 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
 
         fetchPasses()
 
-        // Real-time subscription for visitor status updates
+        // Suscripción Real-time optimizada para el residente
         const channel = supabase
-            .channel(`resident-passes-${resident.user_id}`)
+            .channel(`resident-passes-realtime-${resident.user_id}-${Date.now()}`)
             .on(
                 'postgres_changes',
                 {
-                    event: 'UPDATE',
+                    event: '*', // Escuchar INSERT y UPDATE
                     schema: 'public',
                     table: 'visitor_passes',
                     filter: `resident_id=eq.${resident.user_id}`
                 },
                 (payload) => {
-                    const updatedPass = payload.new as any
-                    const oldPass = payload.old as any
+                    const eventType = payload.eventType
+                    const newData = payload.new as any
+                    const oldData = payload.old as any
 
-                    // If status changed to 'used' (REGISTRADO)
-                    if (updatedPass.status === 'used' && oldPass.status !== 'used') {
-                        toast.success(`✨ ¡Tu invitado ${updatedPass.visitor_name} ha ingresado!`, {
-                            description: `Acceso registrado a las ${format(new Date(), 'HH:mm')} hs`,
-                            duration: 5000,
+                    // Disparar toast solo si el estado cambió a 'used' (REGISTRADO)
+                    if (eventType === 'UPDATE' && newData.status === 'used' && oldData.status !== 'used') {
+                        console.log('ENTRADA DETECTADA:', newData.visitor_name)
+                        toast.success(`✨ ¡Tu invitado ${newData.visitor_name} ha ingresado!`, {
+                            description: `Acceso registrado correctamente`,
+                            duration: 6000,
                         })
                     }
                     
+                    // Refrescar lista en cualquier cambio
                     fetchPasses()
                 }
             )
-            .subscribe()
+            .subscribe((status) => {
+                console.log('Resident Real-time Connection:', status)
+            })
 
         return () => {
             supabase.removeChannel(channel)
@@ -206,19 +215,26 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         }
     }
 
-    const handleCancelPass = async (id: string) => {
+    const handleDeletePass = async () => {
+        if (!passToDelete) return
+
         try {
-            const { error } = await supabase
-                .from('visitor_passes')
-                .update({ status: 'cancelled' })
-                .eq('id', id)
+            setIsDeleting(true)
             
-            if (error) throw error
-            toast.success('Pase cancelado correctamente')
+            // Usar Server Action para garantizar el borrado sin restricciones RLS
+            const result = await deleteVisitorPassAction(passToDelete.id)
+            
+            if (!result.success) throw new Error(result.error)
+            
+            toast.success('Pase eliminado definitivamente de la base de datos')
+            setPassToDelete(null)
             fetchPasses()
-            if (selectedPass?.id === id) setSelectedPass(null)
-        } catch (err) {
-            toast.error('Error al cancelar el pase')
+            if (selectedPass?.id === passToDelete.id) setSelectedPass(null)
+        } catch (err: any) {
+            console.error('Delete Error:', err)
+            toast.error(`Error al eliminar: ${err.message || 'Sin permiso'}`)
+        } finally {
+            setIsDeleting(false)
         }
     }
 
@@ -488,6 +504,19 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                             <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${getStatusStyle(pass.status)}`}>
                                                 {getStatusText(pass.status)}
                                             </span>
+                                            
+                                            {/* Delete Button Profesional */}
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setPassToDelete(pass)
+                                                }}
+                                                className="p-2 rounded-xl border bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/30 transition-all"
+                                                title="Eliminar pase"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+
                                             <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-white transition-colors" />
                                         </div>
                                     </div>
@@ -517,9 +546,23 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                 </p>
                                             </div>
                                         </div>
-                                        <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border ${getStatusStyle(pass.status)}`}>
-                                            {getStatusText(pass.status)}
-                                        </span>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border ${getStatusStyle(pass.status)}`}>
+                                                {getStatusText(pass.status)}
+                                            </span>
+
+                                            {/* Delete Button Profesional en Historial */}
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setPassToDelete(pass)
+                                                }}
+                                                className="p-1.5 rounded-lg border bg-zinc-900 border-zinc-800 text-zinc-600 hover:text-red-400 hover:border-red-500/30 transition-all"
+                                                title="Eliminar del historial"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))
                             )
@@ -1036,6 +1079,15 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                 </AnimatePresence>,
                 document.body
             )}
+
+            {/* Modal de Confirmación de Borrado Profesional */}
+            <ConfirmDeleteModal 
+                isOpen={!!passToDelete}
+                onClose={() => setPassToDelete(null)}
+                onConfirm={handleDeletePass}
+                visitorName={passToDelete?.visitor_name || ''}
+                isLoading={isDeleting}
+            />
         </div>
     )
 }

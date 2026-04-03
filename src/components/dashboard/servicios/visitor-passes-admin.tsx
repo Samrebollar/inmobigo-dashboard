@@ -14,13 +14,16 @@ import {
     Gift,
     AlertCircle,
     Search,
-    Filter
+    Filter,
+    Trash2
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { ConfirmDeleteModal } from './confirm-delete-modal'
+import { deleteVisitorPassAction } from '@/app/actions/visitor-actions'
 
 interface VisitorPass {
     id: string
@@ -44,6 +47,8 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
     const [filterStatus, setFilterStatus] = useState<string>('all')
     const [filterType, setFilterType] = useState<string>('all')
     const [searchTerm, setSearchTerm] = useState('')
+    const [passToDelete, setPassToDelete] = useState<VisitorPass | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     useEffect(() => {
         const orgId = admin?.organization_id
@@ -52,23 +57,25 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
         if (orgId) {
             fetchPasses(orgId)
 
-            // Suscribirse a cambios en tiempo real para la organización
+            // Suscribirse a cambios en tiempo real para la organización (Canal Dinámico)
             const channel = supabase
-                .channel('admin-visitor-passes')
+                .channel(`admin-passes-${orgId}-${Date.now()}`)
                 .on(
                     'postgres_changes',
                     {
-                        event: '*',
+                        event: '*', // Escuchar todo: INSERT, UPDATE, DELETE
                         schema: 'public',
                         table: 'visitor_passes',
                         filter: `organization_id=eq.${orgId}`
                     },
                     (payload) => {
-                        console.log('Realtime update received:', payload)
+                        console.log('Admin Realtime update:', payload.eventType)
                         fetchPasses(orgId)
                     }
                 )
-                .subscribe()
+                .subscribe((status) => {
+                    console.log('Admin subscription status:', status)
+                })
 
             return () => {
                 supabase.removeChannel(channel)
@@ -152,18 +159,25 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
         }
     }
 
-    const handleCancelPass = async (id: string) => {
+    const handleDeletePass = async () => {
+        if (!passToDelete) return
+        
         try {
-            const { error } = await supabase
-                .from('visitor_passes')
-                .update({ status: 'cancelled' })
-                .eq('id', id)
+            setIsDeleting(true)
             
-            if (error) throw error
-            toast.success('Pase cancelado correctamente')
+            // Usar Server Action para saltar RLS y asegurar el borrado
+            const result = await deleteVisitorPassAction(passToDelete.id)
+            
+            if (!result.success) throw new Error(result.error)
+            
+            toast.success('Pase eliminado definitivamente de la base de datos')
+            setPassToDelete(null)
             fetchPasses(admin.organization_id)
-        } catch (error) {
-            toast.error('Error al cancelar el pase')
+        } catch (error: any) {
+            console.error('Delete Error:', error)
+            toast.error(`Error al eliminar: ${error.message || 'Sin permiso'}`)
+        } finally {
+            setIsDeleting(false)
         }
     }
 
@@ -289,10 +303,24 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
                                                     {getTypeIcon(pass.access_type)}
                                                     <span className="text-[10px] font-black tracking-widest">{typeLabels[pass.access_type]}</span>
                                                 </div>
-                                                <Badge className={`px-2.5 py-1 rounded-lg font-black text-[9px] border uppercase tracking-widest ${config.color} shadow-sm`}>
-                                                    <StatusIcon size={10} className="mr-1.5" />
-                                                    {config.label}
-                                                </Badge>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className={`px-2.5 py-1 rounded-lg font-black text-[9px] border uppercase tracking-widest ${config.color} shadow-sm`}>
+                                                        <StatusIcon size={10} className="mr-1.5" />
+                                                        {config.label}
+                                                    </Badge>
+                                                    
+                                                    {/* Botón de Borrado Profesional */}
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setPassToDelete(pass)
+                                                        }}
+                                                        className="p-1.5 rounded-lg border bg-zinc-800/50 text-zinc-500 border-zinc-700 hover:text-red-400 hover:border-red-500/30 transition-all"
+                                                        title="Eliminar pase"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             {/* Visitor Info */}
@@ -365,6 +393,15 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
                     })
                 )}
             </div>
+
+            {/* Modal de Confirmación de Borrado */}
+            <ConfirmDeleteModal 
+                isOpen={!!passToDelete}
+                onClose={() => setPassToDelete(null)}
+                onConfirm={handleDeletePass}
+                visitorName={passToDelete?.visitor_name || ''}
+                isLoading={isDeleting}
+            />
         </div>
     )
 }

@@ -54,25 +54,38 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
 
     const [isDateOpen, setIsDateOpen] = useState(false)
     const [isTimeOpen, setIsTimeOpen] = useState(false)
-    const [isAccessTypeOpen, setIsAccessTypeOpen] = useState(false) // New
+    const [isAccessTypeOpen, setIsAccessTypeOpen] = useState(false)
     const [viewDate, setViewDate] = useState(new Date())
 
     useEffect(() => {
         fetchPasses()
     }, [])
 
+    const calculateEndTime = (startTime: string, accessType: string) => {
+        if (accessType === 'Evento') return '23:59:59'
+        
+        const [hours, minutes] = startTime.split(':').map(Number)
+        const date = new Date()
+        date.setHours(hours, minutes, 0)
+        
+        const duration = accessType === 'Servicio' ? 8 : 4
+        date.setHours(date.getHours() + duration)
+        
+        return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:00`
+    }
+
     const fetchPasses = async () => {
         try {
             setLoading(true)
             const { data, error } = await supabase
-                .from('visitas')
+                .from('visitor_passes')
                 .select('*')
                 .eq('resident_id', resident.user_id)
                 .order('created_at', { ascending: false })
 
             if (error) {
                 if (error.code === '42P01') {
-                    console.log('La tabla visitas no ha sido creada aún.')
+                    console.log('La tabla visitor_passes no ha sido creada aún.')
                 } else {
                     console.error('Error fetching passes:', error)
                 }
@@ -96,40 +109,46 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         setIsGenerating(true)
         try {
             const orgId = resident.condominiums?.organization_id || resident.organization_id
+            const unitId = resident.unit_id || resident.units?.id
+            
             if (!orgId) throw new Error('Organization ID not found')
 
-            // Consolidate dynamic info for visibility
-            let displayDetails = ""
-            if (formData.accessType === 'Servicio') {
-                displayDetails = ` (${formData.company})`
-            } else if (formData.accessType === 'Evento') {
-                displayDetails = ` [${formData.eventName}]`
+            const token = crypto.randomUUID()
+            const endTime = calculateEndTime(formData.startTime, formData.accessType)
+            
+            // Map display labels to DB keys
+            const typeMap: Record<string, string> = {
+                'Invitado': 'guest',
+                'Servicio': 'service',
+                'Evento': 'event'
             }
 
-            // Fallback: Store metadata in visitor name to ensure it's visible in all views
-            const visitorNameWithDetails = `${formData.visitorName}${displayDetails}`
-
-            const safePass = {
+            const newPass = {
+                visitor_name: formData.visitorName,
+                access_type: typeMap[formData.accessType] || 'guest',
+                visit_date: formData.visitDate,
+                start_time: formData.startTime,
+                end_time: endTime,
+                notes: formData.notes,
+                qr_token: token,
+                status: 'pending',
                 organization_id: orgId,
+                organization_name: resident.condominiums?.name || 'InmobiGo',
                 resident_id: resident.user_id,
-                unit_number: resident.units?.unit_number || 'S/D',
-                nombre_visitante: visitorNameWithDetails,
-                nombre_residente: resident.profiles?.full_name || resident.first_name || 'Residente',
-                fecha: formData.visitDate,
-                hora: formData.startTime,
-                estado: 'pendiente',
-                qr_usado: false
+                authorized_by_name: resident.profiles?.full_name || resident.first_name || 'Residente',
+                unit_id: unitId,
+                unit_name: resident.units?.unit_number || 'S/D'
             }
 
             const { data, error } = await supabase
-                .from('visitas')
-                .insert(safePass)
+                .from('visitor_passes')
+                .insert(newPass)
                 .select()
                 .single()
 
             if (error) throw error
 
-            toast.success('Visita registrada exitosamente')
+            toast.success('Pase de seguridad generado')
             setIsCreateModalOpen(false)
             setFormData({
                 visitorName: '', 
@@ -146,10 +165,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             fetchPasses()
             setSelectedPass(data)
         } catch (error: any) {
-            console.error('Full Error:', error)
-            const msg = error?.message || 'Error desconocido'
-            const details = error?.details || ''
-            toast.error(`Error: ${msg} ${details}`)
+            console.error('Create Pass Error:', error)
+            toast.error(`Error al crear el pase: ${error.message || 'Error técnico'}`)
         } finally {
             setIsGenerating(false)
         }
@@ -158,8 +175,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     const handleCancelPass = async (id: string) => {
         try {
             const { error } = await supabase
-                .from('visitas')
-                .update({ estado: 'cancelado' })
+                .from('visitor_passes')
+                .update({ status: 'cancelled' })
                 .eq('id', id)
             
             if (error) throw error
@@ -171,25 +188,25 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         }
     }
 
-    const activePasses = passes.filter(p => p.estado === 'pendiente')
-    const historyPasses = passes.filter(p => p.estado !== 'pendiente')
+    const activePasses = passes.filter(p => p.status === 'pending')
+    const historyPasses = passes.filter(p => p.status !== 'pending')
 
     const getStatusStyle = (status: string) => {
         switch(status) {
-            case 'pendiente': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-            case 'usado': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-            case 'expirado': return 'bg-red-500/10 text-red-500 border-red-500/20'
-            case 'cancelado': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+            case 'pending': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+            case 'used': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            case 'expired': return 'bg-red-500/10 text-red-500 border-red-500/20'
+            case 'cancelled': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
             default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
         }
     }
     const getStatusText = (status: string) => {
         switch(status) {
-            case 'pendiente': return 'PENDIENTE'
-            case 'usado': return 'USADO'
-            case 'expirado': return 'EXPIRADO'
-            case 'cancelado': return 'CANCELADO'
-            default: return status
+            case 'pending': return 'PENDIENTE'
+            case 'used': return 'USADO'
+            case 'expired': return 'EXPIRADO'
+            case 'cancelled': return 'CANCELADO'
+            default: return status.toUpperCase()
         }
     }
 
@@ -248,9 +265,9 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             pdf.rect(0, 0, 350, 8, 'F')
 
             // PDF Header Content (Logic based on name analysis)
-            const mainName = selectedPass.nombre_visitante.toUpperCase()
-            const isService = mainName.includes('(')
-            const isEvent = mainName.includes('[')
+            const mainName = selectedPass.visitor_name.toUpperCase()
+            const isService = selectedPass.access_type === 'service'
+            const isEvent = selectedPass.access_type === 'event'
 
             pdf.setFont('helvetica', 'bold')
             pdf.setTextColor(161, 161, 170) // zinc-400
@@ -267,43 +284,33 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             pdf.setFontSize(22)
             
             if (isService) {
-                // Extract company from parenthetical
-                const companyMatch = mainName.match(/\((.*?)\)/)
-                const company = companyMatch ? companyMatch[1] : 'S/D'
-                const rawName = mainName.replace(/\(.*?\)/, '').trim()
-                
                 pdf.setFontSize(18)
-                pdf.text(rawName, 175, 70, { align: 'center' })
+                pdf.text(mainName, 175, 70, { align: 'center' })
                 
                 pdf.setFontSize(10)
                 pdf.setTextColor(161,161,170)
-                pdf.text(`SERVICIO: ${company.toUpperCase()}`, 175, 85, { align: 'center' })
+                pdf.text(`SERVICIO TÉCNICO`, 175, 85, { align: 'center' })
                 
                 // Shift unit text down
                 pdf.setFontSize(10)
                 pdf.setFont('helvetica', 'normal')
                 pdf.setTextColor(161, 161, 170)
-                const buildText = `${resident.condominiums?.name || 'InmobiGo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
+                const buildText = `${selectedPass.organization_name} • Unidad ${selectedPass.unit_name}`
                 pdf.text(buildText, 175, 105, { align: 'center' })
             } else if (isEvent) {
-                // Extract event from brackets
-                const eventMatch = mainName.match(/\[(.*?)\]/)
-                const event = eventMatch ? eventMatch[1] : 'EVENTO'
-                const rawName = mainName.replace(/\[.*?\]/, '').trim()
-
                 pdf.setFontSize(18)
-                pdf.text(rawName, 175, 65, { align: 'center' })
+                pdf.text(mainName, 175, 65, { align: 'center' })
                 
                 pdf.setFontSize(12)
                 pdf.setFont('helvetica', 'bold')
                 pdf.setTextColor(167, 139, 250) // Purple accent
-                pdf.text(`${event.toUpperCase()}`, 175, 82, { align: 'center' })
+                pdf.text(`EVENTO ESPECIAL`, 175, 82, { align: 'center' })
                 
                 // Shift unit text down
                 pdf.setFontSize(10)
                 pdf.setFont('helvetica', 'normal')
                 pdf.setTextColor(161, 161, 170)
-                const buildText = `${resident.condominiums?.name || 'InmobiGo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
+                const buildText = `${selectedPass.organization_name} • Unidad ${selectedPass.unit_name}`
                 pdf.text(buildText, 175, 105, { align: 'center' })
             } else {
                 pdf.text(mainName, 175, 75, { align: 'center' })
@@ -312,7 +319,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                 pdf.setFontSize(10)
                 pdf.setFont('helvetica', 'normal')
                 pdf.setTextColor(161, 161, 170)
-                const buildText = `${resident.condominiums?.name || 'InmobiGo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
+                const buildText = `${selectedPass.organization_name} • Unidad ${selectedPass.unit_name}`
                 pdf.text(buildText, 175, 95, { align: 'center' })
             }
 
@@ -350,9 +357,9 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             // Date & Time Values
             pdf.setTextColor(255, 255, 255)
             pdf.setFontSize(12)
-            const dateStr = format(parseISO(selectedPass.fecha), 'd MMM yyyy', {locale:es})
+            const dateStr = format(parseISO(selectedPass.visit_date), 'd MMM yyyy', {locale:es})
             pdf.text(dateStr, 102.5, 460, { align: 'center' })
-            pdf.text(`${selectedPass.hora.substring(0,5)} hs`, 247.5, 460, { align: 'center' })
+            pdf.text(`${selectedPass.start_time.substring(0,5)} hs`, 247.5, 460, { align: 'center' })
 
             // Footer / Disclaimer
             pdf.setTextColor(82, 82, 91) // zinc-600
@@ -362,7 +369,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             pdf.text('Pase válido únicamente para la fecha indicada.', 175, 555, { align: 'center' })
 
             // Save PDF
-            const filename = `PASE_${selectedPass.nombre_visitante.replace(/\s+/g, '_')}_${selectedPass.fecha}.pdf`
+            const filename = `PASE_${selectedPass.visitor_name.replace(/\s+/g, '_')}_${selectedPass.visit_date}.pdf`
             pdf.save(filename)
             
             toast.success("¡Pase descargado exitosamente!", { id: toastId })
@@ -434,18 +441,18 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400 font-bold group-hover:scale-105 transition-all">
-                                                {pass.nombre_visitante.charAt(0).toUpperCase()}
+                                                {pass.visitor_name.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="text-white font-bold">{pass.nombre_visitante}</h4>
+                                                <h4 className="text-white font-bold">{pass.visitor_name}</h4>
                                                 <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1">
-                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.fecha), 'd MMM yyyy', {locale:es})} • {pass.hora.substring(0,5)} hs
+                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.visit_date), 'd MMM yyyy', {locale:es})} • {pass.start_time.substring(0,5)} hs
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${getStatusStyle(pass.estado)}`}>
-                                                {getStatusText(pass.estado)}
+                                            <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${getStatusStyle(pass.status)}`}>
+                                                {getStatusText(pass.status)}
                                             </span>
                                             <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-white transition-colors" />
                                         </div>
@@ -467,17 +474,17 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 bg-zinc-800/50 rounded-xl flex items-center justify-center text-zinc-500 font-bold">
-                                                {pass.nombre_visitante.charAt(0).toUpperCase()}
+                                                {pass.visitor_name.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="text-zinc-300 font-semibold">{pass.nombre_visitante}</h4>
+                                                <h4 className="text-zinc-300 font-semibold">{pass.visitor_name}</h4>
                                                 <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
-                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.fecha), 'd MMM yyyy', {locale:es})}
+                                                    <Calendar className="w-3 h-3" /> {format(parseISO(pass.visit_date), 'd MMM yyyy', {locale:es})}
                                                 </p>
                                             </div>
                                         </div>
-                                        <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border ${getStatusStyle(pass.estado)}`}>
-                                            {getStatusText(pass.estado)}
+                                        <span className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded border ${getStatusStyle(pass.status)}`}>
+                                            {getStatusText(pass.status)}
                                         </span>
                                     </div>
                                 ))
@@ -525,7 +532,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     <div style={{ 
                                         height: '8px', 
                                         width: '100%', 
-                                        background: selectedPass.estado === 'pendiente' 
+                                        background: selectedPass.status === 'pending' 
                                             ? 'linear-gradient(to right, #10b981, #2dd4bf)' 
                                             : '#3f3f46' 
                                     }} />
@@ -546,48 +553,40 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                 <ShieldCheck style={{ width: '14px', height: '14px', color: '#34d399' }} />
                                                 <span style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa' }}>Pase Oficial</span>
                                             </div>
-                                            
-                                            {/* Smart Header Parsing for UI */}
+                                                                        {/* Smart Header Parsing for UI */}
                                             {(() => {
-                                                const rawName = selectedPass.nombre_visitante
-                                                const isEvent = rawName.includes('[')
-                                                const isService = rawName.includes('(')
+                                                const isEvent = selectedPass.access_type === 'event'
+                                                const isService = selectedPass.access_type === 'service'
                                                 
                                                 if (isEvent) {
-                                                    const eventMatch = rawName.match(/\[(.*?)\]/)
-                                                    const eventName = eventMatch ? eventMatch[1] : 'Evento'
-                                                    const visitor = rawName.replace(/\[.*?\]/, '').trim()
                                                     return (
                                                         <>
-                                                            <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#ffffff', lineHeight: 1, marginBottom: '4px', letterSpacing: '-0.025em' }}>{visitor}</h2>
+                                                            <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#ffffff', lineHeight: 1, marginBottom: '4px', letterSpacing: '-0.025em' }}>{selectedPass.visitor_name}</h2>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                                                                 <Gift style={{ width: '14px', height: '14px', color: '#a78bfa' }} />
-                                                                <span style={{ fontSize: '18px', fontWeight: 900, color: '#a78bfa' }}>{eventName}</span>
+                                                                <span style={{ fontSize: '18px', fontWeight: 900, color: '#a78bfa' }}>Evento Especial</span>
                                                             </div>
                                                         </>
                                                     )
                                                 }
                                                 
                                                 if (isService) {
-                                                    const companyMatch = rawName.match(/\((.*?)\)/)
-                                                    const company = companyMatch ? companyMatch[1] : 'Servicio'
-                                                    const visitor = rawName.replace(/\(.*?\)/, '').trim()
                                                     return (
                                                         <>
-                                                            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff', lineHeight: 1.1, marginBottom: '4px' }}>{visitor}</h2>
+                                                            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff', lineHeight: 1.1, marginBottom: '4px' }}>{selectedPass.visitor_name}</h2>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                                                                 <ShieldCheck style={{ width: '12px', height: '12px', color: '#34d399' }} />
-                                                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>{company}</span>
+                                                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>Servicio Técnico</span>
                                                             </div>
                                                         </>
                                                     )
                                                 }
                                                 
-                                                return <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', lineHeight: 1.25, marginBottom: '8px', letterSpacing: '-0.025em' }}>{rawName}</h2>
+                                                return <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', lineHeight: 1.25, marginBottom: '8px', letterSpacing: '-0.025em' }}>{selectedPass.visitor_name}</h2>
                                             })()}
                                             
                                             <p style={{ color: '#a1a1aa', fontSize: '12px', fontWeight: 500, backgroundColor: '#18181b', padding: '4px 12px', borderRadius: '8px', border: '1px solid #27272a' }}>
-                                                {resident.condominiums?.name || 'InmobiGo'} • Unidad {resident.units?.unit_number || 'S/D'}
+                                                {selectedPass.organization_name} • Unidad {selectedPass.unit_name}
                                             </p>
                                         </div>
 
@@ -610,16 +609,16 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                             }}
                                         >
                                             <QRCode 
-                                                value={`https://acceso.inmobigo.mx/${selectedPass.id}`} 
+                                                value={`https://acceso.inmobigo.mx/${selectedPass.qr_token}`} 
                                                 size={180} 
                                                 fgColor="#000000" 
                                                 bgColor="transparent"
                                                 level="H"
                                             />
-                                            {selectedPass.estado !== 'pendiente' && (
+                                            {selectedPass.status !== 'pending' && (
                                                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(24,24,27,0.8)', backdropFilter: 'blur(4px)' }}>
                                                     <div style={{ backgroundColor: '#ef4444', color: '#ffffff', fontWeight: 900, fontSize: '12px', padding: '6px 12px', borderRadius: '8px', transform: 'rotate(-15deg)' }}>
-                                                        {getStatusText(selectedPass.estado)}
+                                                        {getStatusText(selectedPass.status)}
                                                     </div>
                                                 </div>
                                             )}
@@ -628,16 +627,16 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                         <div style={{ width: '100%', marginTop: '40px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                             <div style={{ padding: '16px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.01)', textAlign: 'center' }}>
                                                 <span style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#71717a', display: 'block', marginBottom: '4px' }}>Fecha</span>
-                                                <span style={{ color: '#ffffff', fontSize: '12px', fontWeight: 700 }}>{format(parseISO(selectedPass.fecha), 'd MMM yyyy', {locale:es})}</span>
+                                                <span style={{ color: '#ffffff', fontSize: '12px', fontWeight: 700 }}>{format(parseISO(selectedPass.visit_date), 'd MMM yyyy', {locale:es})}</span>
                                             </div>
                                             <div style={{ padding: '16px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.01)', textAlign: 'center' }}>
                                                 <span style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#71717a', display: 'block', marginBottom: '4px' }}>Horario</span>
-                                                <span style={{ color: '#ffffff', fontSize: '12px', fontWeight: 700 }}>{selectedPass.hora.substring(0,5)} hs</span>
+                                                <span style={{ color: '#ffffff', fontSize: '12px', fontWeight: 700 }}>{selectedPass.start_time.substring(0,5)} hs</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {selectedPass.estado === 'pendiente' && (
+                                    {selectedPass.status === 'pending' && (
                                         <div className="p-6 pt-0 flex gap-3 pb-10">
                                             <Button 
                                                 onClick={downloadQR} 

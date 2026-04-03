@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
-import { CheckCircle2, Clock, User, QrCode, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Clock, User, QrCode, AlertTriangle, ShieldCheck, Gift } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -9,6 +9,8 @@ export const metadata = {
     title: 'Registro de Acceso | InmobiGo',
     description: 'Sistema Profesional de Accesos Válido en Caseta'
 }
+
+export const dynamic = 'force-dynamic'
 
 export default async function AccesoVisitaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -78,9 +80,47 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
     }
 
     // 3. FLUJO POSITIVO: ESTADO PENDIENTE
+    // Parsing robusto (Nivel Pro)
+    const rawName = visita.nombre_visitante || ''
+    
+    // Detectar patrones: "Nombre [Evento]" o "Nombre (Empresa)"
+    const eventMatch = rawName.match(/\[(.*?)\]/)
+    const companyMatch = rawName.match(/\((.*?)\)/)
+    
+    const isEvent = !!eventMatch
+    const isService = !!companyMatch
+    
+    let accessTitle = 'Acceso Válido'
+    let themeColor = 'bg-emerald-600'
+    let themeText = 'text-emerald-400'
+    let themeBg = 'bg-emerald-500/20'
+    let iconColor = <QrCode className="w-10 h-10 text-white" />
+    let displayName = rawName
+    let extraDetail = null
+
+    if (isEvent) {
+        const eventTitle = eventMatch ? eventMatch[1] : 'Evento'
+        displayName = rawName.replace(/\[.*?\]/, '').trim()
+        accessTitle = 'Invitado a Evento'
+        themeColor = 'bg-indigo-600'
+        themeText = 'text-indigo-400'
+        themeBg = 'bg-indigo-500/20'
+        iconColor = <Gift className="w-10 h-10 text-white" />
+        extraDetail = { label: 'Evento', value: eventTitle }
+    } else if (isService) {
+        const company = companyMatch ? companyMatch[1] : 'Servicio'
+        displayName = rawName.replace(/\(.*?\)/, '').trim()
+        accessTitle = 'Personal de Servicio'
+        themeColor = 'bg-emerald-600'
+        themeText = 'text-emerald-400'
+        themeBg = 'bg-emerald-500/20'
+        iconColor = <ShieldCheck className="w-10 h-10 text-white" />
+        extraDetail = { label: 'Empresa', value: company }
+    }
+
     return (
         <div className="min-h-screen bg-zinc-950 flex justify-center p-4 text-white font-sans relative">
-            <div className={`absolute top-0 inset-x-0 h-[400px] bg-emerald-500/20 blur-[130px] rounded-full pointer-events-none`} />
+            <div className={`absolute top-0 inset-x-0 h-[400px] ${themeBg} blur-[130px] rounded-full pointer-events-none`} />
             
             <div className="max-w-md w-full relative z-10 space-y-6 pt-4">
                 
@@ -94,22 +134,32 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
 
                 <Card className="bg-zinc-900 border-zinc-800 overflow-hidden shadow-2xl rounded-3xl">
                     {/* Indicador de Estado Visual */}
-                    <div className="bg-gradient-to-b from-emerald-500/10 to-transparent p-6 pb-8 flex flex-col items-center">
-                        <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(16,185,129,0.3)] border-4 border-emerald-950">
-                            <QrCode className="w-10 h-10 text-white" />
+                    <div className={`bg-gradient-to-b from-${isEvent ? 'indigo' : 'emerald'}-500/10 to-transparent p-6 pb-8 flex flex-col items-center`}>
+                        <div className={`w-20 h-20 ${themeColor} rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(${isEvent ? '99,102,241' : '16,185,129'},0.3)] border-4 border-black/20`}>
+                            {iconColor}
                         </div>
-                        <h1 className="text-2xl font-black text-white text-center">Acceso Válido</h1>
-                        <span className="mt-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded-md border border-emerald-500/20">
-                            Status: Pendiente
+                        <h1 className="text-2xl font-black text-white text-center tracking-tight">{accessTitle}</h1>
+                        <span className={`mt-2 px-3 py-1 ${themeBg} ${themeText} text-[10px] font-bold uppercase tracking-[0.2em] rounded-md border border-white/10`}>
+                            Status: {visita.estado.toUpperCase()}
                         </span>
                     </div>
 
                     <CardContent className="p-6 pt-0 space-y-5">
                         <div className="p-5 bg-black/50 rounded-2xl border border-zinc-800/80 space-y-4">
                             <div>
-                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Nombre del Visitante</p>
-                                <p className="text-lg font-bold text-white">{visita.nombre_visitante}</p>
+                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">{extraDetail ? 'Responsable' : 'Nombre del Visitante'}</p>
+                                <p className="text-xl font-black text-white tracking-tight">{displayName}</p>
                             </div>
+                            
+                            {extraDetail && (
+                                <>
+                                    <div className="h-px bg-zinc-800/60 w-full" />
+                                    <div>
+                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">{extraDetail.label}</p>
+                                        <p className={`text-lg font-black ${themeText}`}>{extraDetail.value.toUpperCase()}</p>
+                                    </div>
+                                </>
+                            )}
                             <div className="h-px bg-zinc-800/60 w-full" />
                             <div>
                                 <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Autorizado Por</p>
@@ -139,7 +189,7 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
                             }).eq('id', visita.id)
                             redirect(`/${id}`)
                         }}>
-                            <button type="submit" className="w-full h-16 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-2xl font-black uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(16,185,129,0.2)] transition-all">
+                            <button type="submit" className={`w-full h-16 ${themeColor} hover:opacity-90 active:scale-[0.98] text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all`}>
                                 Registrar Entrada
                             </button>
                         </form>

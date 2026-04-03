@@ -16,7 +16,7 @@ import { es } from 'date-fns/locale'
 import {
     QrCode, UserPlus, Clock, X, CheckCircle2, History,
     ShieldAlert, Calendar, FileText, ChevronRight, Share2, 
-    Download, AlertTriangle, ShieldCheck, ChevronLeft
+    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -44,11 +44,17 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         visitDate: format(new Date(), 'yyyy-MM-dd'),
         startTime: '08:00',
         endTime: '',
+        accessType: 'Invitado', // New
+        company: '', // New
+        serviceType: '', // New
+        eventName: '', // New
+        guestCount: '', // New
         notes: ''
     })
 
     const [isDateOpen, setIsDateOpen] = useState(false)
     const [isTimeOpen, setIsTimeOpen] = useState(false)
+    const [isAccessTypeOpen, setIsAccessTypeOpen] = useState(false) // New
     const [viewDate, setViewDate] = useState(new Date())
 
     useEffect(() => {
@@ -92,11 +98,22 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             const orgId = resident.condominiums?.organization_id || resident.organization_id
             if (!orgId) throw new Error('Organization ID not found')
 
-            const newPass = {
+            // Consolidate dynamic info for visibility
+            let displayDetails = ""
+            if (formData.accessType === 'Servicio') {
+                displayDetails = ` (${formData.company})`
+            } else if (formData.accessType === 'Evento') {
+                displayDetails = ` [${formData.eventName}]`
+            }
+
+            // Fallback: Store metadata in visitor name to ensure it's visible in all views
+            const visitorNameWithDetails = `${formData.visitorName}${displayDetails}`
+
+            const safePass = {
                 organization_id: orgId,
                 resident_id: resident.user_id,
                 unit_number: resident.units?.unit_number || 'S/D',
-                nombre_visitante: formData.visitorName,
+                nombre_visitante: visitorNameWithDetails,
                 nombre_residente: resident.profiles?.full_name || resident.first_name || 'Residente',
                 fecha: formData.visitDate,
                 hora: formData.startTime,
@@ -106,7 +123,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
 
             const { data, error } = await supabase
                 .from('visitas')
-                .insert(newPass)
+                .insert(safePass)
                 .select()
                 .single()
 
@@ -115,13 +132,24 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             toast.success('Visita registrada exitosamente')
             setIsCreateModalOpen(false)
             setFormData({
-                visitorName: '', visitDate: format(new Date(), 'yyyy-MM-dd'), startTime: '08:00', endTime: '', notes: ''
+                visitorName: '', 
+                visitDate: format(new Date(), 'yyyy-MM-dd'), 
+                startTime: '08:00', 
+                endTime: '', 
+                notes: '',
+                accessType: 'Invitado',
+                company: '',
+                serviceType: '',
+                eventName: '',
+                guestCount: ''
             })
             fetchPasses()
             setSelectedPass(data)
         } catch (error: any) {
-            console.error(error)
-            toast.error('Hubo un error al guardar la visita.')
+            console.error('Full Error:', error)
+            const msg = error?.message || 'Error desconocido'
+            const details = error?.details || ''
+            toast.error(`Error: ${msg} ${details}`)
         } finally {
             setIsGenerating(false)
         }
@@ -219,23 +247,76 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             pdf.setFillColor(16, 185, 129) // emerald-500
             pdf.rect(0, 0, 350, 8, 'F')
 
-            // Header Content
+            // PDF Header Content (Logic based on name analysis)
+            const mainName = selectedPass.nombre_visitante.toUpperCase()
+            const isService = mainName.includes('(')
+            const isEvent = mainName.includes('[')
+
             pdf.setFont('helvetica', 'bold')
             pdf.setTextColor(161, 161, 170) // zinc-400
             pdf.setFontSize(9)
-            pdf.text('PASE OFICIAL DE ACCESO', 175, 45, { align: 'center' })
+            
+            let headerText = 'PASE OFICIAL DE ACCESO'
+            if (isService) headerText = 'PASE TÉCNICO / SERVICIO'
+            if (isEvent) headerText = 'PASE ESPECIAL / EVENTO'
+            
+            pdf.text(headerText, 175, 45, { align: 'center' })
 
-            // Visitor Name
+            // Visitor Name / Event / Company
             pdf.setTextColor(255, 255, 255)
-            pdf.setFontSize(24)
-            pdf.text(selectedPass.nombre_visitante.toUpperCase(), 175, 75, { align: 'center' })
+            pdf.setFontSize(22)
+            
+            if (isService) {
+                // Extract company from parenthetical
+                const companyMatch = mainName.match(/\((.*?)\)/)
+                const company = companyMatch ? companyMatch[1] : 'S/D'
+                const rawName = mainName.replace(/\(.*?\)/, '').trim()
+                
+                pdf.setFontSize(18)
+                pdf.text(rawName, 175, 70, { align: 'center' })
+                
+                pdf.setFontSize(10)
+                pdf.setTextColor(161,161,170)
+                pdf.text(`SERVICIO: ${company.toUpperCase()}`, 175, 85, { align: 'center' })
+                
+                // Shift unit text down
+                pdf.setFontSize(10)
+                pdf.setFont('helvetica', 'normal')
+                pdf.setTextColor(161, 161, 170)
+                const buildText = `${resident.condominiums?.name || 'InmobiGo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
+                pdf.text(buildText, 175, 105, { align: 'center' })
+            } else if (isEvent) {
+                // Extract event from brackets
+                const eventMatch = mainName.match(/\[(.*?)\]/)
+                const event = eventMatch ? eventMatch[1] : 'EVENTO'
+                const rawName = mainName.replace(/\[.*?\]/, '').trim()
 
-            // Unit/Building
-            pdf.setFontSize(10)
-            pdf.setFont('helvetica', 'normal')
-            pdf.setTextColor(161, 161, 170)
-            const buildText = `${resident.condominiums?.name || 'Inmobigo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
-            pdf.text(buildText, 175, 95, { align: 'center' })
+                pdf.setFontSize(18)
+                pdf.text(rawName, 175, 65, { align: 'center' })
+                
+                pdf.setFontSize(12)
+                pdf.setFont('helvetica', 'bold')
+                pdf.setTextColor(167, 139, 250) // Purple accent
+                pdf.text(`${event.toUpperCase()}`, 175, 82, { align: 'center' })
+                
+                // Shift unit text down
+                pdf.setFontSize(10)
+                pdf.setFont('helvetica', 'normal')
+                pdf.setTextColor(161, 161, 170)
+                const buildText = `${resident.condominiums?.name || 'InmobiGo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
+                pdf.text(buildText, 175, 105, { align: 'center' })
+            } else {
+                pdf.text(mainName, 175, 75, { align: 'center' })
+                
+                // Standard unit text position
+                pdf.setFontSize(10)
+                pdf.setFont('helvetica', 'normal')
+                pdf.setTextColor(161, 161, 170)
+                const buildText = `${resident.condominiums?.name || 'InmobiGo'} • Unidad ${resident.units?.unit_number || 'S/D'}`
+                pdf.text(buildText, 175, 95, { align: 'center' })
+            }
+
+
 
             // Divider with Perforation (Circles)
             pdf.setDrawColor(39, 39, 42) // #27272a
@@ -449,27 +530,66 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                             : '#3f3f46' 
                                     }} />
                                     
-                                    <div style={{ padding: '32px 32px 24px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                        <div 
-                                            style={{ 
-                                                display: 'inline-flex', 
-                                                alignItems: 'center', 
-                                                gap: '8px', 
-                                                padding: '4px 12px', 
-                                                backgroundColor: 'rgba(255,255,255,0.05)', 
-                                                borderRadius: '9999px', 
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                marginBottom: '16px'
-                                            }}
-                                        >
-                                            <ShieldCheck style={{ width: '14px', height: '14px', color: '#34d399' }} />
-                                            <span style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa' }}>Pase Oficial</span>
+                                        <div style={{ padding: '32px 32px 24px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                            <div 
+                                                style={{ 
+                                                    display: 'inline-flex', 
+                                                    alignItems: 'center', 
+                                                    gap: '8px', 
+                                                    padding: '4px 12px', 
+                                                    backgroundColor: 'rgba(255,255,255,0.05)', 
+                                                    borderRadius: '9999px', 
+                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                    marginBottom: '16px'
+                                                }}
+                                            >
+                                                <ShieldCheck style={{ width: '14px', height: '14px', color: '#34d399' }} />
+                                                <span style={{ fontSize: '9px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa' }}>Pase Oficial</span>
+                                            </div>
+                                            
+                                            {/* Smart Header Parsing for UI */}
+                                            {(() => {
+                                                const rawName = selectedPass.nombre_visitante
+                                                const isEvent = rawName.includes('[')
+                                                const isService = rawName.includes('(')
+                                                
+                                                if (isEvent) {
+                                                    const eventMatch = rawName.match(/\[(.*?)\]/)
+                                                    const eventName = eventMatch ? eventMatch[1] : 'Evento'
+                                                    const visitor = rawName.replace(/\[.*?\]/, '').trim()
+                                                    return (
+                                                        <>
+                                                            <h2 style={{ fontSize: '22px', fontWeight: 900, color: '#ffffff', lineHeight: 1, marginBottom: '4px', letterSpacing: '-0.025em' }}>{visitor}</h2>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                                                <Gift style={{ width: '14px', height: '14px', color: '#a78bfa' }} />
+                                                                <span style={{ fontSize: '18px', fontWeight: 900, color: '#a78bfa' }}>{eventName}</span>
+                                                            </div>
+                                                        </>
+                                                    )
+                                                }
+                                                
+                                                if (isService) {
+                                                    const companyMatch = rawName.match(/\((.*?)\)/)
+                                                    const company = companyMatch ? companyMatch[1] : 'Servicio'
+                                                    const visitor = rawName.replace(/\(.*?\)/, '').trim()
+                                                    return (
+                                                        <>
+                                                            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff', lineHeight: 1.1, marginBottom: '4px' }}>{visitor}</h2>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                                                <ShieldCheck style={{ width: '12px', height: '12px', color: '#34d399' }} />
+                                                                <span style={{ fontSize: '14px', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>{company}</span>
+                                                            </div>
+                                                        </>
+                                                    )
+                                                }
+                                                
+                                                return <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', lineHeight: 1.25, marginBottom: '8px', letterSpacing: '-0.025em' }}>{rawName}</h2>
+                                            })()}
+                                            
+                                            <p style={{ color: '#a1a1aa', fontSize: '12px', fontWeight: 500, backgroundColor: '#18181b', padding: '4px 12px', borderRadius: '8px', border: '1px solid #27272a' }}>
+                                                {resident.condominiums?.name || 'InmobiGo'} • Unidad {resident.units?.unit_number || 'S/D'}
+                                            </p>
                                         </div>
-                                        <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', lineHeight: 1.25, marginBottom: '8px', letterSpacing: '-0.025em' }}>{selectedPass.nombre_visitante}</h2>
-                                        <p style={{ color: '#a1a1aa', fontSize: '12px', fontWeight: 500, backgroundColor: '#18181b', padding: '4px 12px', borderRadius: '8px', border: '1px solid #27272a' }}>
-                                            {resident.condominiums?.name || 'InmobiGo'} • Unidad {resident.units?.unit_number || 'S/D'}
-                                        </p>
-                                    </div>
 
                                     <div className="relative flex items-center justify-between">
                                         <div style={{ width: '32px', height: '32px', borderRadius: '9999px', backgroundColor: '#000000', absolute: 'absolute', left: '-16px', border: '1px solid rgba(255,255,255,0.1)' }} className="absolute" />
@@ -568,7 +688,124 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                 
                                 <form onSubmit={handleCreatePass} className="space-y-6">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Nombre Completo</label>
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Tipo de Acceso</label>
+                                        <div className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsAccessTypeOpen(!isAccessTypeOpen)}
+                                                className="w-full bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500 rounded-2xl h-14 pl-12 pr-4 text-white text-sm outline-none transition-all flex items-center justify-between group"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {formData.accessType === 'Invitado' && <UserPlus className="h-5 w-5 text-indigo-400" />}
+                                                    {formData.accessType === 'Servicio' && <ShieldCheck className="h-5 w-5 text-emerald-400" />}
+                                                    {formData.accessType === 'Evento' && <Calendar className="h-5 w-5 text-purple-400" />}
+                                                    <span className="font-bold text-zinc-200">{formData.accessType}</span>
+                                                </div>
+                                                <ChevronRight className={`w-4 h-4 text-zinc-600 transition-transform ${isAccessTypeOpen ? 'rotate-90' : ''}`} />
+                                            </button>
+
+                                            <AnimatePresence>
+                                                {isAccessTypeOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        className="absolute top-16 left-0 right-0 z-[100] bg-zinc-950 border border-zinc-800 rounded-2xl p-2 shadow-2xl backdrop-blur-xl"
+                                                    >
+                                                        {['Invitado', 'Servicio', 'Evento'].map((type) => (
+                                                            <button
+                                                                key={type}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setFormData({ ...formData, accessType: type })
+                                                                    setIsAccessTypeOpen(false)
+                                                                }}
+                                                                className={`
+                                                                    w-full h-12 rounded-xl text-xs font-bold transition-all flex items-center px-4 gap-3
+                                                                    ${formData.accessType === type ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:bg-white/5'}
+                                                                `}
+                                                            >
+                                                                {type === 'Invitado' && <UserPlus className="h-4 w-4" />}
+                                                                {type === 'Servicio' && <ShieldCheck className="h-4 w-4" />}
+                                                                {type === 'Evento' && <Calendar className="h-4 w-4" />}
+                                                                {type}
+                                                            </button>
+                                                        ))}
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </div>
+
+                                    <AnimatePresence mode="wait">
+                                        {formData.accessType === 'Servicio' && (
+                                            <motion.div
+                                                key="servicio-fields"
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-4 overflow-hidden"
+                                            >
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Empresa</label>
+                                                        <input
+                                                            value={formData.company}
+                                                            onChange={e => setFormData({...formData, company: e.target.value})}
+                                                            className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-emerald-500 rounded-2xl h-14 px-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700 font-bold"
+                                                            placeholder="Ej. Totalplay"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Tipo de Servicio</label>
+                                                        <input
+                                                            value={formData.serviceType}
+                                                            onChange={e => setFormData({...formData, serviceType: e.target.value})}
+                                                            className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-emerald-500 rounded-2xl h-14 px-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700 font-bold"
+                                                            placeholder="Ej. Reparación"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {formData.accessType === 'Evento' && (
+                                            <motion.div
+                                                key="evento-fields"
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-4 overflow-hidden"
+                                            >
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Nombre del Evento</label>
+                                                        <input
+                                                            value={formData.eventName}
+                                                            onChange={e => setFormData({...formData, eventName: e.target.value})}
+                                                            className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-purple-500 rounded-2xl h-14 px-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700 font-bold"
+                                                            placeholder="Ej. Cumpleaños..."
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1"># de Invitados</label>
+                                                        <input
+                                                            type="number"
+                                                            value={formData.guestCount}
+                                                            onChange={e => setFormData({...formData, guestCount: e.target.value})}
+                                                            className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-purple-500 rounded-2xl h-14 px-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700 font-bold"
+                                                            placeholder="Ej. 15"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
+                                            {formData.accessType === 'Evento' ? 'Responsable Evento' : 'Nombre Completo'}
+                                        </label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center"><UserPlus className="h-5 w-5 text-zinc-600 group-focus-within:text-indigo-400 transition-colors" /></div>
                                             <input
@@ -577,7 +814,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                 value={formData.visitorName}
                                                 onChange={e => setFormData({...formData, visitorName: e.target.value})}
                                                 className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl h-14 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700"
-                                                placeholder="Ingresa nombre y apellido"
+                                                placeholder={formData.accessType === 'Evento' ? "Nombre del anfitrión o responsable" : "Ingresa nombre y apellido"}
                                             />
                                         </div>
                                     </div>

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDeleteModal } from './confirm-delete-modal'
-import { deleteVisitorPassAction } from '@/app/actions/visitor-actions'
+import { deleteVisitorPassAction } from '@/app/actions/service-actions'
 
 export function VisitorPassesModule({ resident }: { resident: any }) {
     const supabase = createClient()

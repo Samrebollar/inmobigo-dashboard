@@ -22,12 +22,21 @@ export default async function AvisosPage() {
     .eq('user_id', user.id)
     .single()
 
-  // Bypassing RLS for initial data load: Use admin client to see all organization passes
+  // Bypassing RLS for initial data load: Use admin client to see all organization data
   const adminSupabase = createAdminClient()
+  
   const { data: initialPasses } = await adminSupabase
     .from('visitor_passes')
     .select('*')
     .eq('organization_id', orgUser?.organization_id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  const { data: initialAlerts } = await adminSupabase
+    .from('package_alerts')
+    .select('*')
+    .eq('organization_id', orgUser?.organization_id)
+    .in('status', ['pending', 'received'])
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -36,12 +45,17 @@ export default async function AvisosPage() {
     ...user,
     organization_id: orgUser?.organization_id,
     role: orgUser?.role,
-    serverPassCount: initialPasses?.length || 0
+    serverPassCount: initialPasses?.length || 0,
+    serverAlertCount: initialAlerts?.length || 0
   }
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">
-      <AvisosClient admin={admin} initialPasses={initialPasses || []} />
+      <AvisosClient 
+        admin={admin} 
+        initialPasses={initialPasses || []} 
+        initialAlerts={initialAlerts || []} 
+      />
     </div>
   )
 }

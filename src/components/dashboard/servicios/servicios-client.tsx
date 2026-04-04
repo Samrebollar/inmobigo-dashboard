@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
 import { toast } from 'sonner'
+import { createPackageAlertAction } from '@/app/actions/service-actions'
 
 export default function ServiciosClient({ resident }: { resident: any }) {
     const supabase = createClient()
@@ -39,29 +40,43 @@ export default function ServiciosClient({ resident }: { resident: any }) {
         setIsSendingNotice(true)
         
         try {
-            const { error } = await supabase.from('package_notices').insert({
-                organization_id: resident.condominiums?.organization_id || resident.organization_id,
+            // Recopilar nombres para visualización inmediata en administración sin Joins pesados
+            const fullName = `${resident.first_name} ${resident.last_name || ''}`.trim()
+            const unitName = resident.units?.unit_number || 'N/A'
+            const orgId = resident.condominiums?.organization_id || resident.organization_id
+
+            // VALIDACIÓN PREVIA
+            if (!orgId || !resident.unit_id || !resident.user_id) {
+                console.error('Datos del residente incompletos:', { orgId, unit_id: resident.unit_id, user_id: resident.user_id })
+                toast.error('Tu perfil de residente está incompleto. Por favor contacta a administración.')
+                return
+            }
+
+            const result = await createPackageAlertAction({
+                organization_id: orgId,
                 unit_id: resident.unit_id,
                 resident_id: resident.user_id,
-                courier: courier,
-                tracking_number: trackingNumber,
-                instructions: instructions,
+                resident_name: fullName,
+                unit_name: unitName,
+                carrier: courier,
+                notes: instructions,
                 status: 'pending'
             })
             
-            if (error) throw error
+            if (!result.success) {
+                throw new Error(result.error)
+            }
             
             setShowNoticeSuccess(true)
-            toast.success('Aviso de paquetería registrado correctamente')
+            toast.success('Aviso de paquetería enviado a caseta')
             
             setTimeout(() => {
                 setShowNoticeSuccess(false)
-                setTrackingNumber('')
                 setInstructions('')
             }, 5000)
         } catch (error: any) {
             console.error('Error al enviar aviso de paquetería:', error)
-            toast.error('Hubo un error al registrar el aviso')
+            toast.error(`Error: ${error.message || 'No se pudo registrar el aviso'}`)
         } finally {
             setIsSendingNotice(false)
         }

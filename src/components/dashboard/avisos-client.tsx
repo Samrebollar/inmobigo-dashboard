@@ -38,6 +38,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { QRCodeDisplay } from '@/components/ui/qr-code-display'
 import { VisitorPassesAdmin } from './servicios/visitor-passes-admin'
+import { PackageAlertsAdmin } from './servicios/package-alerts-admin'
 
 type TabType = 'announcements' | 'packages' | 'access' | 'amenities'
 
@@ -61,18 +62,16 @@ interface AmenityReservation {
     price?: string
 }
 
-interface PackageDelivery {
-    id: string
-    resident: string
-    unit: string
-    carrier: string
-    date: string
-    status: 'Empaquetado' | 'Entregado' | 'En espera'
-    qrCode: string
-}
 
-
-export function AvisosClient({ admin, initialPasses = [] }: { admin?: any, initialPasses?: any[] }) {
+export function AvisosClient({ 
+    admin, 
+    initialPasses = [], 
+    initialAlerts = [] 
+}: { 
+    admin?: any, 
+    initialPasses?: any[], 
+    initialAlerts?: any[] 
+}) {
     const supabase = createClient()
     const [activeTab, setActiveTab] = useState<TabType>('announcements')
     const [showNewModal, setShowNewModal] = useState(false)
@@ -246,10 +245,6 @@ export function AvisosClient({ admin, initialPasses = [] }: { admin?: any, initi
         setShowNewModal(true)
     }
 
-    const packages: PackageDelivery[] = [
-        { id: '1', resident: 'Juan Pérez', unit: 'A-101', carrier: 'Amazon', date: 'hoy, 2:30 PM', status: 'En espera', qrCode: 'PKG-123456' },
-        { id: '2', resident: 'María García', unit: 'B-304', carrier: 'Mercado Libre', date: 'hoy, 11:15 AM', status: 'Entregado', qrCode: 'PKG-789012' }
-    ]
 
 
 
@@ -589,57 +584,7 @@ export function AvisosClient({ admin, initialPasses = [] }: { admin?: any, initi
                     )}
 
                     {activeTab === 'packages' && (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                {packages.map((pkg, i) => (
-                                    <Card key={pkg.id} className="bg-zinc-900/40 border-zinc-800 hover:border-amber-500/30 transition-all overflow-hidden relative group">
-                                         <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Package size={80} className="text-amber-500/5" aria-hidden="true" />
-                                         </div>
-                                         <CardContent className="p-0 flex flex-col sm:flex-row h-full">
-                                            <div className="p-6 flex-1 space-y-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-                                                        <Package size={24} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-zinc-500 font-bold uppercase">Paquete {pkg.carrier}</p>
-                                                        <h4 className="text-lg font-bold text-white tracking-tight">{pkg.resident}</h4>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="grid grid-cols-2 gap-4 pt-2">
-                                                    <div>
-                                                        <p className="text-[10px] uppercase text-zinc-600 font-bold mb-1">Unidad</p>
-                                                        <p className="text-zinc-300 font-semibold text-sm">{pkg.unit}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[10px] uppercase text-zinc-600 font-bold mb-1">Llegada</p>
-                                                        <p className="text-zinc-300 font-semibold text-sm truncate">{pkg.date}</p>
-                                                    </div>
-                                                </div>
-
-                                                <div className="pt-4 flex items-center gap-2">
-                                                    <Badge className={`${
-                                                        pkg.status === 'En espera' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
-                                                    } border-0 rounded-lg px-3 py-1 font-bold`}>
-                                                        {pkg.status}
-                                                    </Badge>
-                                                    <div className="flex-1" />
-                                                    <Button 
-                                                        onClick={() => setShowQRModal(pkg.qrCode)}
-                                                        variant="ghost" 
-                                                        className="text-zinc-400 hover:bg-zinc-800 hover:text-white h-9 px-3 gap-2 text-xs font-bold"
-                                                    >
-                                                        <QrCode size={14} /> Ver QR
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                         </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
-                        </div>
+                        <PackageAlertsAdmin admin={admin} initialAlerts={initialAlerts} />
                     )}
 
                     {activeTab === 'access' && (

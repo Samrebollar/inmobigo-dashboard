@@ -94,6 +94,42 @@ body {
   .animate-shimmer {
     animation: shimmer 1s linear infinite;
   }
+
+  .saas-card-glow {
+    position: relative;
+    z-index: 0;
+  }
+
+  .saas-card-glow::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: -1px;
+    background: linear-gradient(
+      var(--saas-glow-angle, 0deg),
+      transparent 20%,
+      rgba(99, 102, 241, 0.4) 40%,
+      rgba(168, 85, 247, 0.4) 60%,
+      transparent 80%
+    );
+    border-radius: inherit;
+    animation: saas-rotate 4s linear infinite;
+    mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    -webkit-mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .saas-card-glow:hover::before {
+    opacity: 1;
+  }
 }
 
 @keyframes aurora1 {
@@ -224,4 +260,21 @@ body {
   100% {
     background-position: 200% 0;
   }
+}
+
+@keyframes saas-rotate {
+  from {
+    --saas-glow-angle: 0deg;
+    transform: rotate(0deg);
+  }
+  to {
+    --saas-glow-angle: 360deg;
+    transform: rotate(360deg);
+  }
+}
+
+@property --saas-glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }

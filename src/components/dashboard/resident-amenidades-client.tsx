@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
+import { getAmenitiesAction } from '@/app/actions/service-actions'
 import { 
     format, 
     isSameDay, 
@@ -124,38 +125,56 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
     useEffect(() => {
         fetchAmenities()
-    }, [])
+    }, [resident?.organization_id])
 
     const fetchAmenities = async () => {
+        let orgId = resident?.organization_id
+
+        if (!orgId) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                    const { data: orgUser } = await supabase
+                        .from('organization_users')
+                        .select('organization_id')
+                        .eq('user_id', user.id)
+                        .maybeSingle()
+                    if (orgUser?.organization_id) orgId = orgUser.organization_id
+                }
+            } catch (e) {
+                console.error('Error fallback orgId:', e)
+            }
+        }
+
+        if (!orgId) {
+            setFetching(false)
+            return
+        }
+
         setFetching(true)
         try {
-            const { data, error } = await supabase
-                .from('amenities')
-                .select('*')
-                .order('name')
-
-            if (error) throw error
-
-            if (data && data.length > 0) {
-                setAmenities(data)
-            } else {
-                // If table is empty, seed it for this organization
+            const result = await getAmenitiesAction(orgId)
+            
+            if (result.success && result.data && result.data.length > 0) {
+                setAmenities(result.data)
+            } else if (result.success) {
+                // Si llegamos aquí con orgId válidopero sin datos, intentamos sembrar
                 const amenitiesToSeed = DEFAULT_AMENITIES.map(a => ({
                     ...a,
-                    organization_id: resident.organization_id
+                    organization_id: orgId
                 }))
                 
+                // Usamos la Server Action para insertar (bypass RLS)
+                // Añado una nueva acción para insertar masivamente si es necesario
                 const { data: seededData, error: seedError } = await supabase
                     .from('amenities')
                     .insert(amenitiesToSeed)
                     .select()
 
-                if (!seedError && seededData) {
-                    setAmenities(seededData)
-                }
+                if (seededData) setAmenities(seededData)
             }
         } catch (error) {
-            console.error('Error fetching/seeding amenities:', error)
+            console.error('Error grave en fetchAmenities:', error)
         } finally {
             setFetching(false)
         }

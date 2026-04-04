@@ -23,25 +23,51 @@ export default async function AmenidadesPage() {
         .eq('user_id', user.id)
         .maybeSingle()
 
-    // Get organization_users to ensure we have organization_id
+    // 2. Get organization_id from multiple sources with priority
+    let organizationId = user.user_metadata?.organization_id || user.user_metadata?.orgId
+
+    // Try from organization_users (primary for admins/owners)
     const { data: orgUser } = await supabase
         .from('organization_users')
         .select('organization_id')
         .eq('user_id', user.id)
         .maybeSingle()
+    
+    if (orgUser?.organization_id) {
+        organizationId = orgUser.organization_id
+    }
+
+    // Try from resident (primary for residents)
+    if (!organizationId && resident) {
+        // @ts-ignore
+        organizationId = resident.organization_id
+    }
+
+    // Fallback: Try through condominiums if resident is linked to one
+    if (!organizationId && resident?.condominium_id) {
+        const { data: condo } = await supabase
+            .from('condominiums')
+            .select('organization_id')
+            .eq('id', resident.condominium_id)
+            .maybeSingle()
+        
+        if (condo?.organization_id) {
+            organizationId = condo.organization_id
+        }
+    }
 
     const isMetadataResident = user.user_metadata?.role === 'resident'
     const isResident = !!resident || isMetadataResident
 
     const mockResident = resident ? { 
         ...resident, 
-        organization_id: orgUser?.organization_id 
+        organization_id: organizationId 
     } : {
         user_id: user.id,
         first_name: user.user_metadata?.full_name?.split(' ')[0] || 'Residente',
-        condominiums: { name: 'Tu Condominio' },
-        units: { unit_number: 'N/A' },
-        organization_id: orgUser?.organization_id,
+        condominiums: { name: resident?.condominiums?.name || 'Tu Condominio' },
+        units: { unit_number: resident?.units?.unit_number || 'N/A' },
+        organization_id: organizationId,
     }
 
     return (

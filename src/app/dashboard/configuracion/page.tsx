@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { InviteUserModal } from '@/components/settings/InviteUserModal'
 import { AmenityModal } from '@/components/settings/AmenityModal'
 import { Role } from '@/types/auth'
+import { saveAmenityAction, getAmenitiesAction, deleteAmenityAction } from '@/app/actions/service-actions'
 
 interface TeamMember {
     id: string
@@ -175,12 +176,12 @@ export default function SettingsPage() {
     const fetchAmenities = async (organizationId: string) => {
         setLoadingAmenities(true)
         try {
-            const { data, error } = await supabase
-                .from('amenities')
-                .select('*')
-                .eq('organization_id', organizationId)
-                .order('name')
-            if (data) setAmenities(data)
+            const result = await getAmenitiesAction(organizationId)
+            if (result.success && result.data) {
+                setAmenities(result.data)
+            } else {
+                console.error('Error fetching amenities:', result.error)
+            }
         } catch (e) {
             console.error('Error fetching amenities:', e)
         } finally {
@@ -190,14 +191,14 @@ export default function SettingsPage() {
 
     const handleSaveAmenity = async (amenityData: any) => {
         try {
-            const { data, error } = await supabase
-                .from('amenities')
-                .upsert(amenityData)
-                .select()
-                .single()
+            const result = await saveAmenityAction(amenityData)
             
-            if (error) throw error
+            if (!result.success) {
+                console.error('Error in handleSaveAmenity:', result)
+                throw new Error(result.error || 'Error al guardar amenidad')
+            }
             
+            const data = result.data
             setAmenities(prev => {
                 const exists = prev.find(a => a.id === data.id)
                 if (exists) return prev.map(a => a.id === data.id ? data : a)
@@ -205,7 +206,7 @@ export default function SettingsPage() {
             })
             toast.success(amenityData.id ? 'Amenidad actualizada' : 'Amenidad creada')
         } catch (e: any) {
-            console.error('Error saving amenity:', e)
+            console.error('Error detallado saving amenity:', e)
             toast.error('Error guardando amenidad: ' + e.message)
             throw e 
         }
@@ -215,8 +216,9 @@ export default function SettingsPage() {
         e.stopPropagation()
         if (!confirm('¿Seguro de que deseas eliminar esta amenidad? Se perderá el acceso a futuras reservas en este espacio.')) return
         try {
-            const { error } = await supabase.from('amenities').delete().eq('id', id)
-            if (error) throw error
+            const result = await deleteAmenityAction(id)
+            if (!result.success) throw new Error(result.error)
+            
             setAmenities(prev => prev.filter(a => a.id !== id))
             toast.success('Espacio eliminado permanentemente')
         } catch (e: any) {

@@ -147,8 +147,13 @@ export function AmenityModal({ isOpen, onClose, orgId, amenityToEdit, onSave }: 
             }
             await onSave(payload)
             onClose()
-        } catch (error) {
-            console.error('Error in form:', error)
+        } catch (error: any) {
+            console.error('Error detallado en el formulario de amenidad:', {
+                message: error.message,
+                stack: error.stack,
+                error
+            })
+            toast.error('Ocurrió un error al procesar la amenidad: ' + (error.message || 'Error desconocido'))
         } finally {
             setLoading(false)
         }

@@ -50,46 +50,20 @@ export function PackageAlertsAdmin({
 
     useEffect(() => {
         if (!admin?.organization_id) return
-
-        // If initial alerts are empty, fetch from Supabase (may be blocked by RLS)
-        if (initialAlerts.length === 0) {
-            fetchAlerts()
-        } else {
+        
+        // Sincronizar el estado local con las props del padre (que ahora maneja el Realtime)
+        if (initialAlerts) {
+            const formattedData = initialAlerts.map((item: any) => ({
+                ...item,
+                organization_name: item.organization_name || 'Las Palmas'
+            }))
+            setAlerts(formattedData)
             setLoading(false)
         }
-
-        // Suscripción Realtime Filtrada por Organización
-        const channel = supabase
-            .channel(`package_alerts_org_${admin.organization_id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'package_alerts',
-                    filter: `organization_id=eq.${admin.organization_id}`
-                },
-                (payload) => {
-                    if (payload.eventType === 'INSERT') {
-                        const newAlert = payload.new as PackageAlert
-                        setAlerts(prev => [newAlert, ...prev])
-                        toast.info(`📦 Nuevo aviso: ${newAlert.carrier} para ${newAlert.resident_name}`)
-                    } else if (payload.eventType === 'UPDATE') {
-                        const updatedAlert = payload.new as PackageAlert
-                        setAlerts(prev => prev.map(a => a.id === updatedAlert.id ? updatedAlert : a))
-                    } else if (payload.eventType === 'DELETE') {
-                        setAlerts(prev => prev.filter(a => a.id !== payload.old.id))
-                    }
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [admin?.organization_id])
+    }, [initialAlerts, admin?.organization_id])
 
     const fetchAlerts = async () => {
+        // Esta función se mantiene como fallback o para recarga manual
         try {
             setLoading(true)
             const { data, error } = await supabase
@@ -110,12 +84,7 @@ export function PackageAlertsAdmin({
             }))
             setAlerts(formattedData || [])
         } catch (error: any) {
-            console.error('Error detallado fetching package alerts:', {
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code
-            })
+            console.error('Error fetching package alerts:', error)
             toast.error('Error al cargar alertas de paquetería')
         } finally {
             setLoading(false)

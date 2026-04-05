@@ -239,3 +239,81 @@ export async function deleteAmenityAction(id: string) {
         return { success: false, error: error.message || 'Error al borrar amenidad' }
     }
 }
+
+/**
+ * Crea una reserva de amenidad (Bypass RLS)
+ */
+export async function createAmenityReservationAction(data: {
+    amenity_id: string,
+    resident_id: string,
+    organization_id: string,
+    reservation_date: string,
+    status?: string
+}) {
+    if (!data.amenity_id || !data.resident_id || !data.organization_id || !data.reservation_date) {
+        return { success: false, error: 'Datos incompletos para procesar la reserva' }
+    }
+
+    try {
+        const adminClient = createAdminClient()
+        
+        const { error } = await adminClient
+            .from('amenity_reservations')
+            .insert({
+                amenity_id: data.amenity_id,
+                resident_id: data.resident_id,
+                organization_id: data.organization_id,
+                reservation_date: data.reservation_date,
+                status: data.status || 'pending'
+            })
+
+        if (error) {
+            console.error('Supabase Error in createAmenityReservationAction:', error)
+            
+            // Error de duplicado (Unique Constraint)
+            if (error.code === '23505') {
+                return { success: false, error: 'Este horario ya ha sido reservado por otro residente. Por favor elige otra fecha.' }
+            }
+            
+            throw error
+        }
+
+        revalidatePath('/dashboard/amenidades')
+        revalidatePath('/dashboard/avisos')
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('Error detail in createAmenityReservationAction:', error)
+        return { 
+            success: false, 
+            error: error.message || 'Error al procesar la reserva en el servidor',
+            details: error.details 
+        }
+    }
+}
+
+/**
+ * Borra una reserva de amenidad (Bypass RLS)
+ */
+export async function deleteAmenityReservationAction(reservationId: string) {
+    if (!reservationId) return { success: false, error: 'ID de reserva no proporcionado' }
+
+    try {
+        const adminClient = createAdminClient()
+        
+        const { error } = await adminClient
+            .from('amenity_reservations')
+            .delete()
+            .eq('id', reservationId)
+
+        if (error) throw error
+
+        revalidatePath('/dashboard/amenidades/reservas')
+        revalidatePath('/dashboard/avisos')
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('Error in deleteAmenityReservationAction:', error)
+        return { success: false, error: error.message || 'Error al borrar la reserva' }
+    }
+}

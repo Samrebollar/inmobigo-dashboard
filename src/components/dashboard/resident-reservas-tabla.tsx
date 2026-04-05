@@ -21,6 +21,7 @@ import { createClient } from '@/utils/supabase/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Link from 'next/link'
+import { deleteAmenityReservationAction } from '@/app/actions/service-actions'
 
 function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, onUpdate: () => void, onDeleteClick: (reserva: any) => void }) {
     const [showMenu, setShowMenu] = useState(false)
@@ -110,7 +111,7 @@ function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, on
             {/* 5. Deposito en Garantia (Total) */}
             <td className="px-4 py-6">
                 <p className="text-white font-bold text-sm whitespace-nowrap text-center">
-                    ${((reserva.amenities?.base_price || 0) + (reserva.amenities?.deposit_required ? reserva.amenities.deposit_amount : 0)).toLocaleString('en-US')} MXN
+                    ${((reserva.amenities?.base_price || 0) + (reserva.amenities?.deposit_amount || 0)).toLocaleString('en-US')} MXN
                 </p>
             </td>
 
@@ -208,12 +209,9 @@ export default function ResidentReservasTabla({ resident }: { resident: any }) {
         
         setIsDeleting(true)
         try {
-            const { error } = await supabase
-                .from('amenity_reservations')
-                .delete()
-                .eq('id', deletingReserva.id)
+            const result = await deleteAmenityReservationAction(deletingReserva.id)
             
-            if (error) throw error
+            if (!result.success) throw new Error(result.error)
             fetchReservas() // Update local state
         } catch (error: any) {
             console.error('Error deleting reservation:', error)

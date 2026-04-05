@@ -82,34 +82,97 @@ export function AvisosClient({
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const [amenityReservations, setAmenityReservations] = useState<any[]>([])
+    const [packageAlerts, setPackageAlerts] = useState<any[]>(initialAlerts)
+    const [visitorPasses, setVisitorPasses] = useState<any[]>(initialPasses)
     const [loadingAmenities, setLoadingAmenities] = useState(false)
 
     useEffect(() => {
-        if (admin && admin.organization_id && activeTab === 'amenities') {
-            fetchAmenityReservations()
+        if (!admin?.organization_id) return
 
-            const channel = supabase
-                .channel('admin-amenity-reservations')
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*',
-                        schema: 'public',
-                        table: 'amenity_reservations',
-                        filter: `organization_id=eq.${admin.organization_id}`
-                    },
-                    (payload) => {
-                        console.log('Realtime Event (Admin):', payload)
-                        fetchAmenityReservations()
+        // 1. Amenity Reservations Subscription
+        const amenityChannel = supabase
+            .channel('admin-amenity-reservations')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'amenity_reservations',
+                    filter: `organization_id=eq.${admin.organization_id}`
+                },
+                (payload) => {
+                    console.log('Realtime Event (Amenities):', payload)
+                    fetchAmenityReservations()
+                    if (payload.eventType === 'INSERT') {
+                        toast.info('🔔 Nueva reserva de amenidad recibida')
                     }
-                )
-                .subscribe()
+                }
+            )
+            .subscribe()
 
-            return () => {
-                supabase.removeChannel(channel)
-            }
+        // 2. Package Alerts Subscription
+        const packageChannel = supabase
+            .channel(`admin-package-alerts-${admin.organization_id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'package_alerts',
+                    filter: `organization_id=eq.${admin.organization_id}`
+                },
+                (payload) => {
+                    console.log('Realtime Event (Packages):', payload)
+                    if (payload.eventType === 'INSERT') {
+                        const newAlert = payload.new
+                        setPackageAlerts(prev => [newAlert, ...prev])
+                        toast.info(`📦 Nuevo paquete: ${newAlert.carrier} para ${newAlert.resident_name}`)
+                    } else if (payload.eventType === 'UPDATE') {
+                        setPackageAlerts(prev => prev.map(a => a.id === payload.new.id ? payload.new : a))
+                    } else if (payload.eventType === 'DELETE') {
+                        setPackageAlerts(prev => prev.filter(a => a.id !== payload.old.id))
+                    }
+                }
+            )
+            .subscribe()
+
+        // 3. Visitor Passes Subscription
+        const accessChannel = supabase
+            .channel(`admin-visitor-passes-${admin.organization_id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'visitor_passes',
+                    filter: `organization_id=eq.${admin.organization_id}`
+                },
+                (payload) => {
+                    console.log('Realtime Event (Access):', payload)
+                    if (payload.eventType === 'INSERT') {
+                        const newPass = payload.new
+                        setVisitorPasses(prev => [newPass, ...prev])
+                        toast.info(`🎫 Nuevo pase de acceso: ${newPass.visitor_name}`)
+                    } else if (payload.eventType === 'UPDATE') {
+                        setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+                    } else if (payload.eventType === 'DELETE') {
+                        setVisitorPasses(prev => prev.filter(p => p.id !== payload.old.id))
+                    }
+                }
+            )
+            .subscribe()
+
+        // Initial data fetch for amenities (since it's not passed as initialData)
+        if (activeTab === 'amenities') {
+            fetchAmenityReservations()
         }
-    }, [activeTab, admin])
+
+        return () => {
+            supabase.removeChannel(amenityChannel)
+            supabase.removeChannel(packageChannel)
+            supabase.removeChannel(accessChannel)
+        }
+    }, [admin?.organization_id, activeTab])
 
     const fetchAmenityReservations = async () => {
         setLoadingAmenities(true)
@@ -441,7 +504,8 @@ export function AvisosClient({
                                 const propInfo = res.residentInfo?.condominiums?.name || 'Comunidad General'
                                 
                                 const dateFormatted = format(new Date(res.reservation_date), 'd MMM, yyyy', { locale: es })
-                                const price = res.amenities?.base_price > 0 ? `$${res.amenities.base_price}` : 'Gratis'
+                                const totalPrice = (res.amenities?.base_price || 0) + (res.amenities?.deposit_required ? (res.amenities?.deposit_amount || 0) : 0)
+                                const price = totalPrice > 0 ? `$${totalPrice.toLocaleString('en-US')}` : 'Gratis'
                                 
                                 const statusStyles: any = {
                                     pending: { 
@@ -584,11 +648,11 @@ export function AvisosClient({
                     )}
 
                     {activeTab === 'packages' && (
-                        <PackageAlertsAdmin admin={admin} initialAlerts={initialAlerts} />
+                        <PackageAlertsAdmin admin={admin} initialAlerts={packageAlerts} />
                     )}
 
                     {activeTab === 'access' && (
-                        <VisitorPassesAdmin admin={admin} initialPasses={initialPasses} />
+                        <VisitorPassesAdmin admin={admin} initialPasses={visitorPasses} />
                     )}
                 </motion.div>
             </AnimatePresence>

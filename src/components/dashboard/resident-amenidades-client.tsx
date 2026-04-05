@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
-import { getAmenitiesAction } from '@/app/actions/service-actions'
+import { getAmenitiesAction, createAmenityReservationAction } from '@/app/actions/service-actions'
 import { 
     format, 
     isSameDay, 
@@ -199,45 +199,48 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
         setLoading(true)
         
         try {
-            // "Al insertar, el organization_id NO debe ser manual. Debe salir de organization_users"
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) throw new Error("No autenticado")
 
-            // Usamos directamente el organization_id de la amenidad seleccionada
-            // ya que la amenidad pertenece estructuralmente a la organización correcta.
+            // Priorizar orgId de la amenidad, luego el del objeto resident, 
+            // y como último recurso, consultar la tabla organization_users
             let orgId = (selectedAmenity as any).organization_id || resident?.organization_id
 
             if (!orgId) {
-                // Último recurso por si la amenidad no lo tiene y el residente tampoco 
-                // (e.g., pruebas en modo admin aislado)
-                const { data: orgUser, error: orgError } = await supabase
+                const { data: orgUser } = await supabase
                     .from('organization_users')
                     .select('organization_id')
                     .eq('user_id', user.id)
                     .single()
-
-                if (orgError || !orgUser || !orgUser.organization_id) {
-                    throw new Error("No se pudo determinar a qué organización pertenece la reserva. Por favor contacta a administración.")
-                }
-                orgId = orgUser.organization_id
+                
+                if (orgUser?.organization_id) orgId = orgUser.organization_id
             }
 
-            const { error } = await supabase
-                .from('amenity_reservations')
-                .insert({
-                    amenity_id: selectedAmenity.id,
-                    resident_id: user.id, // auth.uid()
-                    organization_id: orgId,
-                    reservation_date: format(bookingDate, 'yyyy-MM-dd'),
-                    status: 'pending'
-                })
+            if (!orgId) {
+                throw new Error("No se pudo identificar tu organización. Por favor, re-inicia sesión.")
+            }
 
-            if (error) throw error
+            // Realizar la reserva a través de Server Action (Bypass RLS)
+            const result = await createAmenityReservationAction({
+                amenity_id: selectedAmenity.id,
+                resident_id: user.id,
+                organization_id: orgId,
+                reservation_date: format(bookingDate, 'yyyy-MM-dd'),
+                status: 'pending'
+            })
+
+            if (!result.success) {
+                throw new Error(result.error)
+            }
 
             setShowSuccess(true)
+            toast.success('¡Reserva solicitada con éxito!')
         } catch (error: any) {
-            console.error('Error booking:', error)
-            alert('Error al reservar: ' + error.message)
+            console.error('Error detallado booking:', error)
+            
+            const errorMsg = error.message || 'Error desconocido al procesar la reserva'
+            alert(`Error al reservar: ${errorMsg}`)
+            toast.error(`Error: ${errorMsg}`)
         } finally {
             setLoading(false)
         }
@@ -337,7 +340,9 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                                             <Users className="h-3 w-3 mr-1" /> {amenity.capacity} Pers.
                                         </Badge>
                                         <Badge variant="outline" className="bg-zinc-950/50 border-zinc-800 text-[9px] font-black uppercase text-zinc-400 py-1">
-                                            {amenity.base_price > 0 ? `$${amenity.base_price} MXN` : 'Gratis'}
+                                            {((amenity.base_price || 0) + (amenity.deposit_required ? (amenity.deposit_amount || 0) : 0)) > 0 
+                                                ? `$${((amenity.base_price || 0) + (amenity.deposit_required ? (amenity.deposit_amount || 0) : 0)).toLocaleString('en-US')} MXN` 
+                                                : 'Gratis'}
                                         </Badge>
                                         {amenity.deposit_required && (
                                             <Badge variant="outline" className="bg-amber-500/10 border-amber-500/20 text-[9px] font-black uppercase text-amber-500 py-1">

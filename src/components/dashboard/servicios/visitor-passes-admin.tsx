@@ -52,39 +52,11 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
 
     useEffect(() => {
         const orgId = admin?.organization_id
-        console.log('VisitorPassesAdmin - Current OrgId:', orgId)
-
-        if (orgId) {
-            fetchPasses(orgId)
-
-            // Suscribirse a cambios en tiempo real para la organización (Canal Dinámico)
-            const channel = supabase
-                .channel(`admin-passes-${orgId}-${Date.now()}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*', // Escuchar todo: INSERT, UPDATE, DELETE
-                        schema: 'public',
-                        table: 'visitor_passes',
-                        filter: `organization_id=eq.${orgId}`
-                    },
-                    (payload) => {
-                        console.log('Admin Realtime update:', payload.eventType)
-                        fetchPasses(orgId)
-                    }
-                )
-                .subscribe((status) => {
-                    console.log('Admin subscription status:', status)
-                })
-
-            return () => {
-                supabase.removeChannel(channel)
-            }
-        } else {
-            console.warn('VisitorPassesAdmin - No organization_id found in admin object')
+        if (orgId && initialPasses) {
+            setPasses(initialPasses)
             setLoading(false)
         }
-    }, [admin?.organization_id])
+    }, [initialPasses, admin?.organization_id])
 
     const fetchPasses = async (orgId: string) => {
         if (!orgId) return

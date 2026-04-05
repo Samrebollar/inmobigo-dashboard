@@ -110,9 +110,10 @@ export function AvisosClient({
             )
             .subscribe()
 
-        // 2. Package Alerts Subscription
+        // 2. Package Alerts Subscription (ADMIN VERSION)
+        console.log("🔥 MONITOR ADMIN PAQUETERIA ACTIVO")
         const packageChannel = supabase
-            .channel(`admin-package-alerts-${admin.organization_id}`)
+            .channel('package-alerts-admin')
             .on(
                 'postgres_changes',
                 {
@@ -122,19 +123,21 @@ export function AvisosClient({
                     filter: `organization_id=eq.${admin.organization_id}`
                 },
                 (payload) => {
-                    console.log('Realtime Event (Packages):', payload)
+                    console.log('🔥 CAMBIO DETECTADO (Admin):', payload)
                     if (payload.eventType === 'INSERT') {
-                        const newAlert = payload.new
+                        const newAlert = payload.new as any
                         setPackageAlerts(prev => [newAlert, ...prev])
                         toast.info(`📦 Nuevo paquete: ${newAlert.carrier} para ${newAlert.resident_name}`)
                     } else if (payload.eventType === 'UPDATE') {
-                        setPackageAlerts(prev => prev.map(a => a.id === payload.new.id ? payload.new : a))
+                        setPackageAlerts(prev => prev.map(a => a.id === (payload.new as any).id ? payload.new : a))
                     } else if (payload.eventType === 'DELETE') {
-                        setPackageAlerts(prev => prev.filter(a => a.id !== payload.old.id))
+                        setPackageAlerts(prev => prev.filter(a => a.id !== (payload.old as any).id))
                     }
                 }
             )
-            .subscribe()
+            .subscribe((status) => {
+                console.log("🔥 ESTADO REALTIME (Admin):", status)
+            })
 
         // 3. Visitor Passes Subscription
         const accessChannel = supabase

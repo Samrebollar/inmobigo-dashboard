@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { VisitorPassesModule } from './visitor-passes-module'
 import QRCode from 'react-qr-code'
@@ -26,6 +26,54 @@ import { createPackageAlertAction } from '@/app/actions/service-actions'
 
 export default function ServiciosClient({ resident }: { resident: any }) {
     const supabase = createClient()
+
+    useEffect(() => {
+        console.log("🔥 SERVICIOS MONTADO")
+        console.log("🔥 MONITOR RESIDENTE PAQUETERIA ACTIVO")
+
+        const channel = supabase.channel('package-alerts-resident')
+
+        channel
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'package_alerts'
+                },
+                (payload) => {
+                    console.log('🔥 CAMBIO DETECTADO:', payload)
+                    console.log('🔥 EVENTO:', payload.eventType)
+                    console.log('🔥 STATUS:', (payload.new as any)?.status)
+                    
+                    // Lógica para mostrar la notificación visual (Toast) al residente
+                    const newRow = payload.new as any;
+                    const oldRow = payload.old as any;
+
+                    if (payload.eventType === 'UPDATE' && newRow.status === 'received' && (!oldRow || oldRow.status !== 'received')) {
+                        // Solo mostramos toast si el ID del residente coincide
+                        if (newRow.resident_id === resident?.user_id) {
+                            const carrier = newRow.carrier || 'Un paquete';
+                            const orgName = resident.condominiums?.name || 'la administración';
+                            
+                            toast.success(`📦 ¡Tu paquete de ${carrier} ha llegado!`, {
+                                description: `El personal de seguridad dio ingreso a ${orgName}.`,
+                                duration: 20000,
+                                position: 'top-center'
+                            });
+                        }
+                    }
+                }
+            )
+            .subscribe((status) => {
+                console.log("🔥 ESTADO REALTIME:", status)
+            })
+
+        return () => {
+            console.log("🧹 LIMPIANDO CANAL PAQUETERIA")
+            supabase.removeChannel(channel)
+        }
+    }, [resident?.user_id, resident?.condominiums?.name])
     
     // ESTADOS: Paquetería
     const [courier, setCourier] = useState('Mercado Libre')

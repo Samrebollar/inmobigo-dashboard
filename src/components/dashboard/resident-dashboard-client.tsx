@@ -32,41 +32,8 @@ interface ResidentDashboardClientProps {
 export default function ResidentDashboardClient({ resident, userName }: ResidentDashboardClientProps) {
     const supabase = createClient()
 
-    useEffect(() => {
-        if (!resident?.user_id) return
-
-        const channel = supabase
-            .channel(`package-alerts-${resident.user_id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'package_alerts',
-                    filter: `resident_id=eq.${resident.user_id}`
-                },
-                (payload) => {
-                    // Si el estado cambia a 'received' (autorizado)
-                    if (payload.new.status === 'received' && payload.old.status === 'pending') {
-                        const carrier = payload.new.carrier || 'Paquetería'
-                        const orgName = resident.condominiums?.name || 'Las Palmas'
-                        
-                        toast.success(
-                            `📦 ¡Buenas noticias! Tu paquete de ${carrier} ha sido autorizado por seguridad y está ingresando a ${orgName}. Estará en tu domicilio en breve.`,
-                            {
-                                duration: 10000,
-                                position: 'top-center'
-                            }
-                        )
-                    }
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [resident?.user_id, resident?.condominiums?.name])
+    // El monitor de paquetería en tiempo real se ha movido a ServiciosClient
+    // para centralizar la lógica en el módulo correspondiente.
 
     const stats = [
         {

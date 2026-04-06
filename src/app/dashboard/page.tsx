@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { DollarSign, Building, Users, Activity, TrendingUp, Home } from 'lucide-react'
@@ -52,7 +53,7 @@ export default async function DashboardPage({
   // Check if Resident
   const { data: resident, error: residentError } = await supabase
     .from('residents')
-    .select('*, condominiums(name), units(unit_number)')
+    .select('*, condominiums(name, organization_id), units(unit_number)')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -62,15 +63,19 @@ export default async function DashboardPage({
   // --- RESIDENT VIEW ---
   // If forceView=resident is present in the URL, or user is metadata resident or in residents table
   if (isResident) {
-    const mockResident = resident || {
-      first_name: firstName,
-      last_name: '',
-      condominiums: { name: 'Condominio Demo' },
-      units: { unit_number: 'A-101' },
-      debt_amount: 2500,
-      last_payment_amount: 2500,
-      active_tickets_count: 1,
-      paid_installments_count: 10
+    const mockResident = {
+      ...(resident || {
+        first_name: firstName,
+        last_name: '',
+        condominiums: { name: 'Condominio Demo' },
+        units: { unit_number: 'A-101' },
+        debt_amount: 2500,
+        last_payment_amount: 2500,
+        active_tickets_count: 1,
+        paid_installments_count: 10,
+      }),
+      user_id: user.id,
+      organization_id: resident?.organization_id || (resident?.condominiums as any)?.organization_id || orgUser?.organization?.id || user.user_metadata?.organization_id
     }
     
     return (

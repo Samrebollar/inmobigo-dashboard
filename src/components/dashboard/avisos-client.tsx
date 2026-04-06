@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { createAnnouncement, deleteAnnouncementAction } from '@/app/actions/announcement-actions'
 import { motion, AnimatePresence } from 'framer-motion'
+import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
 import { 
     Bell, 
@@ -31,7 +34,7 @@ import {
     AlertCircle,
     Flame
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -39,6 +42,7 @@ import { Badge } from '@/components/ui/badge'
 import { QRCodeDisplay } from '@/components/ui/qr-code-display'
 import { VisitorPassesAdmin } from './servicios/visitor-passes-admin'
 import { PackageAlertsAdmin } from './servicios/package-alerts-admin'
+import { propertiesService } from '@/services/properties-service'
 
 type TabType = 'announcements' | 'packages' | 'access' | 'amenities'
 
@@ -47,8 +51,16 @@ interface Announcement {
     title: string
     description: string
     date: string
-    category: 'Oficial' | 'Social' | 'Mantenimiento'
+    eventDate?: string
+    startTime?: string
+    endTime?: string
+    location?: string
+    category: string
     status: 'Leído' | 'Nuevo'
+    priority: 'Normal' | 'Alta' | 'Urgente'
+    visibility: string
+    targetUnit?: string
+    imageUrl?: string
 }
 
 interface AmenityReservation {
@@ -64,15 +76,62 @@ interface AmenityReservation {
 
 
 export function AvisosClient({ 
-    admin, 
+    admin,
     initialPasses = [], 
-    initialAlerts = [] 
+    initialAlerts = [],
+    initialAnnouncements = [] 
 }: { 
-    admin?: any, 
-    initialPasses?: any[], 
-    initialAlerts?: any[] 
+    admin: any
+    initialPasses: any[]
+    initialAlerts: any[]
+    initialAnnouncements: any[]
 }) {
+    const router = useRouter()
     const supabase = createClient()
+
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null)
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+    const toggleExpand = (id: string) => {
+        setExpandedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    // Helper para mapear anuncios de DB a UI
+    const mapDbToUI = (ann: any): Announcement => {
+        let categoryWithEmoji = ann.type || '📢 Informativo'
+        if (!categoryWithEmoji.includes('📢') && !categoryWithEmoji.includes('🚧') && !categoryWithEmoji.includes('⚠️') && !categoryWithEmoji.includes('🎉') && !categoryWithEmoji.includes('📌')) {
+            const lowerType = categoryWithEmoji.toLowerCase()
+            if (lowerType.includes('mantenimiento')) categoryWithEmoji = '🚧 ' + ann.type
+            else if (lowerType.includes('urgente')) categoryWithEmoji = '⚠️ ' + ann.type
+            else if (lowerType.includes('evento')) categoryWithEmoji = '🎉 ' + ann.type
+            else if (lowerType.includes('aviso')) categoryWithEmoji = '📌 ' + ann.type
+            else categoryWithEmoji = '📢 ' + ann.type
+        }
+
+        return {
+            id: ann.id,
+            title: ann.title,
+            description: ann.message,
+            date: ann.created_at ? formatDistanceToNow(new Date(ann.created_at.toString().includes('Z') || ann.created_at.toString().includes('+') ? ann.created_at : `${ann.created_at}Z`), { addSuffix: true, locale: es }) : 'hace un momento',
+            category: categoryWithEmoji,
+            status: 'Nuevo',
+            priority: ann.priority,
+            eventDate: ann.event_date,
+            startTime: ann.start_time,
+            endTime: ann.end_time,
+            location: ann.location,
+            visibility: ann.visibility,
+            targetUnit: ann.target_id,
+            imageUrl: ann.image_url
+        }
+    }
     const [activeTab, setActiveTab] = useState<TabType>('announcements')
     const [showNewModal, setShowNewModal] = useState(false)
     const [showQRModal, setShowQRModal] = useState<string | null>(null)
@@ -104,7 +163,7 @@ export function AvisosClient({
                     console.log('Realtime Event (Amenities):', payload)
                     fetchAmenityReservations()
                     if (payload.eventType === 'INSERT') {
-                        toast.info('🔔 Nueva reserva de amenidad recibida')
+                        // toast.info('🔔 Nueva reserva de amenidad recibida')
                     }
                 }
             )
@@ -127,7 +186,7 @@ export function AvisosClient({
                     if (payload.eventType === 'INSERT') {
                         const newAlert = payload.new as any
                         setPackageAlerts(prev => [newAlert, ...prev])
-                        toast.info(`📦 Nuevo paquete: ${newAlert.carrier} para ${newAlert.resident_name}`)
+                        // toast.info(`📦 Nuevo paquete: ${newAlert.carrier} para ${newAlert.resident_name}`)
                     } else if (payload.eventType === 'UPDATE') {
                         setPackageAlerts(prev => prev.map(a => a.id === (payload.new as any).id ? payload.new : a))
                     } else if (payload.eventType === 'DELETE') {
@@ -155,7 +214,7 @@ export function AvisosClient({
                     if (payload.eventType === 'INSERT') {
                         const newPass = payload.new
                         setVisitorPasses(prev => [newPass, ...prev])
-                        toast.info(`🎫 Nuevo pase de acceso: ${newPass.visitor_name}`)
+                        // toast.info(`🎫 Nuevo pase de acceso: ${newPass.visitor_name}`)
                     } else if (payload.eventType === 'UPDATE') {
                         setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
                     } else if (payload.eventType === 'DELETE') {
@@ -164,6 +223,9 @@ export function AvisosClient({
                 }
             )
             .subscribe()
+
+        // 4. Initial data fetch for announcements
+        fetchAnnouncements()
 
         // Initial data fetch for amenities (since it's not passed as initialData)
         if (activeTab === 'amenities') {
@@ -176,6 +238,48 @@ export function AvisosClient({
             supabase.removeChannel(accessChannel)
         }
     }, [admin?.organization_id, activeTab])
+
+    const fetchAnnouncements = async () => {
+        if (!admin?.organization_id) {
+            console.log('🔍 [Avisos] No hay organization_id disponible');
+            return
+        }
+        
+        try {
+            console.log('📡 [Avisos] Buscando anuncios para Org:', admin.organization_id);
+            const { data, error } = await supabase
+                .from('announcements')
+                .select('*')
+                .eq('organization_id', admin.organization_id)
+                .order('created_at', { ascending: false })
+
+            console.log('📦 [Avisos] Resultado raw de Supabase:', { data, error });
+
+            if (error) throw error
+
+            if (data) {
+                const mappedAnnouncements = data.map(ann => mapDbToUI(ann))
+                setAnnouncements(mappedAnnouncements)
+            }
+        } catch (error) {
+            console.error('Error fetching announcements:', error)
+        }
+    }
+
+    const [managedCondos, setManagedCondos] = useState<string[]>([])
+
+    useEffect(() => {
+        const fetchCondos = async () => {
+            if (!admin?.organization_id) return
+            try {
+                const condos = await propertiesService.getByOrganization(admin.organization_id)
+                setManagedCondos(condos.map(c => c.name))
+            } catch (err) {
+                console.error("Error fetching condos for visibility:", err)
+            }
+        }
+        fetchCondos()
+    }, [admin?.organization_id])
 
     const fetchAmenityReservations = async () => {
         setLoadingAmenities(true)
@@ -251,15 +355,21 @@ export function AvisosClient({
 
     // Form States
     const [newTitle, setNewTitle] = useState('')
-    const [newCategory, setNewCategory] = useState<'Oficial' | 'Social' | 'Mantenimiento'>('Oficial')
+    const [newCategory, setNewCategory] = useState('📢 Informativo')
     const [newDescription, setNewDescription] = useState('')
+    const [newEventDate, setNewEventDate] = useState('')
+    const [newStartTime, setNewStartTime] = useState('')
+    const [newEndTime, setNewEndTime] = useState('')
+    const [newLocation, setNewLocation] = useState('')
+    const [newPriority, setNewPriority] = useState<'Normal' | 'Alta' | 'Urgente'>('Normal')
+    const [newVisibility, setNewVisibility] = useState<string>('Todos')
+    const [newTargetUnit, setNewTargetUnit] = useState('')
+    const [isPublishing, setIsPublishing] = useState(false)
 
     // Announcements State
-    const [announcements, setAnnouncements] = useState<Announcement[]>([
-        { id: '1', title: 'Mantenimiento de Elevadores', description: 'Se realizará mantenimiento preventivo en el elevador B el próximo lunes de 9am a 2pm.', date: 'hace 2 horas', category: 'Mantenimiento', status: 'Nuevo' },
-        { id: '2', title: 'Nueva Seguridad en Accesos', description: 'A partir de mañana, todos los invitados deberán presentar código QR generado desde la app.', date: 'ayer', category: 'Oficial', status: 'Leído' },
-        { id: '3', title: 'Clases de Yoga', description: 'Invitamos a todos los residentes a las clases de yoga en el roof garden los sábados a las 8am.', date: 'hace 3 días', category: 'Social', status: 'Leído' }
-    ])
+    const [announcements, setAnnouncements] = useState<Announcement[]>(
+        initialAnnouncements.map(ann => mapDbToUI(ann))
+    )
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -267,46 +377,186 @@ export function AvisosClient({
         }
     }
 
-    const handlePublish = () => {
-        if (!newTitle || !newDescription) return
-
-        if (editingId) {
-            // Update existing
-            setAnnouncements(announcements.map(ann => 
-                ann.id === editingId 
-                    ? { ...ann, title: newTitle, description: newDescription, category: newCategory }
-                    : ann
-            ))
-        } else {
-            // Create new
-            const newAnn: Announcement = {
-                id: Date.now().toString(),
-                title: newTitle,
-                description: newDescription,
-                date: 'hace un momento',
-                category: newCategory,
-                status: 'Nuevo'
-            }
-            setAnnouncements([newAnn, ...announcements])
+    const handlePublish = async () => {
+        if (!newTitle || !newDescription) {
+            setToastMessage('⚠️ El título y la descripción son obligatorios')
+            setTimeout(() => setToastMessage(null), 3000)
+            return
         }
-        
-        // Reset Form
-        setNewTitle('')
-        setNewDescription('')
-        setNewCategory('Oficial')
-        setSelectedFile(null)
-        setEditingId(null)
-        setShowNewModal(false)
+
+        if (!admin?.organization_id || !admin?.id) {
+            setToastMessage('⚠️ Error de sesión: No se identificó la organización o usuario')
+            setTimeout(() => setToastMessage(null), 3000)
+            return
+        }
+
+        setIsPublishing(true)
+
+        let imageUrl = null;
+        if (selectedFile) {
+            const supabase = createClient();
+            const fileExt = selectedFile.name.split('.').pop();
+            const fileName = `${admin.organization_id}/${Date.now()}.${fileExt}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('announcements')
+                .upload(fileName, selectedFile);
+
+            if (uploadError) {
+                console.error('❌ Error al subir archivo:', uploadError);
+                setToastMessage('⚠️ No se pudo subir el archivo: ' + uploadError.message);
+                setTimeout(() => setToastMessage(null), 3000);
+                setIsPublishing(false);
+                return;
+            }
+            
+            const { data: { publicUrl } } = supabase.storage
+                .from('announcements')
+                .getPublicUrl(fileName);
+            
+            imageUrl = publicUrl;
+        }
+
+        // Limpiar emojis del tipo para evitar errores de restriccion en BD si es texto simple
+        const cleanType = newCategory.replace(/[\u{1F300}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
+
+        const payload: any = {
+            organization_id: admin.organization_id,
+            title: newTitle,
+            message: newDescription,
+            type: cleanType,
+            priority: newPriority,
+            event_date: newEventDate || null,
+            start_time: newStartTime || null,
+            end_time: newEndTime || null,
+            location: newLocation || null,
+            visibility: newVisibility,
+            created_by: admin.id,
+            is_active: true,
+            image_url: imageUrl
+        };
+
+        console.log('🚀 DEBUG [Payload]:', payload);
+        console.log('🚀 DEBUG [Admin]:', { id: admin.id, org: admin.organization_id });
+
+        try {
+            if (editingId) {
+                // ... lógica de edición local actual ...
+                setAnnouncements(announcements.map(ann => 
+                    ann.id === editingId 
+                        ? { 
+                            ...ann, 
+                            title: newTitle, 
+                            description: newDescription, 
+                            category: newCategory,
+                            eventDate: newEventDate,
+                            startTime: newStartTime,
+                            endTime: newEndTime,
+                            location: newLocation,
+                            priority: newPriority,
+                            visibility: newVisibility,
+                            targetUnit: newTargetUnit
+                          }
+                        : ann
+                ))
+            } else {
+                // INSERT via Server Action (Para bypassar RLS y diagnosticar {})
+                console.log('📡 INVOCANDO SERVER ACTION: createAnnouncement...');
+                
+                const result = await createAnnouncement(payload);
+
+                if (!result.success) {
+                    console.error('❌ ERROR DESDE SERVER ACTION:', result.error);
+                    throw new Error(result.error);
+                }
+
+                console.log('✅ ÉXITO DESDE SERVER ACTION:', result.data);
+                
+                const newAnn: Announcement = {
+                    id: result.data?.id || Date.now().toString(),
+                    title: newTitle,
+                    description: newDescription,
+                    date: 'hace un momento',
+                    category: newCategory,
+                    status: 'Nuevo',
+                    eventDate: newEventDate,
+                    startTime: newStartTime,
+                    endTime: newEndTime,
+                    location: newLocation,
+                    priority: newPriority,
+                    visibility: newVisibility,
+                    targetUnit: newTargetUnit
+                }
+                setAnnouncements([newAnn, ...announcements])
+            }
+            
+            setToastMessage('✅ Anuncio publicado correctamente')
+            
+            // Reset Form and Modal
+            setNewTitle('')
+            setNewDescription('')
+            setNewCategory('📢 Informativo')
+            setNewEventDate('')
+            setNewStartTime('')
+            setNewEndTime('')
+            setNewLocation('')
+            setNewPriority('Normal')
+            setNewVisibility('Todos')
+            setNewTargetUnit('')
+            setSelectedFile(null)
+            setEditingId(null)
+            setShowNewModal(false)
+
+        } catch (error: any) {
+            console.error('🔥 ERROR CRÍTICO:', error);
+            setToastMessage(`❌ Error: ${error.message || 'Error de conexión'}`);
+        } finally {
+            setIsPublishing(false)
+            setTimeout(() => setToastMessage(null), 3000)
+        }
     }
 
-    const handleDelete = (id: string) => {
-        setAnnouncements(announcements.filter(ann => ann.id !== id))
+    const handleDelete = (ann: Announcement) => {
+        setAnnouncementToDelete(ann)
+        setShowDeleteConfirm(true)
+    }
+
+    const confirmDelete = async () => {
+        if (!announcementToDelete) return
+        
+        setIsDeleting(true)
+        try {
+            const result = await deleteAnnouncementAction(announcementToDelete.id)
+            if (result.success) {
+                setAnnouncements(prev => prev.filter(a => a.id !== announcementToDelete.id))
+                setToastMessage('✅ Aviso eliminado correctamente')
+                setTimeout(() => setToastMessage(null), 3000)
+            } else {
+                setToastMessage('❌ Error: ' + result.error)
+                setTimeout(() => setToastMessage(null), 3000)
+            }
+        } catch (err) {
+            console.error(err)
+            setToastMessage('❌ Error de conexión')
+            setTimeout(() => setToastMessage(null), 3000)
+        } finally {
+            setIsDeleting(false)
+            setShowDeleteConfirm(false)
+            setAnnouncementToDelete(null)
+        }
     }
 
     const handleEdit = (ann: Announcement) => {
         setNewTitle(ann.title)
         setNewDescription(ann.description)
         setNewCategory(ann.category)
+        setNewEventDate(ann.eventDate || '')
+        setNewStartTime(ann.startTime || '')
+        setNewEndTime(ann.endTime || '')
+        setNewLocation(ann.location || '')
+        setNewPriority(ann.priority || 'Normal')
+        setNewVisibility(ann.visibility || 'Todos')
+        setNewTargetUnit(ann.targetUnit || '')
         setEditingId(ann.id)
         setShowNewModal(true)
     }
@@ -350,14 +600,22 @@ export function AvisosClient({
                     )}
                 </AnimatePresence>
                 <div className="flex items-center gap-3">
-                    <div className="relative group hidden sm:block">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 h-4 w-4 transition-colors group-hover:text-zinc-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Buscar avisos o registros..." 
-                            className="h-11 w-64 bg-zinc-900/50 border border-zinc-800 rounded-xl pl-10 pr-4 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all"
-                        />
-                    </div>
+                    <motion.button 
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                            setToastMessage('📊 Abriendo panel de control de lectura...');
+                            setTimeout(() => {
+                                setToastMessage(null);
+                                router.push('/dashboard/control-lectura');
+                            }, 1000);
+                        }}
+                        className="h-12 px-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-zinc-300 hover:text-white font-bold rounded-2xl transition-all flex items-center gap-2 group relative overflow-hidden shadow-lg"
+                    >
+                        <ShieldCheck size={18} className="text-indigo-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-sm">Control de lectura</span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                    </motion.button>
                     <motion.button 
                         whileHover={{ scale: 1.05, y: -2 }}
                         whileTap={{ scale: 0.95 }}
@@ -365,7 +623,14 @@ export function AvisosClient({
                             setEditingId(null);
                             setNewTitle('');
                             setNewDescription('');
-                            setNewCategory('Oficial');
+                            setNewCategory('📢 Informativo');
+                            setNewEventDate('');
+                            setNewStartTime('');
+                            setNewEndTime('');
+                            setNewLocation('');
+                            setNewPriority('Normal');
+                            setNewVisibility('Todos');
+                            setNewTargetUnit('');
                             setSelectedFile(null);
                             setShowNewModal(true);
                         }}
@@ -426,42 +691,102 @@ export function AvisosClient({
                                         <CardContent className="p-6 pt-7">
                                             <div className="flex justify-between items-center mb-5">
                                                 <Badge className={`px-2.5 py-1 rounded-lg border-0 shadow-sm ${
-                                                    ann.category === 'Oficial' ? 'bg-indigo-500/20 text-indigo-400' :
-                                                    ann.category === 'Social' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                    ann.category.includes('Informativo') ? 'bg-indigo-500/20 text-indigo-400' :
+                                                    ann.category.includes('Social') || ann.category.includes('Evento') ? 'bg-emerald-500/20 text-emerald-400' :
+                                                    ann.category.includes('Urgente') ? 'bg-rose-500/20 text-rose-400' :
                                                     'bg-amber-500/20 text-amber-400'
                                                 }`}>
                                                     {ann.category}
                                                 </Badge>
-                                                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{ann.date}</span>
+                                                <span suppressHydrationWarning className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{ann.date}</span>
                                             </div>
                                             <h3 className="text-xl font-bold text-white mb-3 group-hover:text-indigo-400 transition-colors leading-tight">
                                                 {ann.title}
                                             </h3>
-                                            <p className="text-zinc-500 text-sm leading-relaxed mb-6 line-clamp-3 font-medium">
+                                            <p className={cn(
+                                                "text-zinc-500 text-sm leading-relaxed mb-6 font-medium transition-all duration-500",
+                                                !expandedIds.has(ann.id) && "line-clamp-2"
+                                            )}>
                                                 {ann.description}
                                             </p>
+
+                                            { (ann.imageUrl || (ann as any).image_url) && (() => {
+                                                const url = ann.imageUrl || (ann as any).image_url;
+                                                const isPdf = url && url.toLowerCase().includes('.pdf');
+
+                                                if (isPdf) {
+                                                    return (
+                                                        <motion.a 
+                                                            whileHover={{ scale: 1.02 }}
+                                                            whileTap={{ scale: 0.98 }}
+                                                            href={url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="mb-6 block p-6 bg-zinc-950/60 border border-zinc-800/80 rounded-3xl hover:border-indigo-500/40 transition-all group/file relative overflow-hidden shadow-2xl"
+                                                        >
+                                                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                                                            <div className="relative flex items-center gap-5">
+                                                                <div className="h-14 w-14 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center ring-1 ring-rose-500/20 shadow-inner shrink-0 group-hover/file:bg-rose-500/20 transition-all">
+                                                                    <File size={28} />
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-sm font-bold text-white mb-1 truncate">Documento Adjunto (PDF)</p>
+                                                                    <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest flex items-center gap-2">
+                                                                        Ver archivo <ArrowRight size={10} className="group-hover/file:translate-x-1 transition-transform" />
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        </motion.a>
+                                                    )
+                                                }
+
+                                                return (
+                                                    <div className="mb-6 relative w-full h-48 rounded-2xl overflow-hidden border border-zinc-800/80 group-hover:border-indigo-500/30 transition-all bg-black/40 ring-1 ring-white/10 shadow-2xl z-10">
+                                                        <img 
+                                                            src={url} 
+                                                            alt={ann.title}
+                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 pointer-events-none"
+                                                            onError={(e) => {
+                                                                (e.target as any).style.display = 'none';
+                                                            }}
+                                                        />
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                                                    </div>
+                                                )
+                                            })()}
                                             
-                                            <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50">
-                                                <button className="flex items-center gap-2 text-zinc-500 hover:text-white text-xs font-bold transition-all">
-                                                    Leer más <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                                                </button>
+                                            <div className="flex items-center justify-between pt-5 border-t border-zinc-800/50">
+                                                <motion.button 
+                                                    whileHover={{ x: 5 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={() => toggleExpand(ann.id)}
+                                                    className={cn(
+                                                        "flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all",
+                                                        expandedIds.has(ann.id) ? "text-indigo-400" : "text-zinc-500 hover:text-white"
+                                                    )}
+                                                >
+                                                    {expandedIds.has(ann.id) ? 'Ver menos' : 'Leer más'} 
+                                                    <ArrowRight size={14} className={cn("transition-transform duration-300", expandedIds.has(ann.id) && "rotate-90")} />
+                                                </motion.button>
                                                 
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-3">
                                                     <motion.button 
-                                                        whileHover={{ scale: 1.1 }}
+                                                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(99, 102, 241, 0.15)' }}
                                                         whileTap={{ scale: 0.9 }}
                                                         onClick={() => handleEdit(ann)}
-                                                        className="p-2 bg-zinc-800/50 hover:bg-indigo-500/20 text-zinc-500 hover:text-indigo-400 rounded-lg transition-all"
+                                                        className="p-2.5 bg-zinc-800/40 text-zinc-400 hover:text-indigo-400 rounded-xl border border-zinc-800/50 hover:border-indigo-500/30 transition-all shadow-lg"
+                                                        title="Editar"
                                                     >
-                                                        <Edit2 size={14} />
+                                                        <Edit2 size={15} />
                                                     </motion.button>
                                                     <motion.button 
-                                                        whileHover={{ scale: 1.1 }}
+                                                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.15)' }}
                                                         whileTap={{ scale: 0.9 }}
-                                                        onClick={() => handleDelete(ann.id)}
-                                                        className="p-2 bg-zinc-800/50 hover:bg-rose-500/20 text-zinc-500 hover:text-rose-400 rounded-lg transition-all"
+                                                        onClick={() => handleDelete(ann)}
+                                                        className="p-2.5 bg-zinc-800/40 text-zinc-400 hover:text-rose-400 rounded-xl border border-zinc-800/50 hover:border-rose-500/30 transition-all shadow-lg"
+                                                        title="Eliminar"
                                                     >
-                                                        <Trash2 size={14} />
+                                                        <Trash2 size={15} />
                                                     </motion.button>
                                                 </div>
                                             </div>
@@ -722,36 +1047,141 @@ export function AvisosClient({
                                     </button>
                                 </div>
 
-                                <div className="space-y-5">
+                                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar pb-2">
+                                    {/* Visibilidad Selector */}
+                                    <div className="space-y-3 pb-2">
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] pl-1">🚀 Enviar a (Visibilidad)</label>
+                                        <div className="relative">
+                                            <select 
+                                                value={newVisibility}
+                                                onChange={(e) => setNewVisibility(e.target.value)}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-bold text-xs appearance-none cursor-pointer shadow-xl"
+                                            >
+                                                <option value="Todos">Todos (Toda la organización)</option>
+                                                {managedCondos.map((condo) => (
+                                                    <option key={condo} value={condo}>
+                                                        {condo}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 rotate-90 pointer-events-none" size={16} />
+                                        </div>
+                                    </div>
+
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest pl-1">Título del Anuncio</label>
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] pl-1">Título del Anuncio</label>
                                         <input 
                                             value={newTitle}
                                             onChange={(e) => setNewTitle(e.target.value)}
                                             placeholder="Ej. Mantenimiento del Roof Garden"
-                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium"
+                                            className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium shadow-inner"
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest pl-1">Categoría</label>
-                                        <select 
-                                            value={newCategory}
-                                            onChange={(e) => setNewCategory(e.target.value as any)}
-                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium appearance-none"
-                                        >
-                                            <option value="Oficial">Oficial</option>
-                                            <option value="Mantenimiento">Mantenimiento</option>
-                                            <option value="Social">Social</option>
-                                        </select>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] pl-1">Tipo de Anuncio</label>
+                                            <div className="relative">
+                                                <select 
+                                                    value={newCategory}
+                                                    onChange={(e) => setNewCategory(e.target.value)}
+                                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium appearance-none cursor-pointer"
+                                                >
+                                                    <option value="📢 Informativo">📢 Informativo</option>
+                                                    <option value="🚧 Mantenimiento">🚧 Mantenimiento</option>
+                                                    <option value="⚠️ Urgente">⚠️ Urgente</option>
+                                                    <option value="🎉 Evento">🎉 Evento</option>
+                                                    <option value="📌 Aviso importante">📌 Aviso importante</option>
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 rotate-90 pointer-events-none" size={14} />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] pl-1">Prioridad</label>
+                                            <div className="relative">
+                                                <select 
+                                                    value={newPriority}
+                                                    onChange={(e) => setNewPriority(e.target.value as any)}
+                                                    className={`w-full bg-zinc-950 border rounded-xl px-4 py-3 focus:outline-none transition-all font-medium appearance-none cursor-pointer ${
+                                                        newPriority === 'Urgente' ? 'border-rose-500/40 text-rose-400 focus:ring-rose-500/10' :
+                                                        newPriority === 'Alta' ? 'border-amber-500/40 text-amber-400 focus:ring-amber-500/10' :
+                                                        'border-zinc-800 text-white focus:ring-indigo-500/20 focus:border-indigo-500/50'
+                                                    }`}
+                                                >
+                                                    <option value="Normal">Normal</option>
+                                                    <option value="Alta">Alta</option>
+                                                    <option value="Urgente">Urgente</option>
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 rotate-90 pointer-events-none" size={14} />
+                                            </div>
+                                        </div>
                                     </div>
+
+                                    {/* Agenda SaaS Style */}
+                                    <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800/50 space-y-5">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                <Calendar size={14} className="text-indigo-400" /> Fecha del Evento
+                                            </label>
+                                            <div className="relative group">
+                                                <input 
+                                                    type="date"
+                                                    value={newEventDate}
+                                                    onChange={(e) => setNewEventDate(e.target.value)}
+                                                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-bold text-sm [color-scheme:dark] cursor-pointer"
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                    <Clock size={14} className="text-emerald-400" /> Inicio
+                                                </label>
+                                                <input 
+                                                    type="time"
+                                                    value={newStartTime}
+                                                    onChange={(e) => setNewStartTime(e.target.value)}
+                                                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-bold text-sm [color-scheme:dark] cursor-pointer"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                    <Clock size={14} className="text-amber-400" /> Fin (Opc)
+                                                </label>
+                                                <input 
+                                                    type="time"
+                                                    value={newEndTime}
+                                                    onChange={(e) => setNewEndTime(e.target.value)}
+                                                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-bold text-sm [color-scheme:dark] cursor-pointer"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest pl-1">Descripción</label>
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] pl-1">📍 Ubicación del Evento</label>
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 h-8 w-8 bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800">
+                                                <MapPin className="text-rose-400 h-4 w-4" />
+                                            </div>
+                                            <input 
+                                                value={newLocation}
+                                                onChange={(e) => setNewLocation(e.target.value)}
+                                                placeholder="Ej. Roof Garden / Salón Social"
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-14 pr-4 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] pl-1">Descripción Detallada</label>
                                         <textarea 
                                             value={newDescription}
                                             onChange={(e) => setNewDescription(e.target.value)}
-                                            rows={3}
+                                            rows={2}
                                             placeholder="Escribe aquí los detalles del anuncio para los residentes..."
-                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium resize-none"
+                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium resize-none shadow-inner"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -829,17 +1259,92 @@ export function AvisosClient({
                                         Cancelar
                                     </Button>
                                     <motion.button 
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
+                                        whileHover={!isPublishing ? { scale: 1.02 } : {}}
+                                        whileTap={!isPublishing ? { scale: 0.98 } : {}}
                                         onClick={handlePublish}
-                                        className="flex-1 h-12 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl shadow-xl shadow-orange-900/20 transition-all flex items-center justify-center gap-2"
+                                        disabled={isPublishing}
+                                        className={`flex-1 h-12 text-white font-bold rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 ${
+                                            isPublishing ? 'bg-zinc-700 cursor-not-allowed opacity-70' : 'bg-orange-600 hover:bg-orange-500 shadow-orange-900/20'
+                                        }`}
                                     >
-                                        <Bell size={18} /> Publicar Anuncio
+                                        {isPublishing ? (
+                                            <>
+                                                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Publicando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Bell size={18} /> Publicar Anuncio
+                                            </>
+                                        )}
                                     </motion.button>
                                 </div>
                             </div>
                         </motion.div>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Delete Confirmation Modal */}
+            <AnimatePresence>
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="relative w-full max-w-md bg-zinc-900 border border-rose-500/30 rounded-[2.5rem] p-10 shadow-2xl shadow-rose-500/10 overflow-hidden"
+                        >
+                            {/* Decorative Danger Background */}
+                            <div className="absolute -top-24 -right-24 w-48 h-48 bg-rose-500/10 blur-[100px] rounded-full" />
+                            
+                            <div className="relative space-y-8 text-center">
+                                <div className="mx-auto w-24 h-24 bg-rose-500/10 text-rose-500 rounded-3xl flex items-center justify-center ring-1 ring-rose-500/20 shadow-inner group overflow-hidden relative">
+                                    <Trash2 size={44} className="relative z-10" />
+                                    <motion.div 
+                                        animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                        className="absolute inset-0 bg-rose-500/20 blur-xl"
+                                    />
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <h2 className="text-3xl font-black text-white tracking-tight leading-none">¿Eliminar aviso?</h2>
+                                    <p className="text-zinc-400 text-sm font-medium leading-relaxed px-2">
+                                        Esta acción ocultará el anuncio "<span className="text-white lg:text-indigo-400 font-bold">{announcementToDelete?.title}</span>" para todos los residentes. No se puede deshacer.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                                    <button
+                                        disabled={isDeleting}
+                                        onClick={() => setShowDeleteConfirm(false)}
+                                        className="flex-1 h-14 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold transition-all text-sm uppercase tracking-widest disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        disabled={isDeleting}
+                                        onClick={confirmDelete}
+                                        className="flex-1 h-14 px-8 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black transition-all text-sm uppercase tracking-widest shadow-lg shadow-rose-600/40 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isDeleting ? (
+                                            <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            'Sí, Eliminar'
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
         </div>

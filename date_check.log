@@ -1,0 +1,14 @@
+--- Date Debug ---
+Current local time (system): Sun Apr 05 2026 21:39:01 GMT-0600 (hora estándar central)
+Current ISO time: 2026-04-06T03:39:01.926Z
+
+Title: Alberca en Mantenimiento Prueba
+Raw created_at: 2026-04-06T03:32:31.38
+JS parsed: Mon Apr 06 2026 03:32:31 GMT-0600 (hora estándar central)
+JS parsed ISO: 2026-04-06T09:32:31.380Z
+------------------
+Title: Prueba de anuncio
+Raw created_at: 2026-04-05T19:57:13.917
+JS parsed: Sun Apr 05 2026 19:57:13 GMT-0600 (hora estándar central)
+JS parsed ISO: 2026-04-06T01:57:13.917Z
+------------------

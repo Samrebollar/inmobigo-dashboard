@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
     DollarSign, 
@@ -16,13 +16,19 @@ import {
     Zap,
     TrendingUp,
     ShieldCheck,
-    Home
+    Home,
+    MapPin,
+    File
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
+import { getAnnouncementsAction, acknowledgeAnnouncementAction } from '@/app/actions/announcement-actions'
 import { toast } from 'sonner'
+import { format, formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
+import Link from 'next/link'
 
 interface ResidentDashboardClientProps {
     resident: any
@@ -31,6 +37,116 @@ interface ResidentDashboardClientProps {
 
 export default function ResidentDashboardClient({ resident, userName }: ResidentDashboardClientProps) {
     const supabase = createClient()
+    const [announcements, setAnnouncements] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+    const [acknowledgingIds, setAcknowledgingIds] = useState<Set<string>>(new Set())
+    const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set())
+
+    const toggleExpand = (id: string) => {
+        setExpandedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    useEffect(() => {
+        let isMounted = true;
+        
+        async function fetchAnnouncements() {
+            const orgId = resident?.organization_id || resident?.condominiums?.organization_id;
+            console.log("🔍 [Resident Dashboard] BUSCANDO AVISOS PARA ORG:", orgId);
+            
+            if (!orgId) {
+                console.warn("⚠️ [Resident Dashboard] No se encontró organization_id para el residente");
+                setLoading(false);
+                return;
+            }
+
+            try {
+                setLoading(true);
+                const result = await getAnnouncementsAction(orgId);
+
+                if (isMounted) {
+                    if (result.success) {
+                        setAnnouncements(result.data || []);
+                    } else {
+                        console.error('❌ [Resident Dashboard] Error fetching announcements:', result.error);
+                    }
+                }
+            } catch (err) {
+                console.error('❌ [Resident Dashboard] Exception fetching announcements:', err);
+            } finally {
+                if (isMounted) setLoading(false);
+            }
+        }
+
+        fetchAnnouncements();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [resident?.organization_id, resident?.condominiums?.organization_id, supabase]);
+
+    const handleAcknowledge = async (ann: any) => {
+        if (confirmedIds.has(ann.id) || acknowledgingIds.has(ann.id)) return;
+
+        // PRIORIDAD: resident.user_id es el UUID de auth.users que espera la FK
+        const userId = resident?.user_id || resident?.id;
+        
+        if (!userId) {
+            toast.error("No se pudo identificar tu usuario. Por favor, reintenta.");
+            return;
+        }
+
+        try {
+            setAcknowledgingIds(prev => new Set(prev).add(ann.id));
+            
+            // 🔍 EXTRACCIÓN EXHAUSTIVA DE UNIDAD
+            // Probamos todas las rutas posibles que Supabase/Next.js podrían usar
+            const unitsObj = resident?.units || (resident as any)?.unit;
+            const unitValue = resident?.unit_number || 
+                              resident?.unit_name || 
+                              (Array.isArray(unitsObj) ? unitsObj[0]?.unit_number : unitsObj?.unit_number) || 
+                              (Array.isArray(unitsObj) ? unitsObj[0]?.name : unitsObj?.name) ||
+                              'N/A';
+
+            // 🔍 EXTRACCIÓN EXHAUSTIVA DE PROPIEDAD
+            const condosObj = resident?.condominiums || (resident as any)?.condominium;
+            const propertyValue = resident?.property_name || 
+                                  (Array.isArray(condosObj) ? condosObj[0]?.name : condosObj?.name) || 
+                                  'N/A';
+
+            const result = await acknowledgeAnnouncementAction({
+                announcement_id: ann.id,
+                user_id: userId,
+                announcement_title: ann.title,
+                resident_name: userName || 'Residente',
+                unit_name: unitValue,
+                property_name: propertyValue
+            });
+
+            if (result.success) {
+                setConfirmedIds(prev => new Set(prev).add(ann.id));
+                toast.success("¡Gracias! Tu lectura ha sido confirmada.", {
+                    style: { background: '#064e3b', color: '#fff', border: '1px solid #059669' }
+                });
+            } else {
+                toast.error("Error al confirmar: " + result.error);
+            }
+        } catch (err) {
+            console.error("Error acknowledging announcement:", err);
+            toast.error("Error inesperado al confirmar.");
+        } finally {
+            setAcknowledgingIds(prev => {
+                const next = new Set(prev);
+                next.delete(ann.id);
+                return next;
+            });
+        }
+    };
 
     // El monitor de paquetería en tiempo real se ha movido a ServiciosClient
     // para centralizar la lógica en el módulo correspondiente.
@@ -281,66 +397,218 @@ export default function ResidentDashboardClient({ resident, userName }: Resident
 
                     {/* Right Column */}
                     <div className="space-y-6">
-                        {/* Alerts Card */}
-                        <div className="bg-zinc-900/40 backdrop-blur-md border border-white/5 p-5 rounded-2xl space-y-5 ring-1 ring-white/5 shadow-xl relative overflow-hidden">
+                        {/* Alerts Card - Now Main Focus */}
+                        <div className="bg-zinc-900/40 backdrop-blur-md border border-white/5 p-6 rounded-3xl space-y-6 ring-1 ring-white/5 shadow-2xl relative overflow-hidden h-full flex flex-col">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl rounded-full" />
+                            
                             <div className="flex items-center justify-between px-1">
-                                <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                                    <Bell size={16} className="text-amber-500" />
-                                    Avisos de la Torre
+                                <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
+                                    <div className="p-2 bg-amber-500/10 rounded-lg">
+                                        <Bell size={20} className="text-amber-500" />
+                                    </div>
+                                    Avisos
                                 </h2>
-                                <Badge variant="secondary" className="bg-zinc-800 text-zinc-500 text-[9px] border-none font-bold">2 NUEVOS</Badge>
+                                {announcements.length > 0 && (
+                                    <Badge variant="secondary" className="bg-indigo-500/20 text-indigo-400 text-[10px] border-none font-bold py-1 px-2 uppercase tracking-tight">Reciente</Badge>
+                                )}
                             </div>
 
-                            <div className="space-y-4 relative">
-                                {/* Timeline Line */}
-                                <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-zinc-800 via-zinc-800 to-transparent" />
-
-                                {[
-                                    { title: 'Limpieza Cisternas', time: 'Lunes, 10:00 AM', color: 'rose', icon: Wrench, desc: 'Corte de agua parcial' },
-                                    { title: 'Reunión Ordinaria', time: 'Viernes, 07:00 PM', color: 'indigo', icon: MessageSquare, desc: 'Salón de eventos' }
-                                ].map((ann, i) => (
-                                    <motion.div 
-                                        key={i} 
-                                        whileHover={{ x: 4 }}
-                                        className="flex gap-4 group cursor-pointer relative z-10"
-                                    >
-                                        <div className={cn(
-                                            "h-6 w-6 rounded-full flex items-center justify-center ring-4 ring-zinc-950 transition-all group-hover:scale-110 shadow-sm",
-                                            ann.color === 'rose' ? 'bg-rose-500/20 text-rose-400' : 'bg-indigo-500/20 text-indigo-400'
-                                        )}>
-                                            <ann.icon size={12} />
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <h4 className="font-bold text-white text-[13px] leading-tight group-hover:text-indigo-400 transition-colors uppercase tracking-tight">{ann.title}</h4>
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{ann.time}</p>
-                                                <span className="h-1 w-1 rounded-full bg-zinc-800" />
-                                                <p className="text-[10px] font-medium text-zinc-600 italic">{ann.desc}</p>
+                            <div className="flex-grow space-y-5">
+                                {loading ? (
+                                    <div className="space-y-4">
+                                        {[1, 2].map((i) => (
+                                            <div key={i} className="animate-pulse space-y-3">
+                                                <div className="h-4 bg-white/5 rounded w-1/4" />
+                                                <div className="h-6 bg-white/5 rounded w-3/4" />
+                                                <div className="h-4 bg-white/5 rounded w-full" />
                                             </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
+                                        ))}
+                                    </div>
+                                ) : announcements.length > 0 ? (
+                                    announcements.slice(0, 2).map((ann, idx) => {
+                                        const lowerType = (ann.type || '').toLowerCase();
+                                        let cat = ann.type || '📢 Informativo';
+                                        let catClass = "bg-indigo-500/20 text-indigo-400";
+                                        
+                                        // Matching admin's category logic
+                                        if (lowerType.includes('mantenimiento')) {
+                                            cat = '🚧 ' + (ann.type || 'Mantenimiento');
+                                            catClass = "bg-amber-500/20 text-amber-500";
+                                        } else if (lowerType.includes('urgente')) {
+                                            cat = '⚠️ ' + (ann.type || 'Urgente');
+                                            catClass = "bg-rose-500/20 text-rose-400";
+                                        } else if (lowerType.includes('evento')) {
+                                            cat = '🎉 ' + (ann.type || 'Evento');
+                                            catClass = "bg-emerald-500/20 text-emerald-400";
+                                        } else if (!cat.includes('📢') && !cat.includes('📌')) {
+                                            cat = '📌 ' + cat;
+                                        }
+
+                                        const dateStr = ann.created_at ? formatDistanceToNow(new Date(ann.created_at.toString().includes('Z') || ann.created_at.toString().includes('+') ? ann.created_at : `${ann.created_at}Z`), { addSuffix: true, locale: es }) : 'Recién publicado';
+
+                                        return (
+                                            <motion.div 
+                                                key={ann.id}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: idx * 0.05 }}
+                                                className={cn(
+                                                    "space-y-4",
+                                                    idx < Math.min(announcements.length, 2) - 1 && "pb-6 border-b border-white/5"
+                                                )}
+                                            >
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex gap-2">
+                                                            <Badge className={cn("px-2.5 py-1 rounded-lg border-0 shadow-sm uppercase text-[9px] font-bold tracking-wider", catClass)}>
+                                                                {cat}
+                                                            </Badge>
+                                                            {ann.priority === 'high' && (
+                                                                <Badge className="bg-rose-500/10 text-rose-400 border-0 text-[10px] font-bold uppercase tracking-wider">
+                                                                    Alta Prioridad
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <span suppressHydrationWarning className="text-[10px] text-zinc-500 font-bold uppercase">
+                                                            {dateStr}
+                                                        </span>
+                                                    </div>
+                                                    <h3 className="text-xl font-extrabold text-white leading-tight">
+                                                        {ann.title}
+                                                    </h3>
+                                                </div>
+                                                
+                                                <p className={cn(
+                                                    "text-zinc-400 text-sm leading-relaxed font-medium transition-all duration-500",
+                                                    !expandedIds.has(ann.id) && "line-clamp-3"
+                                                )}>
+                                                    {ann.message || ann.description}
+                                                </p>
+
+                                                {(ann.image_url || (ann as any).imageUrl) && (() => {
+                                                    const url = ann.image_url || (ann as any).imageUrl;
+                                                    const isPdf = url && url.toLowerCase().includes('.pdf');
+
+                                                    if (isPdf) {
+                                                        return (
+                                                            <a 
+                                                                href={url} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="block p-4 bg-zinc-900/50 border border-white/10 rounded-2xl hover:border-indigo-500/50 transition-all group/file relative overflow-hidden"
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="h-10 w-10 bg-rose-500/10 text-rose-500 rounded-xl flex items-center justify-center shrink-0">
+                                                                        <File size={20} />
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-xs font-bold text-white truncate">Documento (PDF)</p>
+                                                                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Toca para abrir</p>
+                                                                    </div>
+                                                                </div>
+                                                            </a>
+                                                        )
+                                                    }
+
+                                                    return (
+                                                        <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/40 z-10">
+                                                            <img 
+                                                                src={url} 
+                                                                alt={ann.title}
+                                                                className="w-full h-full object-cover hover:scale-110 transition-transform duration-700 pointer-events-none"
+                                                                onError={(e) => {
+                                                                    (e.target as any).style.display = 'none';
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )
+                                                })()}
+
+                                                {(ann.location || ann.event_date) && (
+                                                    <div className="p-3 bg-zinc-800/30 rounded-2xl border border-white/5 space-y-2">
+                                                       {ann.event_date && (
+                                                           <div className="flex items-center gap-2 text-[10px] text-zinc-300 font-bold">
+                                                               <Calendar size={12} className="text-indigo-400" />
+                                                               {(() => {
+                                                                   try {
+                                                                       return format(new Date(ann.event_date), 'd MMM, yyyy', { locale: es });
+                                                                   } catch {
+                                                                       return ann.event_date;
+                                                                   }
+                                                               })()} {ann.start_time && `• ${ann.start_time}`}
+                                                           </div>
+                                                       )}
+                                                       {ann.location && (
+                                                           <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                                                               <MapPin size={12} className="text-amber-400" />
+                                                               {ann.location}
+                                                           </div>
+                                                       )}
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                                                    <motion.button 
+                                                        whileHover={{ x: 5 }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        onClick={() => toggleExpand(ann.id)}
+                                                        className={cn(
+                                                            "flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] transition-all",
+                                                            expandedIds.has(ann.id) ? "text-indigo-400" : "text-zinc-500 hover:text-white"
+                                                        )}
+                                                    >
+                                                        {expandedIds.has(ann.id) ? 'Ver menos' : 'Leer más'} 
+                                                        <ArrowRight size={14} className={cn("transition-transform duration-300", expandedIds.has(ann.id) && "rotate-90")} />
+                                                    </motion.button>
+                                                    
+                                                    <motion.button 
+                                                        whileHover={!(confirmedIds.has(ann.id) || acknowledgingIds.has(ann.id)) ? { scale: 1.05, backgroundColor: '#2563eb' } : {}}
+                                                        whileTap={!(confirmedIds.has(ann.id) || acknowledgingIds.has(ann.id)) ? { scale: 0.95 } : {}}
+                                                        onClick={() => handleAcknowledge(ann)}
+                                                        disabled={confirmedIds.has(ann.id) || acknowledgingIds.has(ann.id)}
+                                                        className={cn(
+                                                            "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center gap-2",
+                                                            confirmedIds.has(ann.id) 
+                                                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default" 
+                                                                : "bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30",
+                                                            acknowledgingIds.has(ann.id) && "opacity-50 cursor-wait"
+                                                        )}
+                                                    >
+                                                        {acknowledgingIds.has(ann.id) ? (
+                                                            <motion.div 
+                                                                animate={{ rotate: 360 }} 
+                                                                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                                                                className="w-3 h-3 border-2 border-current border-t-transparent rounded-full"
+                                                            />
+                                                        ) : confirmedIds.has(ann.id) ? (
+                                                            <CheckCircle2 size={12} />
+                                                        ) : null}
+                                                        {confirmedIds.has(ann.id) ? 'Confirmado' : acknowledgingIds.has(ann.id) ? 'Enviando...' : 'Enterado'}
+                                                    </motion.button>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="h-40 flex flex-col items-center justify-center text-center space-y-3 opacity-40">
+                                        <Bell size={40} className="text-zinc-600" />
+                                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest italic">Sin avisos activos</p>
+                                    </div>
+                                )}
                             </div>
 
-                            <Button variant="ghost" className="w-full text-zinc-500 hover:text-white text-[11px] font-bold h-9 rounded-xl hover:bg-white/5 transition-all group">
-                                Ver todos los comunicados <ArrowRight size={12} className="ml-2 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
-                            </Button>
+                                <Link href="/dashboard/avisos" className="w-full">
+                                    <Button 
+                                        variant="ghost" 
+                                        className="w-full text-zinc-500 hover:text-white hover:bg-white/5 transition-all py-6 group rounded-2xl border border-dashed border-white/5 mt-4"
+                                    >
+                                        <span className="flex items-center gap-2 text-xs font-bold">
+                                            Ver historial completo
+                                            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                                        </span>
+                                    </Button>
+                                </Link>
                         </div>
-
-                        {/* Help / Contact Card */}
-                        <motion.div 
-                            whileHover={{ y: -2 }}
-                            className="bg-indigo-600/90 p-6 rounded-2xl space-y-4 shadow-xl relative overflow-hidden"
-                        >
-                            <div className="relative z-10 space-y-2">
-                                <h2 className="text-lg font-bold text-white tracking-tight">¿Necesitas ayuda?</h2>
-                                <p className="text-indigo-100 text-[13px] font-medium leading-relaxed opacity-90">Estamos aquí para apoyarte con cualquier duda sobre tu unidad.</p>
-                            </div>
-                            <Button className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-bold h-11 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all text-xs">
-                                <MessageSquare size={16} />
-                                CONTACTAR ADMINISTRACIÓN
-                            </Button>
-                        </motion.div>
                     </div>
                 </div>
             </div>

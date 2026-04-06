@@ -1,0 +1,48 @@
+--- Full Debug Log ---
+
+Organizations: [
+  {
+    "id": "cc123967-5f96-4d4e-acfa-0b4eb889b570",
+    "name": "Samana"
+  }
+]
+
+Announcements (1):
+ - Prueba de anuncio (Org: cc123967-5f96-4d4e-acfa-0b4eb889b570, Active: true, Expires: null)
+
+Condominiums: [
+  {
+    "id": "83ebf549-c241-4000-bbe8-3d53f818f008",
+    "name": "Zacil",
+    "organization_id": "cc123967-5f96-4d4e-acfa-0b4eb889b570"
+  },
+  {
+    "id": "810a13c4-8474-44cf-8d8e-2366875ceacc",
+    "name": "Las Palmas",
+    "organization_id": "cc123967-5f96-4d4e-acfa-0b4eb889b570"
+  }
+]
+
+Residents Mapping: [
+  {
+    "user_id": null,
+    "condominium_id": "810a13c4-8474-44cf-8d8e-2366875ceacc"
+  },
+  {
+    "user_id": null,
+    "condominium_id": "810a13c4-8474-44cf-8d8e-2366875ceacc"
+  },
+  {
+    "user_id": null,
+    "condominium_id": "83ebf549-c241-4000-bbe8-3d53f818f008"
+  },
+  {
+    "user_id": null,
+    "condominium_id": "83ebf549-c241-4000-bbe8-3d53f818f008"
+  },
+  {
+    "user_id": "fe90c23c-98e6-42d9-ac86-e7b13b195b0c",
+    "condominium_id": "810a13c4-8474-44cf-8d8e-2366875ceacc"
+  }
+]
+

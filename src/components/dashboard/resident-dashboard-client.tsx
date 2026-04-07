@@ -67,7 +67,14 @@ export default function ResidentDashboardClient({ resident, userName }: Resident
 
             try {
                 setLoading(true);
-                const result = await getAnnouncementsAction(orgId);
+                
+                // Extracción robusta de la propiedad para filtrar visibilidad
+                const condosObj = resident?.condominiums || (resident as any)?.condominium;
+                const propertyName = resident?.property_name || 
+                                     (Array.isArray(condosObj) ? condosObj[0]?.name : condosObj?.name) || 
+                                     'N/A';
+
+                const result = await getAnnouncementsAction(orgId, propertyName);
 
                 if (isMounted) {
                     if (result.success) {

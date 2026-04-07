@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { residentsService } from '@/services/residents-service'
+import { checkResidentPreApprovalAction, registerResidentAction } from '@/app/actions/resident-actions'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Mail, Lock, Loader2, ArrowRight, Building2, Home, User, Phone, Briefcase } from 'lucide-react'
@@ -38,63 +38,102 @@ function RegisterFormContent() {
         setError('')
 
         const supabase = createClient()
-        setError('')
 
         try {
+            const cleanEmail = formData.email.trim().toLowerCase();
+            
             // 1. Pre-validation for Residents (Closed Access)
             if (userType === 'resident') {
-                const { exists, registered } = await residentsService.checkPreApproval(formData.email)
+                console.log('🔍 Iniciando verificación para residente:', cleanEmail);
+                const { exists, registered } = await checkResidentPreApprovalAction(cleanEmail);
+                console.log('📊 Resultado verificación:', { exists, registered });
                 
                 if (!exists) {
-                    throw new Error('No estás registrado como residente. Por favor contacta a la administración.')
+                    throw new Error(`El correo ${cleanEmail} no está en la lista de residentes pre-aprobados. Por favor, contacta a tu administración.`);
                 }
                 
                 if (registered) {
-                    throw new Error('Este correo ya está registrado. Por favor inicia sesión.')
+                    throw new Error('Este correo ya ha completado su registro. Por favor, usa la opción de Iniciar Sesión.');
                 }
             }
 
-            // 2. Sign Up with Supabase Auth
-            const { data: authData, error: authError } = await supabase.auth.signUp({
-                email: formData.email,
-                password: formData.password,
-                options: {
-                    data: {
-                        first_name: formData.firstName,
-                        last_name: formData.lastName,
-                        phone: formData.phone,
-                        role: userType
+            // 2. REGISTRATION FLOW
+            if (userType === 'resident') {
+                // Use the custom server action for residents to handle database conflicts
+                const regResult = await registerResidentAction(formData);
+                
+                if (!regResult.success) {
+                    const errorObj = regResult.error as any;
+                    const error = new Error(errorObj.message || 'Error al registrar.');
+                    (error as any).code = errorObj.code;
+                    (error as any).status = errorObj.status;
+                    (error as any).details = errorObj.details;
+                    (error as any).hint = errorObj.hint;
+                    throw error;
+                }
+
+                // If registration was successful, we need to sign in manually 
+                // because admin.createUser doesn't establish a client session.
+                const { error: signInError } = await supabase.auth.signInWithPassword({
+                    email: cleanEmail,
+                    password: formData.password
+                });
+
+                if (signInError) {
+                    console.warn('Registro exitoso pero falló el inicio de sesión automático:', signInError);
+                    router.push('/login?registered=true');
+                    return;
+                }
+            } else {
+                // Standard flow for Admins
+                const { data: authData, error: authError } = await supabase.auth.signUp({
+                    email: cleanEmail,
+                    password: formData.password,
+                    options: {
+                        data: {
+                            first_name: formData.firstName,
+                            last_name: formData.lastName,
+                            full_name: `${formData.firstName} ${formData.lastName}`,
+                            phone: formData.phone,
+                            role: userType,
+                            user_type: userType
+                        }
                     }
-                }
-            })
+                })
 
-            console.log('Auth Data:', authData)
-
-            if (authError) throw authError
-            if (!authData.user) throw new Error('No se pudo crear el usuario.')
-
-            // Check if we have a session (critical for RLS)
-            if (!authData.session && userType === 'admin') {
-                console.warn('No session returned after signup. Email confirmation might be enabled.')
-                // Ideally we should show a message saying "Please confirm your email"
-                // But if the user wants to proceed, we might fail at org creation if we are not authenticated.
+                if (authError) throw authError;
+                if (!authData.user) throw new Error('No se pudo crear el usuario.');
             }
-
-            // 2. We skip Organization creation for now, as requested.
-            // The user is created in Auth with role metadata.
 
             // 3. Success -> Redirect
             router.push('/dashboard')
 
         } catch (err: any) {
-            console.error('Registration Error (Detailed):', {
-                message: err.message,
-                code: err.code,
-                status: err.status,
-                details: err.details,
-                hint: err.hint
-            })
-            setError(err.message || 'Error al registrar usuario.')
+            // 🔍 ESTRATEGIA DE LOGGING AVANZADA (Solicitada por el Usuario)
+            console.error("RAW ERROR:", err);
+            
+            // Serialización manual para evitar el objeto vacío {}
+            const serializableError = {
+                message: err.message || "Error desconocido",
+                code: err.code || err.status || "UNKNOWN",
+                details: err.details || null,
+                hint: err.hint || null,
+                stack: err.stack
+            };
+            
+            console.error("ERROR STRING:", JSON.stringify(serializableError, null, 2));
+            console.error("ERROR MESSAGE:", err.message);
+            console.error("ERROR CODE:", err.code || err.status);
+
+            // Extraer mensaje amigable para la UI
+            let errorMessage = err.message || 'Error al registrar usuario.';
+            
+            // Si el error viene de nuestra Action (serializado)
+            if (err.info?.error?.message) {
+                errorMessage = err.info.error.message;
+            }
+
+            setError(errorMessage);
         } finally {
             setLoading(false)
         }

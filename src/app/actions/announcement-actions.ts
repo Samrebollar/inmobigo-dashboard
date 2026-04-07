@@ -55,10 +55,11 @@ export async function createAnnouncement(payload: AnnouncementPayload) {
 }
 
 /**
- * Obtiene los anuncios activos para una organización (Bypass RLS)
+ * Obtiene los anuncios activos para una organización, filtrando por visibilidad (Bypass RLS)
  * @param organizationId El ID de la organización
+ * @param propertyName El nombre de la propiedad del residente (opcional, para filtrar visibilidad específica)
  */
-export async function getAnnouncementsAction(organizationId: string) {
+export async function getAnnouncementsAction(organizationId: string, propertyName?: string) {
     if (!organizationId) {
         console.warn('⚠️ [getAnnouncementsAction] No organizationId provided');
         return { success: false, error: 'ID de organización no proporcionado' };
@@ -68,14 +69,21 @@ export async function getAnnouncementsAction(organizationId: string) {
     const now = new Date().toISOString();
 
     try {
-        console.log(`🔍 [getAnnouncementsAction] Buscando anuncios para ORG: ${organizationId}`);
+        console.log(`🔍 [getAnnouncementsAction] Buscando anuncios para ORG: ${organizationId}${propertyName ? ` y Propiedad: ${propertyName}` : ''}`);
 
-        const { data, error } = await adminClient
+        let query = adminClient
             .from('announcements')
             .select('*')
             .eq('organization_id', organizationId)
             .eq('is_active', true)
-            .or(`expires_at.is.null,expires_at.gt.${now}`)
+            .or(`expires_at.is.null,expires_at.gt.${now}`);
+
+        // Si se proporciona un nombre de propiedad, filtramos por 'Todos' o por esa propiedad específica
+        if (propertyName && propertyName !== 'N/A') {
+            query = query.or(`visibility.eq.Todos,visibility.eq."${propertyName}"`);
+        }
+
+        const { data, error } = await query
             .order('created_at', { ascending: false })
             .limit(10);
 

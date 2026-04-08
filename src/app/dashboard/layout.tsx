@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -158,13 +158,24 @@ export default async function DashboardLayout({
                 )}
 
                 {showFinance && (
-                    <Link
-                        href={isResident ? "/dashboard/payments" : "/dashboard/finance"}
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                    >
-                        <CreditCard size={18} />
-                        <span>{isResident ? 'Pagos' : 'Finanzas'}</span>
-                    </Link>
+                    <>
+                        <Link
+                            href={isResident ? "/dashboard/payments" : "/dashboard/finance"}
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <CreditCard size={18} />
+                            <span>{isResident ? 'Pagos' : 'Finanzas'}</span>
+                        </Link>
+                        {!isResident && (
+                            <Link
+                                href="/dashboard/contabilidad-inteligente"
+                                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                            >
+                                <Brain size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                                <span>Contabilidad Inteligente</span>
+                            </Link>
+                        )}
+                    </>
                 )}
 
                 {showMaintenance && (
@@ -221,6 +232,13 @@ export default async function DashboardLayout({
                         >
                             <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
                             <span>Avisos</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/premium-services"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <Sparkles size={18} className="text-indigo-400" />
+                            <span>Servicios Premium</span>
                         </Link>
                     </>
                 )}

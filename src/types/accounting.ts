@@ -1,5 +1,7 @@
 export type FiscalRegime = 'condominio_no_lucrativo' | 'arrendamiento' | 'actividad_empresarial' | null;
 
+export type PaymentStatus = 'pendiente' | 'pagado' | 'vencido';
+
 export interface FinancialRecord {
     id: string;
     organization_id: string;
@@ -10,7 +12,15 @@ export interface FinancialRecord {
     fiscal_category?: string;
     description: string;
     date: string;
+    status: PaymentStatus;
+    unit_id?: string;
+    es_recurrente?: boolean;
+    frecuencia?: 'mensual' | 'semanal';
+    dia_corte?: number;
+    fecha_inicio?: string;
+    fecha_fin?: string;
     created_at: string;
+    receipt_url?: string;
 }
 
 export type CategoryMap = Record<string, { ingresos: string[], egresos: string[] }>;

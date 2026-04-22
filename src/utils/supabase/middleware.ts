@@ -41,7 +41,11 @@ export async function updateSession(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // REQUISITO: Permitir acceso público a rutas tipo /abc123 o /uuid-1234... en cualquier dominio (fallback)
-    const isVisitRoute = pathname !== '/' && /^\/[a-zA-Z0-9-]+$/.test(pathname)
+    // Excluimos explícitamente rutas conocidas de la app para evitar conflictos
+    const reservedRoutes = ['dashboard', 'login', 'register', 'auth', 'onboarding', 'owner', 'pase', 'api']
+    const isVisitRoute = pathname !== '/' && 
+                        /^\/[a-zA-Z0-9-]+$/.test(pathname) && 
+                        !reservedRoutes.includes(pathname.split('/')[1])
 
     // Rutas estáticas o auth que siempre deben ser públicas
     const isPublicStaticOrAuth = 
@@ -69,33 +73,57 @@ export async function updateSession(request: NextRequest) {
 
     // RBAC Check
     if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
-        // 1. Fetch Admin Role (Strict)
+        // 1. Fetch Role from multiple layers (Strict to Weak)
+        
+        // A. Organization Users (Staff/Admin)
         const { data: orgUser } = await supabase
             .from('organization_users')
-            .select('role')
+            .select('role_new')
             .eq('user_id', user.id)
-            .single()
+            .maybeSingle()
 
-        // 2. Fetch Resident Role (Strict)
+        // B. Profiles (Fallback for Global Roles)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role_new, user_type')
+            .eq('id', user.id)
+            .maybeSingle()
+
+        // C. Residents (Specific for residents)
         const { data: resident } = await supabase
             .from('residents')
             .select('id')
             .eq('user_id', user.id)
-            .single()
+            .maybeSingle()
 
         let role = 'viewer'
-        if (orgUser?.role) {
-            role = orgUser.role
-        } else if (resident) {
+        
+        if (orgUser?.role_new) {
+            role = orgUser.role_new
+        } else if (profile?.role_new && profile.role_new !== 'resident') {
+            role = profile.role_new
+        } else if (user.user_metadata?.role === 'admin') {
+            role = 'admin'
+        } else if (resident || profile?.role_new === 'resident' || user.user_metadata?.role === 'resident') {
             role = 'resident'
         }
 
+        const isAdmin = ['owner', 'admin', 'admin_condominio', 'admin_propiedad', 'admin_propiedades'].includes(role)
+        const userType = profile?.user_type || user.user_metadata?.user_type
+
+        // --- NEW ONBOARDING REDIRECTION ---
+        // If logged in as admin/staff but no user_type or organization, force onboarding
+        if (isAdmin && !userType && !request.nextUrl.pathname.startsWith('/onboarding')) {
+            return NextResponse.redirect(new URL('/onboarding', request.url))
+        }
+
         const path = request.nextUrl.pathname
-        const isResident = role === 'resident'
-        // viewer is treated as restrictive too
+        const isResident = role === 'resident' || role === 'tenant'
+        const isStaff = isAdmin || ['manager', 'accountant', 'staff', 'security'].includes(role)
 
         // RESTRICTED ROUTES FOR RESIDENTS & VIEWERS
-        if (isResident || role === 'viewer') {
+        // Note: New admin roles (admin_condominio, admin_propiedad) pass this check
+        if (!isStaff && (isResident || role === 'viewer')) {
             if (path.startsWith('/dashboard/condominios') ||
                 path.startsWith('/dashboard/residentes') ||
                 path.startsWith('/dashboard/configuracion') ||
@@ -106,11 +134,11 @@ export async function updateSession(request: NextRequest) {
         }
 
         // Settings (Org): Owner, Admin Only
-        if (path.startsWith('/dashboard/configuracion') && !['owner', 'admin'].includes(role)) {
+        if (path.startsWith('/dashboard/configuracion') && !isAdmin) {
             return NextResponse.redirect(new URL('/dashboard', request.url))
         }
 
-        // Maintenance: All except Accountant? (Accountant usually only finance)
+        // Maintenance: All except Accountant?
         if (path.startsWith('/dashboard/maintenance') && role === 'accountant') {
             return NextResponse.redirect(new URL('/dashboard', request.url))
         }

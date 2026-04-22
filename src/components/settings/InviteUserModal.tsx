@@ -14,11 +14,12 @@ interface InviteUserModalProps {
 }
 
 const ROLES: { value: Role; label: string; description: string }[] = [
-    { value: 'admin', label: 'Administrador', description: 'Acceso total a todos los módulos y gestión de usuarios.' },
-    { value: 'manager', label: 'Gerente', description: 'Gestión operativa (residentes, mantenimiento) y vista financiera.' },
-    { value: 'accountant', label: 'Contador', description: 'Gestión exclusiva de finanzas (facturas, pagos).' },
-    { value: 'staff', label: 'Staff / Conserje', description: 'Gestión operativa básica. Sin acceso a finanzas.' },
-    { value: 'viewer', label: 'Solo Lectura', description: 'Puede ver datos, pero no editar nada.' },
+    { value: 'admin_propiedad', label: 'Admin. Propiedad / Dueño', description: 'Acceso total a la organización, finanzas y gestión de todo el equipo.' },
+    { value: 'admin_condominio', label: 'Admin. de Condominio', description: 'Gestión total de un condominio específico, residentes y reportes.' },
+    { value: 'accountant', label: 'Contador', description: 'Gestión exclusiva de finanzas (facturas, pagos) y reportes financieros.' },
+    { value: 'security', label: 'Seguridad / Vigilante', description: 'Control de accesos y avisos. Sin acceso a datos sensibles o finanzas.' },
+    { value: 'staff', label: 'Staff / Conserje', description: 'Gestión operativa básica de mantenimiento y áreas comunes.' },
+    { value: 'viewer', label: 'Solo Lectura', description: 'Acceso de consulta para supervisores o auditores.' },
 ]
 
 export function InviteUserModal({ isOpen, onClose, onInvite }: InviteUserModalProps) {

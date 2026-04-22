@@ -9,6 +9,7 @@ import { CreatePropertyModal } from '@/components/properties/CreatePropertyModal
 import { Skeleton } from '@/components/ui/skeleton'
 import { motion } from 'framer-motion'
 import { Plus, LayoutGrid, List, Building } from 'lucide-react'
+import { DeletePropertyModal } from '@/components/properties/DeletePropertyModal'
 
 import { useProperties } from '@/hooks/use-properties'
 import { EditCondominiumModal } from '@/components/properties/EditCondominiumModal'
@@ -42,6 +43,11 @@ export default function PropiedadesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingCondo, setEditingCondo] = useState<Condominium | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; propertyId: string; propertyName: string }>({
+    isOpen: false,
+    propertyId: '',
+    propertyName: ''
+  })
   const { checkAction, isDemo, loading: loadingDemo } = useDemoMode()
 
   useEffect(() => {
@@ -212,18 +218,24 @@ export default function PropiedadesPage() {
   // Ocupacion de Plan: totalUnits creadas vs el máximo del plan (unitsLimit)
   const occupancyRate = unitsLimit > 0 ? Math.min(100, Math.round((totalUnits / unitsLimit) * 100)) : 0
 
-  const handleDelete = async (id: string, name: string) => {
-    checkAction(async () => {
-      if (!window.confirm(`¿Estás seguro de que deseas eliminar el condominio "${name}"? Esta acción no se puede deshacer y eliminará todas las unidades y residentes asociados.`)) {
-        return
-      }
-
-      try {
-        await deleteProperty(id)
-      } catch (err: any) {
-        alert(`Error al eliminar el condominio: ${err.message}`)
-      }
+  const handleDelete = (id: string, name: string) => {
+    checkAction(() => {
+      setDeleteModal({
+        isOpen: true,
+        propertyId: id,
+        propertyName: name
+      })
     })
+  }
+
+  const confirmDelete = async () => {
+    try {
+      await deleteProperty(deleteModal.propertyId)
+      setDeleteModal({ isOpen: false, propertyId: '', propertyName: '' })
+    } catch (err: any) {
+      console.error('Delete error:', err)
+      throw err // Let the modal handle visual error state if needed, or we could handle it here
+    }
   }
 
   if (loading || ((isLoadingUnits || isLoadingResidents || isLoadingDelinquent || isLoadingOccupied) && !isDemo)) {
@@ -370,6 +382,13 @@ export default function PropiedadesPage() {
           updateProperty={updateProperty}
         />
       )}
+
+      <DeletePropertyModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ ...deleteModal, isOpen: false })}
+        onConfirm={confirmDelete}
+        propertyName={deleteModal.propertyName}
+      />
     </div>
   )
 }

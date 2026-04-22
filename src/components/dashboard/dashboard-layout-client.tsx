@@ -141,7 +141,7 @@ export function DashboardLayoutClient({
 
                 <div className="flex-1 overflow-auto bg-zinc-950 relative">
                     {isDemoMode && (
-                        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 md:px-6 py-3 flex items-center justify-between backdrop-blur-md sticky top-0 z-20">
+                        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 md:px-8 py-3 flex items-center justify-between backdrop-blur-md sticky top-0 z-20">
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
                                 <p className="text-[10px] md:text-xs font-medium text-amber-200/80 truncate">

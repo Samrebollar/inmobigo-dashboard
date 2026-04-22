@@ -1,205 +1,97 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Download, CreditCard, Clock, CheckCircle2, AlertCircle, FileText, ChevronRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { CreditCard, Loader2, AlertCircle } from 'lucide-react'
+import { TransparencyClient } from '@/components/dashboard/transparency/transparency-client'
+import { getAccountingData } from '@/app/actions/accounting-server-actions'
 
-interface Invoice {
-    id: string
-    period: string
-    amount: number
-    status: 'paid' | 'pending' | 'overdue'
-    due_date: string
-    paid_at?: string
+interface ResidentFinanceViewProps {
+    condominiumId: string | null
 }
 
-const MOCK_INVOICES: Invoice[] = [
-    { id: 'INV-001', period: 'Febrero 2026', amount: 2500, status: 'pending', due_date: '2026-02-28' },
-    { id: 'INV-002', period: 'Enero 2026', amount: 2500, status: 'paid', due_date: '2026-01-31', paid_at: '2026-01-28' },
-    { id: 'INV-003', period: 'Diciembre 2025', amount: 2500, status: 'paid', due_date: '2025-12-31', paid_at: '2025-12-29' },
-]
+export function ResidentFinanceView({ condominiumId }: ResidentFinanceViewProps) {
+    const [loading, setLoading] = useState(true)
+    const [transparencyData, setTransparencyData] = useState<any>(null)
+    const [error, setError] = useState<string | null>(null)
 
-export function ResidentFinanceView() {
-    const currentDebt = 2500
-
-    const getStatusColor = (status: Invoice['status']) => {
-        switch (status) {
-            case 'paid': return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
-            case 'pending': return 'text-amber-400 bg-amber-400/10 border-amber-400/20'
-            case 'overdue': return 'text-rose-400 bg-rose-400/10 border-rose-400/20'
-            default: return 'text-zinc-400 bg-zinc-400/10 border-zinc-400/20'
+    useEffect(() => {
+        async function fetchTransparency() {
+            if (!condominiumId) {
+                setLoading(false)
+                return
+            }
+            
+            try {
+                setLoading(true)
+                const result = await getAccountingData(condominiumId)
+                if (result.success) {
+                    setTransparencyData(result)
+                } else {
+                    setError('No se pudieron cargar los datos de transparencia.')
+                }
+            } catch (err) {
+                console.error('Error fetching transparency data:', err)
+                setError('Error de conexión al cargar datos financieros.')
+            } finally {
+                setLoading(false)
+            }
         }
+
+        fetchTransparency()
+    }, [condominiumId])
+
+    if (loading) {
+        return (
+            <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
+                <div className="relative">
+                    <Loader2 className="h-12 w-12 animate-spin text-indigo-500" />
+                    <div className="absolute inset-0 blur-xl bg-indigo-500/20 rounded-full animate-pulse" />
+                </div>
+                <p className="text-zinc-500 font-bold animate-pulse uppercase tracking-[0.2em] text-[10px]">Cargando Transparencia Financiera...</p>
+            </div>
+        )
     }
 
-    const getStatusLabel = (status: Invoice['status']) => {
-        switch (status) {
-            case 'paid': return 'Pagado'
-            case 'pending': return 'Pendiente'
-            case 'overdue': return 'Vencido'
-            default: return status
-        }
+    if (!condominiumId || error || !transparencyData) {
+        return (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-6 text-center">
+                <div className="w-20 h-20 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center text-amber-500 shadow-2xl relative overflow-hidden">
+                    <AlertCircle size={32} />
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-white tracking-tight">Información en Proceso</h2>
+                    <p className="text-zinc-500 max-w-sm mx-auto leading-relaxed font-medium">
+                        Tu condominio aún no tiene datos de transparencia publicados para este periodo.
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (
-        <div className="space-y-6 md:space-y-8 p-4 md:p-0">
-            {/* Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="text-left"
-                >
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Mis Finanzas</h1>
-                    <p className="text-sm md:text-base text-zinc-400">Historial de pagos y estado de cuenta</p>
-                </motion.div>
-
-                <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="flex flex-col sm:flex-row gap-3"
-                >
-                    <Button variant="outline" className="h-11 border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white w-full sm:w-auto">
-                        <Download className="mr-2 h-4 w-4" />
-                        Estado de Cuenta
-                    </Button>
-                </motion.div>
-            </div>
-
-            {/* Main Stats Grid */}
-            <div className="grid gap-6 md:grid-cols-3">
-                {/* Outstanding Balance Card (Compact & Dynamic - Reverted to md:col-span-2) */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="lg:col-span-2 group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 md:p-8 shadow-xl transition-all hover:border-indigo-500/30 hover:shadow-indigo-500/10"
-                >
-                    {/* Animated Background Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
-                    <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl group-hover:bg-indigo-500/20 transition-all duration-700 animate-pulse" />
-
-                    <div className="relative z-10 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-6">
-                        <div className="space-y-1">
-                            <h2 className="text-[10px] md:text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] mb-2">Saldo Total a Pagar</h2>
-                            <div className="flex items-baseline gap-3">
-                                <span className="text-4xl md:text-6xl font-black text-white tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white to-zinc-500">
-                                    ${currentDebt.toLocaleString()}
-                                </span>
-                                <span className="text-sm font-bold text-zinc-500">MXN</span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-4 bg-amber-500/5 border border-amber-500/10 w-fit px-3 py-1 rounded-full">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                                </span>
-                                <p className="text-[10px] md:text-xs font-bold text-amber-500 uppercase tracking-wider">
-                                    Vence el 28 de Febrero
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col gap-3 w-full sm:w-auto">
-                            <Button size="lg" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 px-8 h-12 md:h-14 rounded-xl font-bold text-base transition-all hover:-translate-y-1 hover:shadow-indigo-600/40 active:scale-95">
-                                <CreditCard className="mr-2 h-5 w-5" />
-                                Pagar Ahora
-                            </Button>
-                            <div className="flex justify-center gap-2 text-[9px] md:text-[10px] text-zinc-500 font-medium">
-                                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Seguro</span>
-                                <span>•</span>
-                                <span>Encriptado SSL</span>
-                            </div>
-                        </div>
-                    </div>
-                </motion.div>
-
-                {/* Quick Stats (Stacked Compact with Larger Icons) */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="grid grid-cols-2 md:grid-cols-1 gap-4"
-                >
-                    {/* Status Card */}
-                    <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 transition-all hover:border-emerald-500/30 hover:-translate-y-1">
-                        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="relative z-10 flex items-center gap-4">
-                            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                                <CheckCircle2 className="h-6 w-6" />
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-medium text-zinc-400 mb-0.5">Estado</h3>
-                                <p className="text-lg font-bold text-white leading-tight">Al Corriente</p>
-                                <p className="text-[10px] text-zinc-500 mt-0.5">12 meses consecutivos</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Next Invoice Card */}
-                    <div className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 transition-all hover:border-blue-500/30 hover:-translate-y-1">
-                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="relative z-10 flex items-center gap-4">
-                            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                                <FileText className="h-6 w-6" />
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-medium text-zinc-400 mb-0.5">Próxima Factura</h3>
-                                <p className="text-lg font-bold text-white leading-tight">01 Mar</p>
-                                <p className="text-[10px] text-zinc-500 mt-0.5">Emisión automática</p>
-                            </div>
-                        </div>
-                    </div>
-                </motion.div>
-            </div>
-
-            {/* Payment History List */}
+        <div className="space-y-12">
+            {/* NEW TRANSPARENCY DASHBOARD */}
+            <TransparencyClient data={transparencyData} isAdmin={false} />
+            
+            {/* PERSONAL ACTIONS (Optional but kept for functionality) */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="rounded-3xl border border-zinc-800 bg-zinc-900/50 overflow-hidden"
+                transition={{ delay: 0.5 }}
+                className="bg-indigo-600/10 border border-indigo-500/20 p-8 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6"
             >
-                <div className="p-6 border-b border-zinc-800/50 pb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-white">Historial de Finanzas</h3>
-                    <div className="text-xs font-medium text-zinc-500 bg-zinc-800/50 px-2 py-1 rounded">Últimos 3 meses</div>
+                <div className="space-y-2 text-center md:text-left">
+                    <h3 className="text-xl font-black text-white tracking-tight">¿Tienes un pago pendiente?</h3>
+                    <p className="text-zinc-400 text-sm font-medium">Puedes realizar tu pago de mantenimiento de forma segura desde aquí.</p>
                 </div>
-
-                <div className="divide-y divide-zinc-800/50">
-                    {MOCK_INVOICES.map((invoice) => (
-                        <div key={invoice.id} className="group p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 hover:bg-zinc-800/30 transition-colors cursor-pointer">
-                            <div className="flex items-center gap-4 w-full sm:w-auto">
-                                <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center border shadow-sm transition-all group-hover:scale-105", getStatusColor(invoice.status))}>
-                                    {invoice.status === 'paid' ? <CheckCircle2 className="h-5 w-5" /> :
-                                        invoice.status === 'overdue' ? <AlertCircle className="h-5 w-5" /> :
-                                            <Clock className="h-5 w-5" />}
-                                </div>
-                                <div className="flex-1">
-                                    <h4 className="font-medium text-white text-base group-hover:text-indigo-400 transition-colors">{invoice.period}</h4>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-xs text-zinc-500">Vencimiento: {invoice.due_date}</span>
-                                        {invoice.id === 'INV-001' && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
-                                <div className="text-right">
-                                    <p className="text-lg font-bold text-white tracking-tight">${invoice.amount.toLocaleString()}</p>
-                                    <span className={cn("inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full border mt-1", getStatusColor(invoice.status))}>
-                                        {getStatusLabel(invoice.status)}
-                                    </span>
-                                </div>
-                                <div className="h-8 w-8 flex items-center justify-center rounded-full bg-zinc-800/50 text-zinc-600 group-hover:bg-indigo-500 group-hover:text-white group-hover:translate-x-1 transition-all">
-                                    <ChevronRight className="h-4 w-4" />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="p-4 text-center border-t border-zinc-800/50 bg-zinc-900/30">
-                    <Button variant="ghost" className="text-sm text-zinc-500 hover:text-white w-full sm:w-auto">Ver todo el historial</Button>
-                </div>
+                <Button className="h-14 px-10 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black shadow-2xl shadow-indigo-500/20 transition-all active:scale-95 group">
+                    <CreditCard size={20} className="mr-3 group-hover:rotate-12 transition-transform" />
+                    IR A PAGAR
+                </Button>
             </motion.div>
-
         </div>
     )
 }

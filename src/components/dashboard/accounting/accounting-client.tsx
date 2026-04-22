@@ -12,7 +12,10 @@ import {
     ChevronDown,
     ArrowRight,
     FileSpreadsheet,
-    FileType
+    FileType,
+    ChevronLeft,
+    ShieldCheck,
+    Scale as ScaleIcon
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -20,6 +23,9 @@ import * as XLSX from 'xlsx'
 import { FinancialRecord, FiscalRegime, REGIME_LABELS } from '@/types/accounting'
 import { FinancialSummary } from './financial-summary'
 import { MovementManager } from './movement-manager'
+import { ReserveFundModule } from './reserve-fund-module'
+import { SatTaxProjection } from './sat-tax-projection'
+import { RegimeSelector } from './regime-selector'
 import { cn } from '@/lib/utils'
 
 export function AccountingClient({ 
@@ -37,8 +43,19 @@ export function AccountingClient({
         condominiums, 
         regime, 
         selectedCondoId,
-        unitsInRange
+        unitsInRange,
+        fundData
     } = data
+    
+    // VIEW STATE MANAGEMENT via SearchParams for persistence on reload
+    const activeView = searchParams.get('view') === 'fiscal' ? 'fiscal' : 'dashboard'
+    
+    const setView = (v: 'dashboard' | 'fiscal') => {
+        const params = new URLSearchParams(searchParams.toString())
+        if (v === 'dashboard') params.delete('view')
+        else params.set('view', 'fiscal')
+        router.push(`/dashboard/contabilidad-inteligente?${params.toString()}`)
+    }
 
     const handleCondoChange = (id: string) => {
         const params = new URLSearchParams(searchParams.toString())
@@ -50,6 +67,23 @@ export function AccountingClient({
     const [isExportMenuOpen, setExportMenuOpen] = useState(false)
     const exportMenuRef = useRef<HTMLDivElement>(null)
 
+    // IA ANALYSIS LOGIC
+    const isHealthy = metrics.utilidad >= 0
+    const expensesByCategory = records
+        .filter((r: any) => r.type === 'egreso')
+        .reduce((acc: any, curr: any) => {
+            const cat = curr.category || 'Otros'
+            acc[cat] = (acc[cat] || 0) + Number(curr.amount)
+            return acc
+        }, {})
+
+    const categoryArray = Object.keys(expensesByCategory).map(cat => ({
+        category: cat,
+        amount: expensesByCategory[cat]
+    })).sort((a, b) => b.amount - a.amount)
+
+    const topCategory = categoryArray[0]?.category || ''
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
@@ -60,17 +94,30 @@ export function AccountingClient({
         return () => document.removeEventListener("mousedown", handleClickOutside)
     }, [])
 
+    const generateMagicComment = () => {
+        const currentMonth = new Date().toLocaleDateString('es-MX', { month: 'long' })
+        if (metrics.totalCollected === 0 && metrics.totalExpenses === 0) {
+            return "Sin movimientos registrados este mes. El análisis se activará al procesar la primera factura o gasto."
+        }
+        
+        if (isHealthy) {
+            return `Análisis de ${currentMonth}: Operación saludable con un superávit de $${metrics.utilidad.toLocaleString()}. El gasto se concentra principalmente en ${topCategory || 'operación general'}, manteniendo el cumplimiento fiscal.`
+        } else {
+            return `Alerta Administrativa: El periodo presenta un déficit de $${Math.abs(metrics.utilidad).toLocaleString()}. Se recomienda revisar los gastos de ${topCategory || 'mantenimiento'} y agilizar la cobranza de las facturas pendientes.`
+        }
+    }
+
     const getExportFilename = (ext: string) => `reporte_contable_${selectedCondoId}_${new Date().toISOString().split('T')[0]}.${ext}`
 
     const exportToCSV = () => {
         const headers = ['Fecha', 'Tipo', 'Monto', 'Categoría', 'Descripción', 'Estatus']
         const rows = records.map((r: any) => [
             r.date,
-            r.type.toUpperCase(),
+            (r.type || 'movimiento').toUpperCase(),
             r.amount,
-            r.category,
-            r.description,
-            r.status
+            r.category || 'Varios',
+            r.description || '-',
+            (r.status || 'pagado').toUpperCase()
         ])
 
         const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n")
@@ -89,11 +136,11 @@ export function AccountingClient({
     const exportToExcel = () => {
         const worksheet = XLSX.utils.json_to_sheet(records.map((r: any) => ({
             Fecha: r.date,
-            Tipo: r.type.toUpperCase(),
+            Tipo: (r.type || 'movimiento').toUpperCase(),
             Monto: r.amount,
-            Categoría: r.category,
-            Descripción: r.description,
-            Estatus: r.status
+            Categoría: r.category || 'Varios',
+            Descripción: r.description || '-',
+            Estatus: (r.status || 'pagado').toUpperCase()
         })))
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, worksheet, "Contabilidad")
@@ -108,11 +155,11 @@ export function AccountingClient({
         const tableColumn = ["Fecha", "Tipo", "Monto", "Categoría", "Descripción", "Estatus"]
         const tableRows = records.map((r: any) => [
             r.date, 
-            r.type.toUpperCase(), 
+            (r.type || 'movimiento').toUpperCase(), 
             `$${Number(r.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 
-            r.category, 
-            r.description, 
-            r.status.toUpperCase()
+            r.category || 'Varios', 
+            r.description || '-', 
+            (r.status || 'pagado').toUpperCase()
         ])
 
         autoTable(doc, {
@@ -142,20 +189,30 @@ export function AccountingClient({
                     </div>
                     
                     <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="relative group">
-                            <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-hover:text-indigo-400 transition-colors" size={18} />
-                            <select 
-                                value={selectedCondoId}
-                                onChange={(e) => handleCondoChange(e.target.value)}
-                                className="pl-12 pr-10 py-3.5 bg-zinc-900 border border-zinc-800 rounded-2xl text-white font-bold text-sm focus:outline-none focus:border-indigo-500 transition-all appearance-none min-w-[240px] shadow-xl"
+                        {activeView === 'fiscal' ? (
+                            <button
+                                onClick={() => setView('dashboard')}
+                                className="flex items-center gap-2 px-4 py-3.5 bg-zinc-900 border border-zinc-800 rounded-2xl text-zinc-400 hover:text-white hover:border-indigo-500 transition-all font-bold text-sm"
                             >
-                                <option value="all">Todas las Propiedades</option>
-                                {condominiums.map((c: any) => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" size={16} />
-                        </div>
+                                <ChevronLeft size={18} />
+                                Regresar al Libro
+                            </button>
+                        ) : (
+                            <div className="relative group">
+                                <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-hover:text-indigo-400 transition-colors" size={18} />
+                                <select 
+                                    value={selectedCondoId}
+                                    onChange={(e) => handleCondoChange(e.target.value)}
+                                    className="pl-12 pr-10 py-3.5 bg-zinc-900 border border-zinc-800 rounded-2xl text-white font-bold text-sm focus:outline-none focus:border-indigo-500 transition-all appearance-none min-w-[240px] shadow-xl"
+                                >
+                                    <option value="all">Todas las Propiedades</option>
+                                    {condominiums.map((c: any) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" size={16} />
+                            </div>
+                        )}
 
                         {regime && (
                             <div className="px-4 py-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/10 flex items-center gap-3">
@@ -225,40 +282,166 @@ export function AccountingClient({
                 </div>
             </div>
 
-            {/* Smart Assistant Feedback */}
-            <m.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="relative overflow-hidden p-6 rounded-[32px] bg-zinc-900/50 border border-zinc-800"
-            >
-                <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/20 text-white shrink-0">
-                        <Sparkles size={28} />
-                    </div>
-                    <div className="space-y-1 text-center md:text-left">
-                        <h4 className="text-lg font-black text-white tracking-tight">Análisis bajo Demanda</h4>
-                        <p className="text-zinc-500 text-sm font-medium">
-                            {selectedCondoId === 'all' 
-                                ? "Visualizando flujo consolidado de toda la organización." 
-                                : `Resumen financiero y fiscal basado en facturación emitida para ${condominiums.find((c:any) => c.id === selectedCondoId)?.name || 'la propiedad'}.`}
-                        </p>
-                    </div>
-                </div>
-            </m.div>
+            <AnimatePresence mode="wait">
+                {activeView === 'dashboard' ? (
+                    <m.div
+                        key="dashboard"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        transition={{ duration: 0.4 }}
+                        className="space-y-8"
+                    >
+                        {/* 💰 RESERVA SECTION */}
+                        <ReserveFundModule 
+                            fundData={fundData} 
+                            condominiumId={selectedCondoId} 
+                            isAdmin={true} 
+                        />
 
-            {/* Summary Grid with New Metrics */}
-            <FinancialSummary metrics={metrics} regime={regime} />
+                        {/* Smart Assistant Feedback */}
+                        <m.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={cn(
+                                "relative overflow-hidden p-6 md:p-10 rounded-[32px] md:rounded-[48px] border transition-all duration-500",
+                                isHealthy 
+                                    ? "bg-zinc-900/50 border-zinc-800" 
+                                    : "bg-rose-500/5 border-rose-500/20"
+                            )}
+                        >
+                            <div className="absolute top-0 right-0 p-8 text-indigo-500/5 select-none">
+                                <Sparkles size={80} className="md:w-[120px] md:h-[120px]" />
+                            </div>
 
-            {/* Movement Manager - Updated for Hybrid Data */}
-            <MovementManager 
-                records={records} 
-                regime={regime} 
-                organizationId={organizationId}
-                units={unitsInRange}
-                onNewRecord={() => router.refresh()}
-                onDelete={() => router.refresh()}
-                selectedCondoId={selectedCondoId}
-            />
+                            <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 md:gap-10">
+                                <div className={cn(
+                                    "w-16 h-16 md:w-24 md:h-24 rounded-2xl md:rounded-3xl flex items-center justify-center shadow-2xl shrink-0 transition-transform hover:scale-105 duration-300",
+                                    isHealthy 
+                                        ? "bg-indigo-600 shadow-indigo-600/20 text-white" 
+                                        : "bg-rose-600 shadow-rose-600/30 text-white"
+                                )}>
+                                    <Brain className="w-8 h-8 md:w-12 md:h-12" />
+                                </div>
+                                
+                                <div className="space-y-3 text-center md:text-left flex-1">
+                                    <div className="flex flex-col md:flex-row md:items-center gap-3">
+                                        <h4 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase tracking-widest">
+                                            {selectedCondoId === 'all' ? 'Resumen Global' : 'Análisis Inteligente'}
+                                        </h4>
+                                        <div className={cn(
+                                            "inline-flex px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest border self-center md:self-auto",
+                                            isHealthy 
+                                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" 
+                                                : "bg-rose-500/10 border-rose-500/20 text-rose-500"
+                                        )}>
+                                            {isHealthy ? 'Operación Saludable' : 'Atención Requerida'}
+                                        </div>
+                                    </div>
+
+                                    <p className={cn(
+                                        "text-base md:text-xl font-medium leading-relaxed italic",
+                                        isHealthy ? "text-zinc-400" : "text-rose-200/80"
+                                    )}>
+                                        "{generateMagicComment()}"
+                                    </p>
+                                    
+                                    <div className="pt-2 flex items-center justify-center md:justify-start gap-4 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                            <span>IA Diagnostic</span>
+                                        </div>
+                                        <div className="w-1 h-1 rounded-full bg-zinc-800" />
+                                        <span>Datos en Tiempo Real</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </m.div>
+
+                        {/* Summary Grid with New Metrics */}
+                        <FinancialSummary metrics={metrics} regime={regime} />
+
+                        {/* Movement Manager - Updated for Hybrid Data */}
+                        <MovementManager 
+                            records={records} 
+                            regime={regime} 
+                            organizationId={organizationId}
+                            units={unitsInRange}
+                            condominiums={condominiums}
+                            onNewRecord={() => router.refresh()}
+                            onDelete={() => router.refresh()}
+                            selectedCondoId={selectedCondoId}
+                        />
+
+                        {/* 📊 ACCESO A CUMPLIMIENTO FISCAL (TARJETA FINAL) */}
+                        <m.button
+                            onClick={() => setView('fiscal')}
+                            whileHover={{ scale: 0.99, y: 2 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="w-full relative overflow-hidden group"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-orange-600/20 to-indigo-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[32px] md:rounded-[48px]" />
+                            <div className="relative p-8 md:p-12 rounded-[32px] md:rounded-[48px] bg-zinc-900/40 border border-zinc-800 group-hover:border-orange-500/30 transition-all flex flex-col md:flex-row items-center justify-between gap-8 backdrop-blur-sm">
+                                <div className="flex items-center gap-6 md:gap-10">
+                                    <div className="p-5 md:p-7 rounded-3xl bg-gradient-to-br from-orange-500 to-rose-600 text-white shadow-2xl shadow-orange-500/20 group-hover:scale-110 transition-transform duration-500">
+                                        <ShieldCheck size={32} className="md:w-10 md:h-10" />
+                                    </div>
+                                    <div className="text-center md:text-left space-y-2">
+                                        <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight uppercase tracking-widest">Cumplimiento Fiscal</h3>
+                                        <p className="text-zinc-500 text-sm md:text-base font-bold uppercase tracking-[0.2em] group-hover:text-amber-400/70 transition-colors">Estimación de obligaciones fiscales en tiempo real</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 text-orange-500 font-black text-xs uppercase tracking-[0.3em] group-hover:translate-x-2 transition-transform">
+                                    <span>Ver Proyección SAT</span>
+                                    <ArrowRight size={20} />
+                                </div>
+                            </div>
+                        </m.button>
+                    </m.div>
+                ) : (
+                    <m.div
+                        key="fiscal"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{ duration: 0.4 }}
+                    >
+                        {!regime && selectedCondoId !== 'all' ? (
+                            <m.div
+                                initial={{ opacity: 0, scale: 0.98 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="py-12"
+                            >
+                                <RegimeSelector 
+                                    condominiumId={selectedCondoId}
+                                    condominiumName={condominiums.find((c: any) => c.id === selectedCondoId)?.name}
+                                />
+                            </m.div>
+                        ) : (
+                            <SatTaxProjection 
+                                records={records}
+                                regime={regime}
+                                condominiums={condominiums}
+                            />
+                        )}
+                        
+                        <div className="mt-12 p-8 rounded-[32px] bg-indigo-500/5 border border-indigo-500/10 text-center space-y-4">
+                            <p className="text-zinc-500 text-sm font-medium italic">
+                                {selectedCondoId === 'all' 
+                                    ? "La estimación global combina los regímenes individuales de cada propiedad."
+                                    : `La estimación fiscal utiliza el régimen configurado para ${condominiums.find((c: any) => c.id === selectedCondoId)?.name || 'la propiedad'}.`}
+                            </p>
+                            <button 
+                                onClick={() => setView('dashboard')}
+                                className="inline-flex items-center gap-2 text-indigo-400 font-black text-[10px] uppercase tracking-widest hover:text-white transition-colors"
+                            >
+                                <ChevronLeft size={14} />
+                                Regresar al resumen financiero
+                            </button>
+                        </div>
+                    </m.div>
+                )}
+            </AnimatePresence>
 
             {/* Footer / Disclaimer */}
             <div className="pt-12 pb-8 border-t border-zinc-900 flex flex-col items-center text-center space-y-4">

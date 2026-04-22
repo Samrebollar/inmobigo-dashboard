@@ -16,6 +16,7 @@ export default function FinancePage() {
   const [role, setRole] = useState<{ isResident: boolean, isAdminOrStaff: boolean }>({ isResident: false, isAdminOrStaff: false })
   const [organization, setOrganization] = useState<any>(null)
   const [condominiumId, setCondominiumId] = useState<string | null>(null)
+  const [condominiumList, setCondominiumList] = useState<{ id: string, name: string }[]>([])
 
   useEffect(() => {
     const init = async () => {
@@ -34,13 +35,15 @@ export default function FinancePage() {
 
         // Check Role
         const [resData, orgUserData] = await Promise.all([
-          supabase.from('residents').select('id').eq('user_id', user.id).maybeSingle(),
+          supabase.from('residents').select('id, condominium_id').eq('user_id', user.id).maybeSingle(),
           supabase.from('organization_users').select('role, organization:organizations(*)').eq('user_id', user.id).maybeSingle()
         ])
-
+        
         const isResident = !!resData.data
+        const residentCondoId = resData.data?.condominium_id
         const isAdminOrStaff = !!orgUserData.data?.role
         setRole({ isResident, isAdminOrStaff })
+        if (isResident) setCondominiumId(residentCondoId)
 
         let org = orgUserData.data?.organization
         if (!org) {
@@ -53,28 +56,30 @@ export default function FinancePage() {
         }
         setOrganization(org)
 
-        // Find Condominium
+        // Find Condominiums
         if (org) {
           const { data: condos } = await supabase
             .from('condominiums')
-            .select('id')
+            .select('id, name')
             .eq('organization_id', (org as any)?.id ?? '')
             .eq('status', 'active')
-            .limit(1)
 
           if (condos && condos.length > 0) {
-            setCondominiumId((condos as any)[0].id)
+            setCondominiumList(condos as any)
+            // Default to null (Todas las propiedades)
+            setCondominiumId(null)
           }
         }
 
         // Demo Overrides
-        if (isDemo && !condominiumId) {
+        if (isDemo && (condominiumList.length === 0)) {
           const demoCondos = demoDb.getProperties()
           if (demoCondos.length > 0) {
-            setCondominiumId(demoCondos[0].id)
+            setCondominiumList(demoCondos.map(c => ({ id: c.id, name: c.name })))
           } else {
-            setCondominiumId('demo-condo-1')
+            setCondominiumList([{ id: 'demo-condo-1', name: 'Zacil (Demo)' }])
           }
+          setCondominiumId(null) 
           if (!org) setOrganization({ id: 'demo-org-id' })
           setRole({ isResident: false, isAdminOrStaff: true })
         }
@@ -100,12 +105,12 @@ export default function FinancePage() {
   }
 
   if (role.isResident && !role.isAdminOrStaff) {
-    return <ResidentFinanceView />
+    return <ResidentFinanceView condominiumId={condominiumId} />
   }
 
   if (!organization && !isDemo) return <div className="p-8 text-white">No se encontró organización activa.</div>
 
-  if (!condominiumId) {
+  if (condominiumList.length === 0 && !isDemo) {
     return (
       <div className="p-8 text-white">
         <h2 className="text-xl font-bold mb-2">No hay condominios activos</h2>
@@ -114,5 +119,5 @@ export default function FinancePage() {
     )
   }
 
-  return <AdminFinanceClient condominiumId={condominiumId} organizationId={organization?.id || 'demo-org-id'} />
+  return <AdminFinanceClient initialCondoId={condominiumId} organizationId={organization?.id || 'demo-org-id'} condominiumList={condominiumList} />
 }

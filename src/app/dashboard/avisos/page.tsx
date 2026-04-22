@@ -30,9 +30,23 @@ export default async function AvisosPage() {
     .eq('user_id', user.id)
     .maybeSingle()
 
-  const organizationId = orgUser?.organization_id || resident?.condominiums?.organization_id
+  // 3. Fallback: If not in organization_users, check if they are the OWNER of any organization
+  let finalOrganizationId = orgUser?.organization_id || resident?.condominiums?.organization_id
+  let userRole = orgUser?.role || 'admin_propiedad' // Default to admin for owners
 
-  if (!organizationId) {
+  if (!finalOrganizationId) {
+    const { data: ownedOrg } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('owner_id', user.id)
+      .maybeSingle()
+    
+    if (ownedOrg) {
+      finalOrganizationId = ownedOrg.id
+    }
+  }
+
+  if (!finalOrganizationId) {
     return (
       <div className="flex h-[50vh] items-center justify-center text-zinc-500">
         No se encontró un contexto de organización para este usuario.
@@ -47,31 +61,32 @@ export default async function AvisosPage() {
   const { data: initialAnnouncements } = await adminSupabase
     .from('announcements')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('organization_id', finalOrganizationId)
     .order('created_at', { ascending: false })
     .limit(50)
 
-  // CASE 1: ADMINISTRATOR
-  if (orgUser) {
+  // CASE 1: ADMINISTRATOR / OWNER
+  // If orgUser exists OR it's not a resident, treat as Admin context
+  if (orgUser || !resident) {
     const { data: initialPasses } = await adminSupabase
       .from('visitor_passes')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('organization_id', finalOrganizationId)
       .order('created_at', { ascending: false })
       .limit(50)
 
     const { data: initialAlerts } = await adminSupabase
       .from('package_alerts')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('organization_id', finalOrganizationId)
       .in('status', ['pending', 'received'])
       .order('created_at', { ascending: false })
       .limit(50)
 
     const admin = {
       ...user,
-      organization_id: organizationId,
-      role: orgUser?.role,
+      organization_id: finalOrganizationId,
+      role: userRole,
       serverPassCount: initialPasses?.length || 0,
       serverAlertCount: initialAlerts?.length || 0,
       serverAnnCount: initialAnnouncements?.length || 0

@@ -118,7 +118,22 @@ export default async function DashboardPage({
 
   // --- UNAUTHENTICATED / UNCONFIGURED STATE ---
   if (!organization) {
-    const isIntendedAdmin = user.user_metadata?.role === 'admin'
+    const userRole = user.user_metadata?.role || user.user_metadata?.user_type || profile?.role
+    const isIntendedAdmin = ['admin', 'owner', 'admin_condominio', 'admin_propiedad', 'admin_propiedades'].includes(userRole)
+
+    const isPropertyManager = userRole === 'admin_propiedad' || userRole === 'admin_propiedades'
+    
+    const emptyTitle = isPropertyManager 
+      ? 'Configura tu Portafolio' 
+      : 'Configura tu Condominio'
+
+    const emptyDesc = isPropertyManager
+      ? 'Tu cuenta está lista. Ahora necesitas registrar tu primer portafolio para comenzar a gestionar propiedades.'
+      : 'Para comenzar, necesitas registrar tu organización o condominio.'
+
+    const buttonLabel = isPropertyManager ? 'Ir a Propiedades' : 'Crear Organización'
+    // Redirect to the module where they can actually create the items
+    const buttonHref = isPropertyManager ? '/dashboard/condominios' : '/onboarding'
 
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center p-10 text-center space-y-6">
@@ -128,26 +143,21 @@ export default async function DashboardPage({
 
         <div className="max-w-md space-y-2">
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            {isIntendedAdmin ? 'Configura tu Condominio' : 'Cuenta no vinculada'}
+            {isIntendedAdmin ? emptyTitle : 'Cuenta no vinculada'}
           </h1>
           <p className="text-zinc-400">
             {isIntendedAdmin
-              ? 'Para comenzar, necesitas registrar tu organización o condominio.'
+              ? emptyDesc
               : 'Tu cuenta ha sido creada, pero aún no estás vinculado a ninguna unidad.'}
           </p>
-          {!isIntendedAdmin && residentError && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 font-mono text-left">
-              Error Code: {residentError.code}<br />
-              Message: {residentError.message}<br />
-              Details: {residentError.details}
-            </div>
-          )}
         </div>
 
         {isIntendedAdmin && (
           <div className="w-full max-w-sm">
-            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-10">
-              <Link href="/onboarding" className="w-full h-full flex items-center justify-center">Crear Organización</Link>
+            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-10 shadow-lg shadow-indigo-500/20">
+              <Link href={buttonHref} className="w-full h-full flex items-center justify-center">
+                {buttonLabel}
+              </Link>
             </Button>
           </div>
         )}

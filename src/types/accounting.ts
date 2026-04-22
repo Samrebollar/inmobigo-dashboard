@@ -21,6 +21,7 @@ export interface FinancialRecord {
     fecha_fin?: string;
     created_at: string;
     receipt_url?: string;
+    iva_amount?: number;
 }
 
 export type CategoryMap = Record<string, { ingresos: string[], egresos: string[] }>;
@@ -45,3 +46,26 @@ export const REGIME_LABELS: Record<string, string> = {
     'arrendamiento': 'Arrendamiento',
     'actividad_empresarial': 'Actividad Empresarial'
 };
+
+export interface ReserveFund {
+    id: string;
+    condominium_id: string;
+    balance: number;
+    target_amount: number;
+    contribution_type: 'percentage' | 'fixed';
+    contribution_value: number;
+    is_automated: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ReserveFundTransaction {
+    id: string;
+    fund_id: string;
+    type: 'deposit' | 'withdrawal';
+    amount: number;
+    reason: string;
+    description?: string;
+    user_id?: string;
+    created_at: string;
+}

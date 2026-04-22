@@ -215,22 +215,22 @@ export default function ResidentDashboardClient({ resident, userName }: Resident
             
             <div className="mx-auto max-w-6xl space-y-6">
                 {/* Header Section */}
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <motion.div 
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="space-y-1"
+                        className="space-y-1.5"
                     >
                         <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 font-bold px-2 py-0.5 rounded-full uppercase tracking-widest text-[9px]">
+                            <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 font-black px-2.5 py-1 rounded-lg uppercase tracking-widest text-[8px]">
                                 Mi Propiedad
                             </Badge>
-                            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse border-2 border-zinc-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                         </div>
-                        <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                            Hola, <span className="text-zinc-400">{userName}</span>
+                        <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-tight">
+                            Hola, <span className="text-indigo-500/50">{userName.split(' ')[0]}</span>
                         </h1>
-                        <p className="text-zinc-500 text-sm font-medium flex items-center gap-2">
+                        <p className="text-zinc-500 text-sm md:text-base font-bold flex items-center gap-2">
                              <Home className="h-4 w-4 text-indigo-500/30" />
                             {resident?.units?.unit_number || 'A-101'} <span className="text-zinc-800">•</span> {resident?.condominiums?.name || 'Torre Reforma'}
                         </p>
@@ -239,14 +239,15 @@ export default function ResidentDashboardClient({ resident, userName }: Resident
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="bg-zinc-900/40 backdrop-blur-md border border-white/5 px-5 py-3 rounded-2xl flex items-center gap-4 shadow-xl ring-1 ring-white/5"
+                        className="w-full md:w-auto bg-zinc-900/60 backdrop-blur-xl border border-white/10 px-6 py-4 rounded-[28px] flex items-center justify-between md:justify-start gap-6 shadow-2xl relative overflow-hidden"
                     >
-                        <div className="space-y-0.5">
-                            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Próximo vencimiento</p>
-                            <p className="text-xl font-bold text-white tracking-tight">5 Días</p>
+                        <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 blur-2xl rounded-full translate-x-1/2 -translate-y-1/2" />
+                        <div className="space-y-0.5 relative z-10">
+                            <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Próximo vencimiento</p>
+                            <p className="text-2xl font-black text-white tracking-tight italic">5 Días</p>
                         </div>
-                        <div className="h-8 w-8 bg-indigo-500/10 rounded-xl flex items-center justify-center border border-indigo-500/20">
-                            <Zap className="h-4 w-4 text-indigo-400 fill-indigo-400/20" />
+                        <div className="h-12 w-12 bg-indigo-600 shadow-lg shadow-indigo-600/20 rounded-2xl flex items-center justify-center border border-white/10 relative z-10">
+                            <Zap className="h-6 w-6 text-white fill-white/20" />
                         </div>
                     </motion.div>
                 </header>

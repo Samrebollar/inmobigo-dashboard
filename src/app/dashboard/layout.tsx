@@ -23,7 +23,7 @@ export default async function DashboardLayout({
     // 1. Check if Admin/Staff (STRICT: Must be in organization_users)
     const { data: orgUser } = await supabase
         .from('organization_users')
-        .select('role')
+        .select('role_new')
         .eq('user_id', user.id)
         .single()
 
@@ -39,7 +39,7 @@ export default async function DashboardLayout({
     // 3. Get Profile for Name fallback and Avatar
     const { data: profile } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url, role')
+        .select('full_name, avatar_url, role_new')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -73,15 +73,15 @@ export default async function DashboardLayout({
     // Determine Role
     let role = 'viewer'
 
-    if (orgUser?.role) {
-        role = orgUser.role
-    } else if (profile?.role && profile.role !== 'resident') {
+    if (orgUser?.role_new) {
+        role = orgUser.role_new
+    } else if (profile?.role_new && profile.role_new !== 'resident') {
         // Priority to Admin/Staff from DB
-        role = profile.role
+        role = profile.role_new
     } else if (user.user_metadata?.role === 'admin') {
         // Trust metadata for NEW admins if DB is not updated yet
         role = 'admin'
-    } else if (resident || profile?.role === 'resident' || isMetadataResident) {
+    } else if (resident || profile?.role_new === 'resident' || isMetadataResident) {
         role = 'resident'
     }
 
@@ -99,8 +99,8 @@ export default async function DashboardLayout({
     const isResident = role === 'resident'
 
     // RBAC Logic for Sidebar
-    const isStaff = ['owner', 'admin', 'manager', 'accountant'].includes(role)
-    const isAdmin = ['owner', 'admin'].includes(role)
+    const isStaff = ['owner', 'admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
+    const isAdmin = ['owner', 'admin', 'admin_condominio', 'admin_propiedad'].includes(role)
 
     const showProperties = isStaff
     const showResidents = isStaff
@@ -190,6 +190,13 @@ export default async function DashboardLayout({
 
                 {isResident && (
                     <>
+                        <Link
+                            href="/dashboard/transparencia"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <BarChart3 size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                            <span>Finanzas del Condominio</span>
+                        </Link>
                         <Link
                             href="/dashboard/amenidades"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"

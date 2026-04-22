@@ -11,6 +11,7 @@ import { unitsService } from '@/services/units-service'
 import { Unit } from '@/types/units'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
+import { toast } from 'sonner'
 
 interface CreateResidentModalProps {
     isOpen: boolean
@@ -121,9 +122,13 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
             console.error('Error saving resident:', error)
 
             if (error.code === '23505' || error.message?.includes('residents_email_key')) {
-                alert('Este correo electrónico ya está registrado para otro residente.')
+                toast.error('Correo duplicado', {
+                    description: 'Este correo electrónico ya está registrado para otro residente en este condominio.',
+                })
             } else {
-                alert(`Error al guardar residente: ${error.message || 'Error desconocido'}`)
+                toast.error('Error al guardar', {
+                    description: error.message || 'Ocurrió un error inesperado al procesar el residente.',
+                })
             }
         } finally {
             setLoading(false)

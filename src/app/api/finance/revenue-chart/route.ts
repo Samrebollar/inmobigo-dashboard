@@ -5,6 +5,7 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
         const condominiumId = searchParams.get('condominium_id')
+        const organizationId = searchParams.get('organization_id')
         
         const supabase = await createClient()
         
@@ -17,6 +18,8 @@ export async function GET(request: Request) {
         
         if (condominiumId) {
             query = query.eq('condominium_id', condominiumId)
+        } else if (organizationId) {
+            query = query.eq('organization_id', organizationId)
         }
         
         const { data: invoices, error } = await query

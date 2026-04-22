@@ -12,7 +12,7 @@ const defaultData = [
     { mes: 'Mar', facturado: 0, cobrado: 0, pendiente: 0 },
 ]
 
-export function RevenueChart({ condominiumId }: { condominiumId?: string }) {
+export function RevenueChart({ organizationId, condominiumId }: { organizationId: string, condominiumId?: string }) {
     const [filter, setFilter] = useState<'monthly' | 'quarterly'>('monthly')
     const [chartData, setChartData] = useState<any[] | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -21,8 +21,11 @@ export function RevenueChart({ condominiumId }: { condominiumId?: string }) {
         const fetchChartData = async () => {
             try {
                 setIsLoading(true)
-                const url = condominiumId ? `/api/finance/revenue-chart?condominium_id=${condominiumId}` : '/api/finance/revenue-chart'
-                const res = await fetch(url)
+                const params = new URLSearchParams()
+                params.append('organization_id', organizationId)
+                if (condominiumId) params.append('condominium_id', condominiumId)
+                
+                const res = await fetch(`/api/finance/revenue-chart?${params.toString()}`)
                 if (res.ok) {
                     const data = await res.json()
                     setChartData(data)
@@ -34,7 +37,7 @@ export function RevenueChart({ condominiumId }: { condominiumId?: string }) {
             }
         }
         fetchChartData()
-    }, [condominiumId])
+    }, [condominiumId, organizationId])
 
     return (
         <motion.div

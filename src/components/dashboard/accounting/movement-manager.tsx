@@ -35,12 +35,17 @@ import {
     UploadCloud,
     File as FileIcon,
     ExternalLink,
-    Eye
+    Eye,
+    Wallet,
+    Scale
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { FinancialRecord, FiscalRegime, REGIME_CATEGORIES, PaymentStatus } from '@/types/accounting'
 import { createFinancialRecord, deleteFinancialRecord } from '@/app/actions/accounting-server-actions'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { parse_CFDI_XML } from '@/utils/cfdi-parser'
+import { parseInvoicePDF } from '@/app/actions/pdf-parser-action'
 
 const CATEGORY_ICONS: Record<string, any> = {
     // Condominio
@@ -66,6 +71,7 @@ export function MovementManager({
     regime, 
     organizationId,
     units,
+    condominiums,
     onNewRecord,
     onDelete,
     selectedCondoId
@@ -74,6 +80,7 @@ export function MovementManager({
     regime: FiscalRegime,
     organizationId: string,
     units: any[],
+    condominiums: any[],
     onNewRecord: (r: any) => void,
     onDelete: (id: string) => void,
     selectedCondoId: string
@@ -85,6 +92,7 @@ export function MovementManager({
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [recordToDelete, setRecordToDelete] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [localTargetCondoId, setLocalTargetCondoId] = useState('')
 
     // Form State v4 - Specialized for Expenses
     const [formData, setFormData] = useState({
@@ -99,8 +107,15 @@ export function MovementManager({
         frecuencia: 'mensual' as 'mensual' | 'semanal',
         dia_corte: 1,
         fecha_inicio: new Date().toISOString().split('T')[0],
-        fecha_fin: ''
+        fecha_fin: '',
+        use_reserve_fund: false,
+        reserve_reason: 'emergencia',
+        iva_amount: '0'
     })
+
+    const [isParsing, setIsParsing] = useState(false)
+    const [parsedFromCFDI, setParsedFromCFDI] = useState(false)
+    const [isReviewingData, setIsReviewingData] = useState(false)
 
     const filteredRecords = records.filter(r => {
         const matchesSearch = r.description?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -150,12 +165,14 @@ export function MovementManager({
             }
 
             const newRecord = await createFinancialRecord({
-                condominium_id: selectedCondoId,
+                condominium_id: selectedCondoId === 'all' ? localTargetCondoId : selectedCondoId,
                 amount: parseFloat(formData.amount),
                 category: formData.category,
                 description: formData.description || formData.category,
                 date: formData.date,
-                receipt_url
+                receipt_url,
+                use_reserve_fund: formData.use_reserve_fund,
+                reserve_reason: formData.reserve_reason
             })
             onNewRecord(newRecord)
             setIsModalOpen(false)
@@ -172,11 +189,16 @@ export function MovementManager({
                 frecuencia: 'mensual',
                 dia_corte: 1,
                 fecha_inicio: new Date().toISOString().split('T')[0],
-                fecha_fin: ''
+                fecha_fin: '',
+                use_reserve_fund: false,
+                reserve_reason: 'emergencia'
             })
         } catch (error: any) {
             console.error('Error creating record:', error)
-            alert('Error al guardar: ' + error.message)
+            toast.error('Error en la operación', {
+                description: error.message || 'No se pudo guardar el registro financiero.',
+                duration: 5000,
+            })
         } finally {
             setIsSubmitting(false)
         }
@@ -184,7 +206,10 @@ export function MovementManager({
 
     const handleDeleteClick = (id: string, isInvoice: boolean) => {
         if (isInvoice) {
-            alert('Las facturas son de solo lectura en este módulo. Visita el módulo de Facturación para gestionarlas.')
+            toast.info('Acceso Restringido', {
+                description: 'Las facturas procesadas son de solo lectura. Para gestionarlas, dirígete al módulo de Facturación centralizada.',
+                icon: <Shield size={16} className="text-blue-500" />
+            })
             return
         }
         setRecordToDelete(id)
@@ -250,9 +275,11 @@ export function MovementManager({
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-zinc-900/30 border border-zinc-800 rounded-[32px] overflow-hidden">
-                <div className="overflow-x-auto">
+            {/* Table / Cards View */}
+            <div className="space-y-4">
+                {/* Desktop View (Table) */}
+                <div className="hidden lg:block bg-zinc-900/30 border border-zinc-800 rounded-[32px] overflow-hidden">
+                    <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-zinc-800 bg-zinc-900/50">
@@ -414,6 +441,127 @@ export function MovementManager({
                         </div>
                     </div>
                 )}
+                </div>
+
+                {/* Mobile View (Cards) */}
+                <div className="lg:hidden space-y-4">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                        {filteredRecords.map((record) => {
+                            const CategoryIcon = record.is_invoice ? Receipt : (CATEGORY_ICONS[record.category] || FolderPlus)
+                            
+                            return (
+                                <motion.div
+                                    key={record.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 space-y-5 relative overflow-hidden group shadow-xl"
+                                >
+                                    {/* Decorative Type Background */}
+                                    <div className={cn(
+                                        "absolute top-0 right-0 w-24 h-24 blur-[60px] opacity-10 -translate-y-1/2 translate-x-1/2 rounded-full",
+                                        record.type === 'ingreso' ? "bg-emerald-500" : "bg-rose-500"
+                                    )} />
+
+                                    <div className="flex justify-between items-start gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className={cn(
+                                                "h-12 w-12 rounded-2xl border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105",
+                                                record.is_invoice 
+                                                    ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" 
+                                                    : "bg-zinc-950 text-rose-500 border-rose-500/20"
+                                            )}>
+                                                <CategoryIcon size={24} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-black text-white text-base tracking-tight">{record.category}</h3>
+                                                    {record.is_invoice && (
+                                                        <Sparkles size={12} className="text-indigo-400 animate-pulse" />
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                                    <Calendar size={10} className="text-zinc-600" />
+                                                    <span>{record.date}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className={cn(
+                                                "text-xl font-black tracking-tighter",
+                                                record.type === 'ingreso' ? "text-emerald-500" : "text-rose-500"
+                                            )}>
+                                                {record.type === 'ingreso' ? '+' : '-'}${Number(record.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </p>
+                                            <div className={cn(
+                                                "inline-flex px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-[0.2em] mt-1 border",
+                                                record.status === 'pagado' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                                "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                            )}>
+                                                {record.status}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-white/5">
+                                        <div className="space-y-1">
+                                            <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Propiedad</p>
+                                            <div className="flex items-center gap-2 text-[11px] font-bold text-zinc-300">
+                                                <Building size={12} className="text-zinc-500" />
+                                                <span className="truncate">{record.condominium_name || '-'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Unidad</p>
+                                            <div className="flex items-center gap-2 text-[11px] font-bold text-zinc-300">
+                                                <Home size={12} className="text-zinc-500" />
+                                                <span>{record.unit_number || 'General'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-4 pt-1">
+                                        <p className="text-xs text-zinc-500 font-medium italic truncate flex-1 underline underline-offset-4 decoration-zinc-800">
+                                            {record.description || record.category}
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            {record.receipt_url && (
+                                                <a 
+                                                    href={record.receipt_url} 
+                                                    target="_blank" 
+                                                    rel="noreferrer" 
+                                                    className="h-9 w-9 bg-zinc-800 text-zinc-400 rounded-xl flex items-center justify-center hover:text-white transition-all shadow-lg"
+                                                >
+                                                    <ExternalLink size={16} />
+                                                </a>
+                                            )}
+                                            {!record.is_invoice && (
+                                                <button 
+                                                    onClick={() => handleDeleteClick(record.id, false)} 
+                                                    className="h-9 w-9 bg-rose-500/10 text-rose-500 rounded-xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-lg shadow-rose-600/5"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )
+                        })}
+                    </AnimatePresence>
+                </div>
+
+                {filteredRecords.length === 0 && (
+                    <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
+                        <div className="p-4 bg-zinc-900 rounded-full text-zinc-700">
+                            <Search size={40} />
+                        </div>
+                        <div>
+                            <p className="text-white font-bold">No hay movimientos registrados</p>
+                            <p className="text-zinc-500 text-sm">Prueba ajustando los filtros o seleccionando otra propiedad.</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Modal for Manual Expenses ONLY */}
@@ -431,7 +579,7 @@ export function MovementManager({
                             initial={{ scale: 0.9, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                            className="relative bg-zinc-900 border border-zinc-800 rounded-[40px] p-8 max-w-xl w-full shadow-2xl my-8 overflow-y-auto max-h-[90vh] scrollbar-hide"
+                            className="relative bg-zinc-900 border border-zinc-800 rounded-[32px] md:rounded-[48px] p-6 md:p-10 max-w-xl w-full shadow-2xl my-8 overflow-y-auto max-h-[90vh] scrollbar-hide"
                         >
                             <div className="flex justify-between items-center mb-8">
                                 <div className="flex items-center gap-4">
@@ -449,6 +597,28 @@ export function MovementManager({
                             </div>
 
                             <form onSubmit={handleAdd} className="space-y-6">
+                                {isReviewingData && (
+                                    <motion.div 
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        className="bg-indigo-500/10 border border-indigo-500/30 rounded-2xl p-4 mb-4 flex items-start gap-4"
+                                    >
+                                        <div className="p-2 bg-indigo-500/20 rounded-xl text-indigo-400">
+                                            <Sparkles size={20} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold text-indigo-300">Datos extraídos por IA</p>
+                                            <p className="text-[11px] text-indigo-300/70 leading-relaxed">Hemos rellenado los campos automáticamente basándonos en tu factura. Por favor, verifica que el Monto e IVA sean correctos antes de guardar.</p>
+                                        </div>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setIsReviewingData(false)}
+                                            className="text-indigo-400 hover:text-white transition-colors"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </motion.div>
+                                )}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2 group">
                                         <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
@@ -482,14 +652,31 @@ export function MovementManager({
 
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                                        <Building size={12} className="text-rose-400" />
+                                        <Building size={12} className={selectedCondoId === 'all' ? "text-indigo-400" : "text-rose-400"} />
                                         <span>Propiedad de Destino</span>
                                     </label>
-                                    <div className="w-full bg-zinc-950/50 border border-zinc-800/50 rounded-2xl p-4 text-zinc-400 text-sm font-bold flex items-center gap-2">
-                                        <CheckCircle2 size={16} className="text-emerald-500" />
-                                        <span>Gasto asociado a Propiedad Seleccionada</span>
-                                    </div>
-                                    <input type="hidden" value={selectedCondoId} />
+                                    
+                                    {selectedCondoId === 'all' ? (
+                                        <div className="relative group">
+                                            <select 
+                                                required
+                                                value={localTargetCondoId}
+                                                onChange={(e) => setLocalTargetCondoId(e.target.value)}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-white focus:outline-none focus:border-indigo-500/50 transition-all text-sm font-bold appearance-none shadow-inner"
+                                            >
+                                                <option value="" disabled>Selecciona un condominio...</option>
+                                                {condominiums.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" size={16} />
+                                        </div>
+                                    ) : (
+                                        <div className="w-full bg-zinc-950/50 border border-zinc-800/50 rounded-2xl p-4 text-zinc-400 text-sm font-bold flex items-center gap-2">
+                                            <CheckCircle2 size={16} className="text-emerald-500" />
+                                            <span>Gasto asociado a {condominiums.find(c => c.id === selectedCondoId)?.name || 'Propiedad Seleccionada'}</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2">
@@ -535,18 +722,93 @@ export function MovementManager({
                                     <div className="w-full bg-zinc-950 border border-dashed border-zinc-800 rounded-2xl p-4 transition-all hover:bg-zinc-900 overflow-hidden relative">
                                         <input 
                                             type="file" 
-                                            accept=".pdf,image/jpeg,image/png"
-                                            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                                            accept=".pdf,image/jpeg,image/png,.xml"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0] || null;
+                                                setSelectedFile(file);
+                                                
+                                                if (!file) return;
+
+                                                if (file.name.toLowerCase().endsWith('.xml')) {
+                                                    setIsParsing(true);
+                                                    const reader = new FileReader();
+                                                    reader.onload = (event) => {
+                                                        const content = event.target?.result as string;
+                                                        const data = parse_CFDI_XML(content);
+                                                        if (data) {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                amount: data.total.toString(),
+                                                                iva_amount: data.iva.toString(),
+                                                                date: data.fecha,
+                                                                description: `Factura ${data.emisor}`
+                                                            }));
+                                                            setIsReviewingData(true);
+                                                            setParsedFromCFDI(true);
+                                                            toast.success('Factura analizada con éxito.');
+                                                        } else {
+                                                            toast.error('No se pudo parsear el CFDI');
+                                                        }
+                                                        setIsParsing(false);
+                                                    };
+                                                    reader.readAsText(file);
+                                                } else if (file.name.toLowerCase().endsWith('.pdf')) {
+                                                    setIsParsing(true);
+                                                    try {
+                                                        const pdfFormData = new FormData();
+                                                        pdfFormData.append('file', file);
+                                                        const result = await parseInvoicePDF(pdfFormData);
+                                                        
+                                                        if (result.success && result.data) {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                amount: result.data!.total.toString(),
+                                                                iva_amount: result.data!.iva.toString(),
+                                                                date: result.data!.fecha,
+                                                                description: result.data!.description
+                                                            }));
+                                                            setIsReviewingData(true);
+                                                            setParsedFromCFDI(true);
+                                                            toast.success('PDF analizado con éxito.');
+                                                        } else {
+                                                            toast.error(result.error || 'No se pudo extraer información del PDF');
+                                                        }
+                                                    } catch (err) {
+                                                        toast.error('Error al procesar el PDF');
+                                                    } finally {
+                                                        setIsParsing(false);
+                                                    }
+                                                } else {
+                                                    setParsedFromCFDI(false);
+                                                }
+                                            }}
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                         />
                                         <div className="flex flex-col items-center justify-center gap-2 pointer-events-none text-center">
-                                            {selectedFile ? (
+                                            {isParsing ? (
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="animate-spin text-indigo-500">
+                                                        <Sparkles size={24} />
+                                                    </div>
+                                                    <p className="text-xs font-black text-indigo-500 uppercase tracking-widest animate-pulse">
+                                                        {selectedFile?.name.toLowerCase().endsWith('.pdf') ? 'Analizando PDF con IA...' : 'Extrayendo datos SAT...'}
+                                                    </p>
+                                                </div>
+                                            ) : selectedFile ? (
                                                 <>
-                                                    <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-full">
+                                                    <div className={cn(
+                                                        "p-3 rounded-full",
+                                                        parsedFromCFDI ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-400"
+                                                    )}>
                                                         <FileIcon size={24} />
                                                     </div>
-                                                    <p className="text-sm font-bold text-emerald-400 truncate w-full px-4">{selectedFile.name}</p>
-                                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Listo para subir</p>
+                                                    <p className={cn(
+                                                        "text-sm font-bold truncate w-full px-4",
+                                                        parsedFromCFDI ? "text-indigo-400" : "text-emerald-400"
+                                                    )}>{selectedFile.name}</p>
+                                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                                                        {parsedFromCFDI ? 'Validado por CFDI 4.0' : 'Listo para subir'}
+                                                    </p>
                                                 </>
                                             ) : (
                                                 <>
@@ -554,11 +816,82 @@ export function MovementManager({
                                                         <UploadCloud size={24} />
                                                     </div>
                                                     <p className="text-sm font-bold text-zinc-400">Haz clic o arrastra un archivo aquí</p>
-                                                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Soporta PDF, JPG, PNG max 5MB</p>
+                                                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">SOPORTA PDF, XML (CFDI), JPG, PNG</p>
                                                 </>
                                             )}
                                         </div>
                                     </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                            <Scale size={12} className="text-indigo-400" />
+                                            <span>IVA Acreditable ($)</span>
+                                        </label>
+                                        <input 
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.iva_amount}
+                                            onChange={(e) => setFormData({ ...formData, iva_amount: e.target.value })}
+                                            placeholder="0.00"
+                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-indigo-400 focus:outline-none focus:border-indigo-500/50 transition-all font-bold text-lg shadow-inner"
+                                        />
+                                    </div>
+                                    <div className="flex items-end pb-2">
+                                        <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl w-full">
+                                            <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1">Subtotal (Calculado)</p>
+                                            <p className="text-sm font-black text-white">
+                                                ${(parseFloat(formData.amount || '0') - parseFloat(formData.iva_amount || '0')).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 pt-2">
+                                    <div className="flex items-center justify-between p-5 rounded-3xl bg-amber-500/5 border border-amber-500/10 transition-all hover:bg-amber-500/10">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 bg-amber-500/10 rounded-2xl text-amber-500">
+                                                <Wallet size={20} />
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <p className="text-sm font-black text-amber-200/90">Usar Fondo de Reserva</p>
+                                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Afecta saldos de contingencia</p>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sr-only peer" 
+                                                checked={formData.use_reserve_fund}
+                                                onChange={(e) => setFormData({...formData, use_reserve_fund: e.target.checked})}
+                                            />
+                                            <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600 peer-checked:after:bg-white"></div>
+                                        </label>
+                                    </div>
+
+                                    {formData.use_reserve_fund && (
+                                        <motion.div 
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: 'auto', opacity: 1 }}
+                                            className="space-y-2 overflow-hidden"
+                                        >
+                                            <label className="text-[10px] font-black text-amber-500/80 uppercase tracking-widest pl-1">Motivo del uso (Obligatorio)</label>
+                                            <div className="relative">
+                                                <select
+                                                    required={formData.use_reserve_fund}
+                                                    value={formData.reserve_reason}
+                                                    onChange={(e) => setFormData({...formData, reserve_reason: e.target.value})}
+                                                    className="w-full bg-zinc-950 border border-amber-500/20 rounded-2xl p-4 text-white focus:outline-none focus:border-amber-500/50 transition-all text-sm font-bold appearance-none"
+                                                >
+                                                    <option value="emergencia">🆘 Emergencia</option>
+                                                    <option value="mantenimiento mayor">🛠️ Mantenimiento mayor</option>
+                                                    <option value="proyecto especial">✨ Proyecto especial</option>
+                                                </select>
+                                                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500/50 pointer-events-none" size={16} />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </div>
                                 </div>
 
                                 <button
@@ -566,7 +899,7 @@ export function MovementManager({
                                     type="submit"
                                     className={cn(
                                         "w-full p-5 rounded-[28px] font-black transition-all duration-500 flex items-center justify-center gap-3 mt-4 text-lg",
-                                        canSubmit && !isSubmitting
+                                        canSubmit && !isSubmitting && (selectedCondoId !== 'all' || localTargetCondoId !== '')
                                             ? "bg-rose-600 text-white shadow-2xl shadow-rose-600/30 hover:scale-[1.02] hover:bg-rose-500"
                                             : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
                                     )}

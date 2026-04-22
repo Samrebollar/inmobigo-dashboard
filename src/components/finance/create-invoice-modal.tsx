@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Modal } from '@/components/ui/modal'
 import { Loader2, Plus, Mail, Phone, ChevronRight } from 'lucide-react'
 import { residentsService } from '@/services/residents-service'
@@ -145,13 +146,17 @@ export function CreateInvoiceModal({
             const selectedResident = defaultResident || residents.find(r => r.id === formData.residentId)
 
             if (!selectedResident) {
-                alert('Por favor selecciona un residente')
+                toast.error('Residente no seleccionado', {
+                    description: 'Por favor, elige un residente válido de la lista para generar la factura.',
+                })
                 return
             }
 
             // Should verify unit_id presence
             if (!selectedResident.unit_id) {
-                alert('El residente seleccionado no tiene una unidad asignada.')
+                toast.error('Unidad No Asignada', {
+                    description: 'El residente seleccionado no tiene una unidad vinculada. Es necesario asignar una unidad antes de facturar.',
+                })
                 return
             }
 
@@ -182,7 +187,9 @@ export function CreateInvoiceModal({
             })
         } catch (error: any) {
             console.error('Error creating invoice:', error)
-            alert(`Error al crear la factura: ${error.message || JSON.stringify(error)}`)
+            toast.error('Error al facturar', {
+                description: error.message || 'Ocurrió un error inesperado al intentar generar la factura.',
+            })
         } finally {
             setLoading(false)
         }

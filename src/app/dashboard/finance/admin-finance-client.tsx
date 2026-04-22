@@ -8,7 +8,16 @@ import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
 import { FileText, Download, ArrowRight, Plus } from 'lucide-react'
 import Link from 'next/link'
 
-export default function AdminFinanceClient({ condominiumId, organizationId }: { condominiumId: string, organizationId: string }) {
+export default function AdminFinanceClient({ 
+    initialCondoId, 
+    organizationId, 
+    condominiumList 
+}: { 
+    initialCondoId: string | null, 
+    organizationId: string, 
+    condominiumList: { id: string, name: string }[] 
+}) {
+    const [selectedCondoId, setSelectedCondoId] = useState<string | null>(initialCondoId)
     const [isReportModalOpen, setIsReportModalOpen] = useState(false)
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
 
@@ -18,7 +27,21 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Finanzas & Facturación</h1>
-                    <p className="text-sm md:text-base text-zinc-400">Visión general del estado financiero de tu condominio.</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
+                        <p className="text-sm text-zinc-400">Visión general del estado financiero de</p>
+                        <select
+                            value={selectedCondoId || 'all'}
+                            onChange={(e) => setSelectedCondoId(e.target.value === 'all' ? null : e.target.value)}
+                            className="bg-transparent border-none text-indigo-400 font-semibold focus:ring-0 cursor-pointer hover:text-indigo-300 transition-colors p-0 text-sm h-auto w-auto"
+                        >
+                            <option value="all" className="bg-zinc-900 text-white font-normal italic">Todas las propiedades</option>
+                            {condominiumList.map(condo => (
+                                <option key={condo.id} value={condo.id} className="bg-zinc-900 text-white font-normal">
+                                    {condo.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3">
                     <button
@@ -43,12 +66,12 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
             </div>
 
             {/* KPI Cards */}
-            <KPICards condominiumId={condominiumId} />
+            <KPICards organizationId={organizationId} condominiumId={selectedCondoId ?? undefined} />
 
             {/* Main Content Grid */}
             <div className="min-h-[400px]">
                 {/* Revenue Chart - Taking up full space now */}
-                <RevenueChart condominiumId={condominiumId} />
+                <RevenueChart organizationId={organizationId} condominiumId={selectedCondoId ?? undefined} />
             </div>
 
             {/* Quick Link to Detailed Billing */}
@@ -68,7 +91,7 @@ export default function AdminFinanceClient({ condominiumId, organizationId }: { 
             <CreateInvoiceModal
                 isOpen={isCreateInvoiceOpen}
                 onClose={() => setIsCreateInvoiceOpen(false)}
-                condominiumId={condominiumId}
+                condominiumId={selectedCondoId || (condominiumList.length > 0 ? condominiumList[0].id : '')}
                 organizationId={organizationId}
                 onSuccess={() => {
                     // Optional: refresh data

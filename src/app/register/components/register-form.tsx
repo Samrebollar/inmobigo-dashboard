@@ -12,7 +12,7 @@ function RegisterFormContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
 
-    const [userType, setUserType] = useState<'admin' | 'resident'>('admin')
+    const [userType] = useState<'admin' | 'resident'>('admin')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
@@ -25,12 +25,15 @@ function RegisterFormContent() {
         orgName: '' // Only for admin
     })
 
+    // No longer needed as we force 'admin' for registration
+    /*
     useEffect(() => {
         const typeParam = searchParams.get('type')
         if (typeParam === 'resident') {
             setUserType('resident')
         }
     }, [searchParams])
+    */
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -96,7 +99,7 @@ function RegisterFormContent() {
                             full_name: `${formData.firstName} ${formData.lastName}`,
                             phone: formData.phone,
                             role: userType,
-                            user_type: userType
+                            onboarding_completed: false
                         }
                     }
                 })
@@ -106,7 +109,7 @@ function RegisterFormContent() {
             }
 
             // 3. Success -> Redirect
-            router.push('/dashboard')
+            router.push('/onboarding')
 
         } catch (err: any) {
             // 🔍 ESTRATEGIA DE LOGGING AVANZADA (Solicitada por el Usuario)
@@ -161,47 +164,15 @@ function RegisterFormContent() {
             {/* FORM CARD */}
             <div className="backdrop-blur-2xl bg-white/[0.04] border border-white/15 rounded-3xl p-1 shadow-[0_0_40px_-10px_rgba(79,70,229,0.3)] relative overflow-hidden group">
 
-                {/* User Type Toggle */}
-                <div className="grid grid-cols-2 p-1 bg-black/40 rounded-xl mb-1 relative">
-                    <div
-                        className={cn(
-                            "absolute inset-y-1 w-[calc(50%-4px)] bg-zinc-800/80 rounded-lg shadow-sm transition-all duration-300 ease-spring",
-                            userType === 'admin' ? "left-1" : "left-[calc(50%+2px)]"
-                        )}
-                    />
-                    <button
-                        type="button"
-                        onClick={() => setUserType('admin')}
-                        className={cn(
-                            "relative z-10 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors duration-200",
-                            userType === 'admin' ? "text-white" : "text-zinc-500 hover:text-zinc-300"
-                        )}
-                    >
-                        <Building2 size={16} />
-                        <span>Administrador</span>
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setUserType('resident')}
-                        className={cn(
-                            "relative z-10 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors duration-200",
-                            userType === 'resident' ? "text-white" : "text-zinc-500 hover:text-zinc-300"
-                        )}
-                    >
-                        <Home size={16} />
-                        <span>Residente</span>
-                    </button>
-                </div>
+                {/* User Type Toggle REMOVED as per new requirement */}
 
                 <div className="p-6 pt-4">
                     <div className="text-center mb-6">
                         <h1 className="text-2xl font-bold tracking-tight text-white mb-1">
-                            Crear cuenta
+                            Crea tu cuenta y configura tu sistema
                         </h1>
                         <p className="text-sm text-zinc-400">
-                            {userType === 'admin'
-                                ? 'Empieza a gestionar tu condominio hoy.'
-                                : 'Únete a tu comunidad digital.'}
+                            Registro profesional para administradores.
                         </p>
                     </div>
 
@@ -324,6 +295,10 @@ function RegisterFormContent() {
                             </span>
                             <div className="absolute inset-0 -translate-x-full group-hover:animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent z-0" />
                         </button>
+                        
+                        <p className="text-[10px] text-center text-zinc-500 mt-4 leading-tight">
+                            Los residentes e inquilinos acceden únicamente por invitación del administrador
+                        </p>
                     </form>
 
                     {/* Footer */}

@@ -169,7 +169,7 @@ export default function AdminDashboardClient({ userEmail, userName, stats, recen
     }
 
     return (
-        <div className="mx-auto max-w-7xl space-y-8 p-6">
+        <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
 
             <motion.div

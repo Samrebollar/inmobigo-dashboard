@@ -29,12 +29,12 @@ export function useUserRole(): UserRoleContext {
                 // Fetch org user to get role
                 const { data: orgUser, error } = await supabase
                     .from('organization_users')
-                    .select('role, organization_id')
+                    .select('role_new, organization_id')
                     .eq('user_id', user.id)
                     .single()
 
                 if (orgUser && !error) {
-                    const role = orgUser.role as Role
+                    const role = orgUser.role_new as Role
                     const permissions = ROLE_PERMISSIONS[role] || []
 
                     setContext({
@@ -42,8 +42,8 @@ export function useUserRole(): UserRoleContext {
                         loading: false,
                         organizationId: orgUser.organization_id,
                         permissions,
-                        isOwner: role === 'owner',
-                        isAdmin: role === 'admin' || role === 'owner',
+                        isOwner: role === 'owner' || role === 'admin_propiedad',
+                        isAdmin: ['owner', 'admin', 'admin_condominio', 'admin_propiedad'].includes(role),
                         can: (permission: Permission) => permissions.includes(permission)
                     })
                 } else {

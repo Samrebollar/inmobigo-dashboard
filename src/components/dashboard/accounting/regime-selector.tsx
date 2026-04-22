@@ -6,6 +6,7 @@ import { Building2, Home, Briefcase, ChevronRight, CheckCircle2 } from 'lucide-r
 import { FiscalRegime, REGIME_LABELS } from '@/types/accounting'
 import { updateFiscalRegime } from '@/app/actions/accounting-server-actions'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const REGIMES = [
     {
@@ -34,7 +35,13 @@ const REGIMES = [
     }
 ]
 
-export function RegimeSelector() {
+export function RegimeSelector({ 
+    condominiumId = null, 
+    condominiumName = null 
+}: { 
+    condominiumId?: string | null,
+    condominiumName?: string | null
+}) {
     const [selected, setSelected] = useState<FiscalRegime>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -42,31 +49,21 @@ export function RegimeSelector() {
         if (!selected) return
         setIsSubmitting(true)
 
-        // Timeout fallback after 15 seconds
-        const timeout = setTimeout(() => {
-            if (isSubmitting) {
-                setIsSubmitting(false)
-                alert('El servidor está tardando demasiado en responder. Asegúrate de que las políticas de Supabase (RLS) estén configuradas correctamente.')
-            }
-        }, 15000)
-
         try {
-            console.log('Enviando solicitud de régimen:', selected)
-            const result = await updateFiscalRegime(selected)
-            clearTimeout(timeout)
+            const result = await updateFiscalRegime(selected, condominiumId)
 
             if (result.success) {
-                console.log('Actualización exitosa, recargando...')
                 window.location.reload()
             } else {
-                console.error('Error devuelto por la acción:', result.error)
-                alert(result.error || 'Error al actualizar el régimen.')
+                toast.error('No se pudo actualizar', {
+                    description: result.error || 'Ocurrió un error inesperado.',
+                })
                 setIsSubmitting(false)
             }
         } catch (error: any) {
-            clearTimeout(timeout)
-            console.error('Error atrapado en el cliente:', error)
-            alert('Error de conexión. Es muy probable que falte la política RLS en la tabla "organizations".')
+            toast.error('Error de conexión', {
+                description: 'No se pudo contactar con el servidor.',
+            })
             setIsSubmitting(false)
         }
     }
@@ -80,13 +77,13 @@ export function RegimeSelector() {
                     className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold uppercase tracking-widest mb-4"
                 >
                     <CheckCircle2 size={14} />
-                    <span>Configuración Inicial</span>
+                    <span>Configuración {condominiumName ? `para ${condominiumName}` : 'Fiscal'}</span>
                 </motion.div>
                 <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
-                    ¿Cómo funciona tu <span className="text-indigo-500">Contabilidad</span>?
+                    ¿Cómo funciona {condominiumName ? <span className="text-indigo-500">{condominiumName}</span> : 'tu Contabilidad'}?
                 </h1>
                 <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-                    Selecciona tu régimen fiscal para adaptar el dashboard, las categorías y los reportes a tus necesidades reales.
+                    Selecciona el régimen fiscal {condominiumName ? 'de esta propiedad' : 'principal'} para adaptar el dashboard y fórmulas de cálculo.
                 </p>
             </div>
 

@@ -23,7 +23,7 @@ interface KPI {
     data: number[] // sparkline 7 days
 }
 
-export function KPICards({ condominiumId }: { condominiumId?: string }) {
+export function KPICards({ organizationId, condominiumId }: { organizationId: string, condominiumId?: string }) {
     const [metrics, setMetrics] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
 
@@ -31,8 +31,11 @@ export function KPICards({ condominiumId }: { condominiumId?: string }) {
         const fetchMetrics = async () => {
             try {
                 setIsLoading(true)
-                const url = condominiumId ? `/api/finance/metrics?condominium_id=${condominiumId}` : '/api/finance/metrics'
-                const res = await fetch(url)
+                const params = new URLSearchParams()
+                params.append('organization_id', organizationId)
+                if (condominiumId) params.append('condominium_id', condominiumId)
+                
+                const res = await fetch(`/api/finance/metrics?${params.toString()}`)
                 if (res.ok) {
                     const data = await res.json()
                     setMetrics(data)
@@ -44,7 +47,7 @@ export function KPICards({ condominiumId }: { condominiumId?: string }) {
             }
         }
         fetchMetrics()
-    }, [condominiumId])
+    }, [condominiumId, organizationId])
 
     const kpis: KPI[] = [
         {

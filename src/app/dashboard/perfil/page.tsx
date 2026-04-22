@@ -36,8 +36,8 @@ export default async function ProfilePage() {
         role = orgUser.role
     } else if (profile?.role && profile.role !== 'resident') {
         role = profile.role
-    } else if (user.user_metadata?.role === 'admin') {
-        role = 'admin'
+    } else if (user.user_metadata?.role === 'admin' || user.user_metadata?.role === 'admin_condominio' || user.user_metadata?.role === 'admin_propiedad') {
+        role = user.user_metadata?.role
     } else if (resident || profile?.role === 'resident' || user.user_metadata?.role === 'resident') {
         role = 'resident'
     }

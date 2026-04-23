@@ -10,11 +10,11 @@ export default async function ResetPasswordPage({
     const supabase = await createClient()
     const params = await searchParams
     
-    // 1. Detectar si el usuario viene de un correo (tiene código o hash)
-    const code = params.get('code')
-    const token_hash = params.get('token_hash')
-    const type = params.get('type')
-    const isVerified = params.get('verified') === 'true'
+    // En Next.js, searchParams es un objeto plano, no un URLSearchParams
+    const code = params.code as string | undefined
+    const token_hash = params.token_hash as string | undefined
+    const type = params.type as string | undefined
+    const isVerified = params.verified === 'true'
 
     // 2. Si viene del correo pero aún no ha hecho el "clic humano" para evitar el pre-click de Gmail
     if ((code || token_hash) && !isVerified) {

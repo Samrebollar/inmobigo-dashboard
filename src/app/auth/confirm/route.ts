@@ -29,11 +29,15 @@ export async function GET(request: NextRequest) {
     }
   )
 
+  // Capturar la respuesta de redirección
+  const response = NextResponse.redirect(new URL(next, request.url))
+
   // Caso 1: Flujo PKCE con 'code'
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      return NextResponse.redirect(new URL(next, request.url))
+      // Importante: El middleware de Supabase ya manejó las cookies en cookieStore
+      return response
     }
   }
 
@@ -44,7 +48,7 @@ export async function GET(request: NextRequest) {
       token_hash,
     })
     if (!error) {
-      return NextResponse.redirect(new URL(next, request.url))
+      return response
     }
   }
 

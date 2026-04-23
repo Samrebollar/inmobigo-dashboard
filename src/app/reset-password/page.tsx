@@ -18,9 +18,23 @@ function ResetPasswordContent() {
 
     useEffect(() => {
         const checkSession = async () => {
+            // 1. Verificar si hay un código de intercambio en la URL (Flujo PKCE)
+            const params = new URLSearchParams(window.location.search)
+            const code = params.get('code')
+
+            if (code) {
+                console.log('🔄 Intercambiando código por sesión...')
+                const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+                if (exchangeError) {
+                    console.error('Error exchanging code:', exchangeError)
+                }
+            }
+
+            // 2. Verificar sesión actual
             const { data: { session } } = await supabase.auth.getSession()
+            
             if (!session) {
-                // Dar un pequeño margen para que el hash de la URL sea procesado
+                // Dar margen para procesar hash (#access_token) si no es PKCE
                 setTimeout(async () => {
                     const { data: { session: retrySession } } = await supabase.auth.getSession()
                     if (!retrySession) {

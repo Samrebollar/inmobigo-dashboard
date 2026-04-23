@@ -1,6 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
 
 /**
  * Detecta el rol y la redirección adecuada para un usuario autenticado.

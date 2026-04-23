@@ -10,10 +10,30 @@ function ResetPasswordContent() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
+    const [verifying, setVerifying] = useState(true)
     const [success, setSuccess] = useState(false)
     const [error, setError] = useState('')
     const router = useRouter()
     const supabase = createClient()
+
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) {
+                // Dar un pequeño margen para que el hash de la URL sea procesado
+                setTimeout(async () => {
+                    const { data: { session: retrySession } } = await supabase.auth.getSession()
+                    if (!retrySession) {
+                        setError('Tu sesión de seguridad ha expirado o el enlace es inválido. Por favor, solicita un nuevo acceso.')
+                    }
+                    setVerifying(false)
+                }, 1500)
+            } else {
+                setVerifying(false)
+            }
+        }
+        checkSession()
+    }, [])
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -46,6 +66,15 @@ function ResetPasswordContent() {
         } finally {
             setLoading(false)
         }
+    }
+
+    if (verifying) {
+        return (
+            <div className="text-center space-y-4 animate-pulse">
+                <Loader2 className="h-12 w-12 text-indigo-500 animate-spin mx-auto" />
+                <p className="text-zinc-400 text-sm">Verificando sesión de seguridad...</p>
+            </div>
+        )
     }
 
     if (success) {
@@ -127,8 +156,8 @@ function ResetPasswordContent() {
 
                     <button
                         type="submit"
-                        disabled={loading}
-                        className="relative w-full overflow-hidden rounded-xl py-2.5 text-sm font-semibold text-white shadow-lg transition-all bg-gradient-to-r from-indigo-600 to-violet-600 hover:shadow-indigo-500/40 active:scale-[0.98] disabled:opacity-50"
+                        disabled={loading || !!error}
+                        className="relative w-full overflow-hidden rounded-xl py-2.5 text-sm font-semibold text-white shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-indigo-600 to-violet-600 hover:shadow-indigo-500/40 active:scale-[0.98]"
                     >
                         <span className="relative z-10 flex items-center justify-center gap-2">
                             {loading ? (

@@ -1,36 +1,23 @@
 const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
 
-const envPath = path.join(process.cwd(), '.env.local');
-let supabaseUrl, supabaseKey;
+const supabase = createClient(
+  'https://djxllvplxdigosbhhicn.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqeGxsdnBseGRpZ29zYmhoaWNuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDIzODMwMywiZXhwIjoyMDg1ODE0MzAzfQ.W8sB7_M_2smipPtbXcADjArL1s_tCigha09h3S8Xrzg'
+);
 
-if (fs.existsSync(envPath)) {
-    const env = fs.readFileSync(envPath, 'utf8');
-    const lines = env.split('\n');
-    lines.forEach(line => {
-        if (line.startsWith('NEXT_PUBLIC_SUPABASE_URL=')) supabaseUrl = line.split('=')[1].trim();
-        if (line.startsWith('SUPABASE_SERVICE_ROLE_KEY=')) supabaseKey = line.split('=')[1].trim();
-    });
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-async function check() {
-  const tables = ['reserve_fund', 'reserve_fund_transactions']
-  for (const table of tables) {
-    console.log(`\n--- TABLE: ${table} ---`)
-    const { data, error } = await supabase.from(table).select('*').limit(1)
-    if (error) {
-      console.error(`Error fetching ${table}:`, error.message)
-      continue
+async function listTables() {
+  const { data, error } = await supabase.rpc('get_tables'); // Some projects have this helper
+  if (error) {
+    // If no helper, try to query a common table
+    console.log('Error listing tables, trying direct queries...');
+    
+    for (const table of ['users', 'profiles', 'residents', 'organization_users']) {
+        const { error: checkError } = await supabase.from(table).select('count', { count: 'exact', head: true });
+        console.log(`Table '${table}': ${checkError ? 'NOT FOUND (' + checkError.code + ')' : 'EXISTS'}`);
     }
-    if (data && data.length > 0) {
-      console.log('Columns:', Object.keys(data[0]))
-    } else {
-      console.log('Table exists but has no data.')
-    }
+  } else {
+    console.log('Tables:', data);
   }
 }
 
-check()
+listTables();

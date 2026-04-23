@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Lock, Loader2, CheckCircle2, ArrowRight, ShieldCheck } from 'lucide-react'
+import { resetPasswordWithCodeAction } from '@/app/actions/auth-actions'
 
 export default function ResetPasswordClient() {
     const [password, setPassword] = useState('')
@@ -99,10 +100,18 @@ export default function ResetPasswordClient() {
         setError('')
 
         try {
-            const { error: resetError } = await supabase.auth.updateUser({
-                password: password
-            })
-            if (resetError) throw resetError
+            // USAR LA ACCIÓN DE SERVIDOR ROBUSTA
+            const result = await resetPasswordWithCodeAction(
+                password,
+                authParams?.code,
+                authParams?.token_hash,
+                authParams?.type
+            )
+
+            if (!result.success) {
+                throw new Error(result.error || 'Error al actualizar la contraseña')
+            }
+
             setSuccess(true)
             setTimeout(() => {
                 router.push('/login')

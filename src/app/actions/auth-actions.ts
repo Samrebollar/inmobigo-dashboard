@@ -44,3 +44,42 @@ export async function getUserRoleAction(userId: string) {
         return { success: true, role: 'user', redirectPath: '/dashboard' };
     }
 }
+
+export async function resetPasswordWithCodeAction(
+    password: string,
+    code?: string,
+    token_hash?: string,
+    type?: string
+) {
+    const supabase = await createClient();
+
+    try {
+        // 1. Validar la identidad primero en el servidor
+        if (code) {
+            const { error: authError } = await supabase.auth.exchangeCodeForSession(code);
+            if (authError) throw authError;
+        } else if (token_hash && type) {
+            const { error: authError } = await supabase.auth.verifyOtp({
+                token_hash,
+                type: type as any,
+            });
+            if (authError) throw authError;
+        } else {
+            // Si no hay código ni hash, verificar si ya hay una sesión (para navegadores que sí la guardaron)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error('No se detectó una invitación válida o sesión activa.');
+        }
+
+        // 2. Una vez validado (ya tenemos sesión en el servidor), actualizar la contraseña
+        const { error: updateError } = await supabase.auth.updateUser({
+            password: password,
+        });
+
+        if (updateError) throw updateError;
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('❌ [resetPasswordWithCodeAction] Error:', error.message);
+        return { success: false, error: error.message };
+    }
+}

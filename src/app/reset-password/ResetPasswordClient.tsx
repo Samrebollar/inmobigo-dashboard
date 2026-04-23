@@ -30,29 +30,27 @@ export default function ResetPasswordClient() {
             
             // 2. Revisar Fragmento (#access_token=...) muy común en móviles
             const hash = window.location.hash
-            const hasHashToken = hash.includes('access_token=')
-
-            if (hasHashToken) {
-                // Dar un momento para que Supabase procese el fragmento automáticamente
-                await new Promise(r => setTimeout(r, 800))
+            if (hash.includes('access_token=')) {
+                // Si hay un token en el fragmento, el usuario YA está autenticado en el cliente.
+                // Intentamos capturar la sesión para estar seguros.
+                const { data: { session } } = await supabase.auth.getSession()
+                if (session) {
+                    setActivated(true)
+                } else {
+                    // Si el fragmento está pero la sesión no, esperamos un poco (proceso de Supabase)
+                    await new Promise(r => setTimeout(r, 1000))
+                    const { data: { session: retrySession } } = await supabase.auth.getSession()
+                    if (retrySession) setActivated(true)
+                }
             }
 
-            // 3. Confirmar la sesión real
-            const { data: { session } } = await supabase.auth.getSession()
-            
-            if (session) {
-                setActivated(true)
-            } else if (code || token_hash) {
+            // 3. Si tenemos parámetros directos, guardarlos para la acción de servidor
+            if (code || token_hash) {
                 setAuthParams({ 
                     code: code || undefined, 
                     token_hash: token_hash || undefined, 
                     type: type || undefined 
                 })
-            } else if (!hasHashToken) {
-                // Solo mostrar error si no hay rastro de nada después de 2 segundos
-                setTimeout(() => {
-                    if (!activated) setError('No se detectó una invitación válida. Usa el enlace de tu correo.')
-                }, 2000)
             }
         }
         checkAuth()
@@ -100,12 +98,16 @@ export default function ResetPasswordClient() {
         setError('')
 
         try {
-            // USAR LA ACCIÓN DE SERVIDOR ROBUSTA
+            // Obtener el token de acceso actual si existe una sesión en el cliente
+            const { data: { session } } = await supabase.auth.getSession()
+
+            // USAR LA ACCIÓN DE SERVIDOR ROBUSTA PASANDO EL ACCESS TOKEN COMO RESPALDO
             const result = await resetPasswordWithCodeAction(
                 password,
                 authParams?.code,
                 authParams?.token_hash,
-                authParams?.type
+                authParams?.type,
+                session?.access_token // Pasar el token de la sesión del móvil
             )
 
             if (!result.success) {

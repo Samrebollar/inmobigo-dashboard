@@ -51,13 +51,21 @@ export async function resetPasswordWithCodeAction(
     password: string,
     code?: string,
     token_hash?: string,
-    type?: string
+    type?: string,
+    access_token?: string
 ) {
     const supabase = await createClient();
 
     try {
         // 1. Validar la identidad primero en el servidor
-        if (code) {
+        if (access_token) {
+            // Si el cliente ya nos pasó la llave maestra, la usamos
+            const { error: authError } = await supabase.auth.setSession({
+                access_token,
+                refresh_token: '' // No necesitamos refresh para esta operación única
+            });
+            if (authError) throw authError;
+        } else if (code) {
             const { error: authError } = await supabase.auth.exchangeCodeForSession(code);
             if (authError) throw authError;
         } else if (token_hash && type) {
@@ -72,7 +80,7 @@ export async function resetPasswordWithCodeAction(
             if (!session) throw new Error('No se detectó una invitación válida o sesión activa.');
         }
 
-        // 2. Una vez validado (ya tenemos sesión en el servidor), actualizar la contraseña
+        // 2. Una vez validado, actualizar la contraseña
         const { error: updateError } = await supabase.auth.updateUser({
             password: password,
         });

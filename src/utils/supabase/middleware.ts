@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
         pathname.startsWith('/auth') || 
         pathname.startsWith('/register') || 
         pathname.startsWith('/reset-password') || 
+        pathname.startsWith('/auth/confirm') || 
         pathname.startsWith('/api/debug-limits') ||
         pathname.includes('.')
 

@@ -29,29 +29,32 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  // Capturar la respuesta de redirección
-  const response = NextResponse.redirect(new URL(next, request.url))
-
-  // Caso 1: Flujo PKCE con 'code'
+  // 1. Intercambiar el código o validar el token
+  let authError = null
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      // Importante: El middleware de Supabase ya manejó las cookies en cookieStore
-      return response
-    }
+    authError = error
+  } else if (token_hash && type) {
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash })
+    authError = error
+  } else {
+    authError = new Error('No code or token_hash found')
   }
 
-  // Caso 2: Flujo OTP con 'token_hash'
-  if (token_hash && type) {
-    const { error } = await supabase.auth.verifyOtp({
-      type,
-      token_hash,
-    })
-    if (!error) {
-      return response
-    }
+  // 2. Si hubo error, redirigir al login
+  if (authError) {
+    console.error('Auth Confirmation Error:', authError)
+    return NextResponse.redirect(new URL('/login?error=auth-failure', request.url))
   }
 
-  // Si algo falla, redirigir al login con error
-  return NextResponse.redirect(new URL('/login?error=auth-failure', request.url))
+  // 3. ¡ESTA ES LA CLAVE! Crear la respuesta y copiar las cookies MANUALMENTE
+  const response = NextResponse.redirect(new URL(next, request.url))
+  
+  // Obtenemos todas las cookies que Supabase acaba de intentar poner en el almacén
+  const allCookies = cookieStore.getAll()
+  allCookies.forEach(cookie => {
+    response.cookies.set(cookie.name, cookie.value)
+  })
+
+  return response
 }

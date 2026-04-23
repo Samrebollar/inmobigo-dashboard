@@ -15,6 +15,8 @@ export interface UserRoleContext {
     role: Role | null
     loading: boolean
     organizationId: string | null
+    businessType: 'condominio' | 'propiedades' | null
+    isPropiedades: boolean
     permissions: Permission[]
     isOwner: boolean
     isAdmin: boolean

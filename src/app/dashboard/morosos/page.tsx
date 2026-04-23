@@ -125,8 +125,8 @@ export default function MorososPage() {
     <div className="mx-auto max-w-7xl space-y-8 p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Gestión de Morosos</h1>
-          <p className="text-zinc-400">Visualiza a los inquilinos con atrasos y da seguimiento a la cobranza.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white">Cobranza y Morosidad</h1>
+          <p className="text-zinc-400">Supervisa, automatiza y da seguimiento a los adeudos de tus residentes en tiempo real</p>
         </div>
       </div>
 
@@ -142,7 +142,7 @@ export default function MorososPage() {
           <div className="absolute inset-x-0 -top-px h-px w-full bg-gradient-to-r from-transparent via-rose-500/50 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
           <div className="p-6">
             <div className="flex flex-row items-center justify-between pb-4">
-              <h3 className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">Total Morosos</h3>
+              <h3 className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">Morosos Activos</h3>
               <div className="rounded-full bg-rose-500/10 p-2 text-rose-500 transition-colors group-hover:bg-rose-500/20">
                 <UserX className="h-4 w-4" />
               </div>
@@ -151,7 +151,7 @@ export default function MorososPage() {
               <div className="flex items-baseline gap-2">
                 <div className="text-3xl font-bold tracking-tight text-white">{stats.totalMorosos}</div>
               </div>
-              <p className="text-xs text-zinc-500 mt-2 font-medium">Residentes con deuda</p>
+              <p className="text-xs text-zinc-500 mt-2 font-medium">Residentes con pagos pendientes registrados</p>
             </div>
           </div>
         </motion.div>
@@ -178,7 +178,7 @@ export default function MorososPage() {
                   ${stats.deudaTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
-              <p className="text-xs text-zinc-500 mt-2 font-medium">Monto pendiente de cobro</p>
+              <p className="text-xs text-zinc-500 mt-2 font-medium">Monto acumulado por cobrar</p>
             </div>
           </div>
         </motion.div>

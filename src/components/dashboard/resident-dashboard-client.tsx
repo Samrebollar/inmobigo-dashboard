@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Link from 'next/link'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface ResidentDashboardClientProps {
     resident: any
@@ -37,6 +38,7 @@ interface ResidentDashboardClientProps {
 
 export default function ResidentDashboardClient({ resident, userName }: ResidentDashboardClientProps) {
     const supabase = createClient()
+    const { isPropiedades } = useUserRole()
     const [announcements, setAnnouncements] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -350,7 +352,9 @@ export default function ResidentDashboardClient({ resident, userName }: Resident
                                     <span className="text-[9px] font-bold uppercase text-indigo-400 tracking-widest">Servicios Seguros</span>
                                 </div>
                                 <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">Realiza tus pagos en segundos</h2>
-                                <p className="text-zinc-500 text-sm max-w-sm leading-relaxed">Administra las cuotas de tu propiedad de forma rápida y confiable.</p>
+                                <p className="text-zinc-500 text-sm max-w-sm leading-relaxed">
+                                    {isPropiedades ? 'Administra las rentas de tu propiedad de forma rápida y confiable.' : 'Administra las cuotas de tu propiedad de forma rápida y confiable.'}
+                                </p>
                             </div>
                             
                             <Button className="h-14 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 border border-white/10 font-bold tracking-wide transition-all active:scale-95">
@@ -373,7 +377,7 @@ export default function ResidentDashboardClient({ resident, userName }: Resident
 
                             <div className="space-y-3">
                                 {[
-                                    { title: 'Pago Verificado', desc: 'Cuota de Abril confirmada', date: 'Hoy', icon: CheckCircle2, color: 'emerald' },
+                                    { title: 'Pago Verificado', desc: isPropiedades ? 'Renta de Abril confirmada' : 'Cuota de Abril confirmada', date: 'Hoy', icon: CheckCircle2, color: 'emerald' },
                                     { title: 'Incidencia Reportada', desc: 'Fuga en el área común', date: 'Ayer', icon: MessageSquare, color: 'amber' },
                                     { title: 'Aviso Importante', desc: 'Mantenimiento preventivo', date: '24 Mar', icon: Bell, color: 'indigo' }
                                 ].map((act, i) => (

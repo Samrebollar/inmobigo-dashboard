@@ -9,6 +9,8 @@ export function useUserRole(): UserRoleContext {
         role: null,
         loading: true,
         organizationId: null,
+        businessType: null,
+        isPropiedades: false,
         permissions: [],
         isOwner: false,
         isAdmin: false,
@@ -26,21 +28,30 @@ export function useUserRole(): UserRoleContext {
                     return
                 }
 
-                // Fetch org user to get role
+                // Fetch org user to get role and organization business type
                 const { data: orgUser, error } = await supabase
                     .from('organization_users')
-                    .select('role_new, organization_id')
+                    .select(`
+                        role_new, 
+                        organization_id,
+                        organizations (
+                            business_type
+                        )
+                    `)
                     .eq('user_id', user.id)
                     .single()
 
                 if (orgUser && !error) {
                     const role = orgUser.role_new as Role
                     const permissions = ROLE_PERMISSIONS[role] || []
+                    const businessType = (orgUser.organizations as any)?.business_type || 'condominio'
 
                     setContext({
                         role,
                         loading: false,
                         organizationId: orgUser.organization_id,
+                        businessType,
+                        isPropiedades: businessType === 'propiedades',
                         permissions,
                         isOwner: role === 'owner' || role === 'admin_propiedad',
                         isAdmin: ['owner', 'admin', 'admin_condominio', 'admin_propiedad'].includes(role),

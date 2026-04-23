@@ -36,6 +36,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
 import { unitsService } from '@/services/units-service'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface Condominium {
     id: string
@@ -54,6 +55,7 @@ interface ResidentWithFinance extends Resident {
 
 export default function ResidentsPage() {
     const supabase = createClient()
+    const { isPropiedades } = useUserRole()
 
     // State
     const [loading, setLoading] = useState(true)
@@ -300,8 +302,10 @@ export default function ResidentsPage() {
                 {/* Forced recompile console log */}
                 {console.log('Rendering residents page (cache busted)')}
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Residentes</h1>
-                    <p className="text-sm md:text-base text-zinc-400">Directorio global de residentes por condominio.</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">{isPropiedades ? 'Inquilinos' : 'Residentes'}</h1>
+                    <p className="text-sm md:text-base text-zinc-400">
+                        {isPropiedades ? 'Directorio global de inquilinos por propiedad.' : 'Directorio global de residentes por condominio.'}
+                    </p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4">
                     <div className="relative">
@@ -336,7 +340,7 @@ export default function ResidentsPage() {
                             className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white gap-2 h-10 px-3 md:px-4"
                             disabled={!selectedCondo}
                         >
-                            <Plus className="h-4 w-4" /> <span className="hidden xs:inline">Nuevo Residente</span><span className="xs:hidden">Nuevo</span>
+                            <Plus className="h-4 w-4" /> <span className="hidden xs:inline">{isPropiedades ? 'Nuevo Inquilino' : 'Nuevo Residente'}</span><span className="xs:hidden">Nuevo</span>
                         </Button>
                     </div>
                 </div>

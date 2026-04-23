@@ -12,6 +12,8 @@ import { Unit } from '@/types/units'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
 import { toast } from 'sonner'
+import { useUserRole } from '@/hooks/use-user-role'
+import { adminCreateResidentAction } from '@/app/actions/resident-actions'
 
 interface CreateResidentModalProps {
     isOpen: boolean
@@ -25,6 +27,7 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
     const [loading, setLoading] = useState(false)
     const [units, setUnits] = useState<Unit[]>([])
     const { isDemo } = useDemoMode()
+    const { isPropiedades } = useUserRole()
 
     const [formData, setFormData] = useState<Partial<CreateResidentDTO>>({
         first_name: '',
@@ -110,11 +113,18 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                 const { vehicles, ...updatePayload } = submitData
                 result = await residentsService.update(residentToEdit.id, updatePayload as any)
             } else {
-                // Service.create handles both resident and vehicles
-                result = await residentsService.create({
-                    ...submitData as CreateResidentDTO,
+                // USAR ACCIÓN DE SERVIDOR PARA CREACIÓN (Maneja Invitaciones)
+                const resAction = await adminCreateResidentAction({
+                    ...submitData,
                     condominium_id: condominiumId,
+                    business_type: isPropiedades ? 'propiedades' : 'condominio'
                 })
+
+                if (!resAction.success) {
+                    throw new Error(resAction.error)
+                }
+                
+                result = resAction.data
             }
             onSuccess(result)
             onClose()
@@ -123,11 +133,11 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
 
             if (error.code === '23505' || error.message?.includes('residents_email_key')) {
                 toast.error('Correo duplicado', {
-                    description: 'Este correo electrónico ya está registrado para otro residente en este condominio.',
+                    description: `Este correo electrónico ya está registrado para otro ${isPropiedades ? 'inquilino' : 'residente'} en este condominio.`,
                 })
             } else {
                 toast.error('Error al guardar', {
-                    description: error.message || 'Ocurrió un error inesperado al procesar el residente.',
+                    description: error.message || `Ocurrió un error inesperado al procesar el ${isPropiedades ? 'inquilino' : 'residente'}.`,
                 })
             }
         } finally {
@@ -147,7 +157,7 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                     >
                         <div className="flex items-center justify-between border-b border-zinc-800 p-6 bg-zinc-900/50">
                             <h2 className="text-xl font-bold text-white">
-                                {residentToEdit ? 'Editar Residente' : 'Nuevo Residente'}
+                                {residentToEdit ? (isPropiedades ? 'Editar Inquilino' : 'Editar Residente') : (isPropiedades ? 'Nuevo Inquilino' : 'Nuevo Residente')}
                             </h2>
                             <button onClick={onClose} className="rounded-full p-2 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors">
                                 <X className="h-5 w-5" />
@@ -296,7 +306,7 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                             <div className="pt-4">
                                 <Button type="submit" isLoading={loading} className="w-full gap-2 bg-indigo-600 hover:bg-indigo-500 text-white">
                                     <Check className="h-4 w-4" />
-                                    {residentToEdit ? 'Actualizar Residente' : 'Guardar Residente'}
+                                    {residentToEdit ? (isPropiedades ? 'Actualizar Inquilino' : 'Actualizar Residente') : (isPropiedades ? 'Guardar Inquilino' : 'Guardar Residente')}
                                 </Button>
                             </div>
                         </form>

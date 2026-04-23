@@ -11,6 +11,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface AdminDashboardClientProps {
     userEmail?: string
@@ -30,6 +31,7 @@ interface AdminDashboardClientProps {
 }
 
 export default function AdminDashboardClient({ userEmail, userName, stats, recentActivity = [] }: AdminDashboardClientProps) {
+    const { isPropiedades } = useUserRole()
     const [totalIngresos, setTotalIngresos] = useState<number | null>(null)
     const [isLoadingIngresos, setIsLoadingIngresos] = useState(true)
     const [ingresosError, setIngresosError] = useState<string | null>(null)
@@ -355,7 +357,9 @@ export default function AdminDashboardClient({ userEmail, userName, stats, recen
                         <Card className="h-full bg-zinc-900 border-zinc-800">
                             <CardHeader>
                                 {/* Re-imported missing icons at the top of file later if needed, assuming Wrench, Users, etc. are already imported */}
-                                <CardTitle className="text-white">Actividad del condominio</CardTitle>
+                                <CardTitle className="text-white">
+                                    {isPropiedades ? 'Actividad de la propiedad' : 'Actividad del condominio'}
+                                </CardTitle>
                                 <CardDescription className="text-zinc-400">Últimos movimientos registrados.</CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -513,7 +517,9 @@ export default function AdminDashboardClient({ userEmail, userName, stats, recen
                                         <Building className="h-6 w-6" />
                                     </div>
                                     <div>
-                                        <h3 className="font-medium text-white">Nuevo Condominio</h3>
+                                        <h3 className="font-medium text-white">
+                                            {isPropiedades ? 'Nueva Propiedad' : 'Nuevo Condominio'}
+                                        </h3>
                                         <p className="text-xs text-zinc-500 mt-1">Registra una nueva propiedad</p>
                                     </div>
                                 </CardContent>

@@ -376,7 +376,7 @@ export function DelinquencyReportModal({
                         Reporte de Morosidad Inteligente
                     </h2>
                     <p className="text-zinc-400 mt-1">
-                        Análisis automático de riesgo y antigüedad de deuda.
+                        Análisis de antigüedad, riesgo y comportamiento de pago
                     </p>
                 </div>
             </div>

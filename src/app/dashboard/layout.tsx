@@ -23,9 +23,17 @@ export default async function DashboardLayout({
     // 1. Check if Admin/Staff (STRICT: Must be in organization_users)
     const { data: orgUser } = await supabase
         .from('organization_users')
-        .select('role_new')
+        .select(`
+            role_new,
+            organizations (
+                business_type
+            )
+        `)
         .eq('user_id', user.id)
         .single()
+
+    const businessType = (orgUser?.organizations as any)?.business_type || 'condominio'
+    const isPropiedades = businessType === 'propiedades'
 
     // 2. Check if Resident (STRICT: Must be in residents)
     const { data: resident } = await supabase
@@ -153,7 +161,7 @@ export default async function DashboardLayout({
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Users size={18} />
-                        <span>Residentes</span>
+                        <span>{isPropiedades ? 'Inquilinos' : 'Residentes'}</span>
                     </Link>
                 )}
 
@@ -164,7 +172,7 @@ export default async function DashboardLayout({
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
                             <CreditCard size={18} />
-                            <span>{isResident ? 'Pagos' : 'Finanzas'}</span>
+                            <span>{isResident ? 'Pagos' : (isPropiedades ? 'Rentas' : 'Finanzas')}</span>
                         </Link>
                         {!isResident && (
                             <Link
@@ -195,7 +203,7 @@ export default async function DashboardLayout({
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
                         >
                             <BarChart3 size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                            <span>Finanzas del Condominio</span>
+                            <span>{isPropiedades ? 'Finanzas de la Propiedad' : 'Finanzas del Condominio'}</span>
                         </Link>
                         <Link
                             href="/dashboard/amenidades"

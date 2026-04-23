@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import { getUserRoleAction } from '@/app/actions/auth-actions'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Mail, Lock, Loader2, ArrowRight, Building2, Home, UserCircle2 } from 'lucide-react'
@@ -23,18 +24,35 @@ export function LoginForm() {
         setError('')
 
         const supabase = createClient()
-        const { error } = await supabase.auth.signInWithPassword({
+        
+        // Ejecutar el inicio de sesión
+        const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
             email,
-            password,
+            password
         })
 
-        if (error) {
+        if (signInError) {
             setError('Credenciales incorrectas.')
             setLoading(false)
             return
         }
 
-        router.push('/dashboard')
+        if (!authData.user) {
+            setError('No se pudo obtener la información del usuario.')
+            setLoading(false)
+            return
+        }
+
+        // 3. Detectar Rol y Redirección Automática
+        const roleResult = await getUserRoleAction(authData.user.id);
+        
+        if (roleResult.success && roleResult.redirectPath) {
+            console.log(`✅ Login exitoso. Redirigiendo a ${roleResult.redirectPath}`);
+            router.push(roleResult.redirectPath);
+        } else {
+            // Fallback por si la detección falla
+            router.push('/dashboard');
+        }
     }
 
     const isFormValid = email.length > 0 && password.length > 0

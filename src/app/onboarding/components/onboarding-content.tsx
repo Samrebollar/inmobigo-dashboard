@@ -60,6 +60,8 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
             if (!orgId) {
                 console.log('No se encontró organización previa, creando una nueva...')
                 const defaultName = type === 'admin_condominio' ? 'Mi Condominio' : 'Mi Portafolio de Propiedades'
+                const businessType = type === 'admin_condominio' ? 'condominio' : 'propiedades'
+                
                 const { data: newOrg, error: orgError } = await supabase
                     .from('organizations')
                     .insert({
@@ -67,7 +69,8 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
                         owner_id: userId,
                         plan: 'free',
                         status: 'active',
-                        type: type,
+                        type: type, // admin_condominio o admin_propiedades
+                        business_type: businessType, // condominio o propiedades
                         address: 'Por configurar',
                         total_units: 0,
                         units_limit: 10,
@@ -88,6 +91,15 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
                 console.log('Organización creada exitosamente:', orgId)
             } else {
                 console.log('Utilizando organización existente:', orgId)
+                // Aseguramos que la organización existente tenga el business_type correcto
+                const businessType = type === 'admin_condominio' ? 'condominio' : 'propiedades'
+                await supabase
+                    .from('organizations')
+                    .update({ 
+                        type: type,
+                        business_type: businessType 
+                    })
+                    .eq('id', orgId)
             }
 
             // 3. Create Membership (if not exists)
@@ -116,11 +128,32 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
                 console.log('Membresía creada.')
             }
 
-            // 4. Update profile to link organization
-            console.log('Actualizando perfil final...')
+            // 4. Update public.users and public.profiles for backward compatibility and role assignment
+            console.log('Actualizando datos de usuario y perfil...')
+            
+            const commonRole = type // 'admin_condominio' o 'admin_propiedades'
+            
+            // Actualizar tabla public.users (donde se guarda el rol del sistema)
+            const { error: userTableError } = await supabase
+                .from('users')
+                .update({ 
+                    role: commonRole 
+                    // NO usamos condominium_id ni property_id
+                })
+                .eq('id', userId)
+
+            if (userTableError) {
+                console.error('ERROR TABLA USERS MESSAGE:', userTableError.message)
+            }
+
+            // Actualizar tabla public.profiles (usada para el contexto del frontend)
             const { error: finalProfileError } = await supabase
                 .from('profiles')
-                .update({ organization_id: orgId })
+                .update({ 
+                    organization_id: orgId,
+                    user_type: type,
+                    role_new: 'owner'
+                })
                 .eq('id', userId)
 
             if (finalProfileError) {
@@ -131,12 +164,17 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
             // Update user metadata in Auth (for middleware/RBAC sync)
             console.log('Actualizando metadatos de Auth...')
             await supabase.auth.updateUser({
-                data: { user_type: type, role: 'admin' }
+                data: { 
+                    user_type: type, 
+                    role: commonRole, // Sincronizamos el rol para el middleware
+                    organization_id: orgId
+                }
             })
 
             console.log('Onboarding completado con éxito.')
-            router.push('/dashboard')
-            router.refresh()
+            
+            // Forzar actualización total para que useUserRole capture los cambios desde organization_users
+            window.location.href = '/dashboard'
         } catch (err: any) {
             console.error('--- FALLO CRITICO EN ONBOARDING ---')
             console.error('OBJETO ERROR:', err)

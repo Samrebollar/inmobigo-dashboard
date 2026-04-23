@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { format } from 'date-fns'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface CreateInvoiceModalProps {
     isOpen: boolean
@@ -30,6 +31,7 @@ export function CreateInvoiceModal({
     onSuccess
 }: CreateInvoiceModalProps) {
     const { isDemo, loading: demoLoading } = useDemoMode()
+    const { isPropiedades } = useUserRole()
     const [loading, setLoading] = useState(false)
     const [loadingData, setLoadingData] = useState(false)
 
@@ -50,7 +52,7 @@ export function CreateInvoiceModal({
 
     const [formData, setFormData] = useState({
         residentId: '',
-        concept: 'Cuota de Mantenimiento', // Default value
+        concept: isPropiedades ? 'Renta' : 'Cuota de Mantenimiento', // Default value
         amount: '',
         dueDate: format(new Date(), 'yyyy-MM-dd'),
         notes: ''
@@ -146,8 +148,8 @@ export function CreateInvoiceModal({
             const selectedResident = defaultResident || residents.find(r => r.id === formData.residentId)
 
             if (!selectedResident) {
-                toast.error('Residente no seleccionado', {
-                    description: 'Por favor, elige un residente válido de la lista para generar la factura.',
+                toast.error(`${isPropiedades ? 'Inquilino' : 'Residente'} no seleccionado`, {
+                    description: `Por favor, elige un ${isPropiedades ? 'inquilino' : 'residente'} válido de la lista para generar la factura.`,
                 })
                 return
             }
@@ -155,7 +157,7 @@ export function CreateInvoiceModal({
             // Should verify unit_id presence
             if (!selectedResident.unit_id) {
                 toast.error('Unidad No Asignada', {
-                    description: 'El residente seleccionado no tiene una unidad vinculada. Es necesario asignar una unidad antes de facturar.',
+                    description: `El ${isPropiedades ? 'inquilino' : 'residente'} seleccionado no tiene una unidad vinculada. Es necesario asignar una unidad antes de facturar.`,
                 })
                 return
             }
@@ -180,7 +182,7 @@ export function CreateInvoiceModal({
             // Reset form
             setFormData({
                 residentId: '',
-                concept: 'Cuota de Mantenimiento',
+                concept: isPropiedades ? 'Renta' : 'Cuota de Mantenimiento',
                 amount: '',
                 dueDate: format(new Date(), 'yyyy-MM-dd'),
                 notes: ''
@@ -202,7 +204,7 @@ export function CreateInvoiceModal({
 
                 {/* Resident Selection Section */}
                 <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-300">Residente</label>
+                    <label className="text-sm font-semibold text-slate-300">{isPropiedades ? 'Inquilino' : 'Residente'}</label>
 
                     {defaultResident ? (
                         // Read-Only Card Style driven by provided image
@@ -245,7 +247,7 @@ export function CreateInvoiceModal({
                                 </select>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-slate-500">Residente</label>
+                                <label className="text-xs font-medium text-slate-500">{isPropiedades ? 'Inquilino' : 'Residente'}</label>
                                 <select
                                     className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-indigo-500/50"
                                     required
@@ -272,7 +274,7 @@ export function CreateInvoiceModal({
                         value={formData.concept}
                         onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
                     >
-                        <option value="Cuota de Mantenimiento">Cuota de Mantenimiento</option>
+                        <option value={isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'}>{isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'}</option>
                         <option value="Multa">Multa</option>
                         <option value="Reserva Amenidad">Reserva Amenidad</option>
                         <option value="Otro">Otro</option>
@@ -399,7 +401,7 @@ export function CreateInvoiceModal({
                                 onCheckedChange={setSendEmail}
                                 className="data-[state=checked]:bg-blue-600"
                             />
-                            <span className="text-sm text-slate-200 font-medium select-none">Enviar correo de notificación al residente</span>
+                            <span className="text-sm text-slate-200 font-medium select-none">Enviar correo de notificación al {isPropiedades ? 'inquilino' : 'residente'}</span>
                         </div>
                     </div>
                 </div>

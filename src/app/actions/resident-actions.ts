@@ -158,3 +158,157 @@ export async function registerResidentAction(formData: any) {
         };
     }
 }
+
+/**
+ * Crea un residente o inquilino desde el panel de administración.
+ * Maneja la invitación por email, creación de usuario en auth y vinculación.
+ */
+export async function adminCreateResidentAction(payload: any) {
+    const { 
+        email, 
+        first_name, 
+        last_name, 
+        phone, 
+        condominium_id, 
+        unit_id, 
+        debt_amount, 
+        status,
+        vehicles,
+        business_type 
+    } = payload;
+    
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // SOPORTE PARA MODO DEMO
+    if (condominium_id?.startsWith('demo-')) {
+        console.log('🧪 [adminCreateResidentAction] Modo DEMO detectado, simulando creación...');
+        return { 
+            success: true, 
+            data: { 
+                id: `demo-res-${Math.random().toString(36).substr(2, 9)}`,
+                email: cleanEmail,
+                first_name,
+                last_name,
+                phone,
+                status: status || 'active',
+                condominium_id,
+                resident_type: business_type === 'propiedades' ? 'propiedades' : 'condominio',
+                role: business_type === 'propiedades' ? 'tenant' : 'resident',
+                is_registered: false,
+                created_at: new Date().toISOString()
+            } 
+        };
+    }
+
+    const admin = createAdminClient();
+
+    try {
+        console.log(`🚀 [adminCreateResidentAction] Iniciando creación para: ${cleanEmail}`);
+        
+        // 0. Verificar duplicados en la tabla residents
+        const { data: existingResident } = await admin
+            .from('residents')
+            .select('id')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+            
+        if (existingResident) {
+            return { 
+                success: false, 
+                error: `Ya existe un registro con el correo ${cleanEmail} en la base de datos de residentes.` 
+            };
+        }
+
+        // 1. Verificar si el usuario ya existe en auth
+        const { data: userData, error: searchError } = await admin.auth.admin.listUsers({
+            perPage: 1000
+        });
+        
+        if (searchError) {
+            console.error('❌ Error listing users:', searchError);
+            return { success: false, error: 'Error al verificar usuarios existentes.' };
+        }
+        
+        let userId: string | null = null;
+        const existingAuthUser = userData.users.find(u => u.email?.toLowerCase() === cleanEmail);
+        
+        if (existingAuthUser) {
+            userId = existingAuthUser.id;
+            console.log(`ℹ️ [adminCreateResidentAction] Usuario ya existe en Auth: ${userId}`);
+        } else {
+            // 2. Invitar al usuario por email para que configure su contraseña
+            console.log(`👤 [adminCreateResidentAction] Invitando nuevo usuario: ${cleanEmail}`);
+            
+            const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
+                data: {
+                    first_name,
+                    last_name,
+                    full_name: `${first_name} ${last_name}`,
+                    role: business_type === 'propiedades' ? 'tenant' : 'resident',
+                    user_type: business_type === 'propiedades' ? 'tenant' : 'resident'
+                }
+            });
+            
+            if (authError) {
+                console.error('❌ Error en inviteUserByEmail:', authError);
+                return { success: false, error: `Error de Supabase Auth: ${authError.message}` };
+            }
+            
+            userId = authData.user.id;
+        }
+
+        // 3. Determinar campos dinámicos según el tipo de negocio
+        const resRole = business_type === 'propiedades' ? 'tenant' : 'resident';
+        const resType = business_type === 'propiedades' ? 'propiedades' : 'condominio';
+
+        // 4. Insertar en la tabla residents
+        const { data: newResident, error: residentError } = await admin
+            .from('residents')
+            .insert({
+                email: cleanEmail,
+                first_name,
+                last_name,
+                phone,
+                condominium_id,
+                unit_id: unit_id || null,
+                debt_amount: debt_amount || 0,
+                status: status || 'active',
+                user_id: userId,
+                role: resRole,
+                resident_type: resType,
+                is_registered: false 
+            })
+            .select('id, email')
+            .single();
+
+        if (residentError) {
+            console.error('❌ [adminCreateResidentAction] Error creando residente:', residentError);
+            return { success: false, error: `Error de base de datos: ${residentError.message}` };
+        }
+
+        // 5. Insertar vehículos si existen
+        if (vehicles && vehicles.length > 0) {
+            const vehicleInserts = vehicles.map((v: any) => ({
+                resident_id: newResident.id,
+                plate: v.plate,
+                brand: v.brand,
+                color: v.color
+            }));
+            const { error: vehError } = await admin.from('vehicles').insert(vehicleInserts);
+            if (vehError) console.error('⚠️ Error insertando vehículos:', vehError);
+        }
+
+        console.log(`✅ [adminCreateResidentAction] Todo completado con éxito para: ${cleanEmail}`);
+        return { 
+            success: true, 
+            data: { id: newResident.id, email: newResident.email } 
+        };
+
+    } catch (err: any) {
+        console.error('❌ [adminCreateResidentAction] Error crítico:', err);
+        return { 
+            success: false, 
+            error: 'Ocurrió un fallo inesperado en el servidor durante la creación del residente.' 
+        };
+    }
+}

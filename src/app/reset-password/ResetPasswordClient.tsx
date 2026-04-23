@@ -31,10 +31,15 @@ export default function ResetPasswordClient() {
             const hash = window.location.hash
             const hasHashToken = hash.includes('access_token=')
 
-            // 3. Si hay sesión vieja o en el hash, marcar como activado
+            if (hasHashToken) {
+                // Dar un momento para que Supabase procese el fragmento automáticamente
+                await new Promise(r => setTimeout(r, 800))
+            }
+
+            // 3. Confirmar la sesión real
             const { data: { session } } = await supabase.auth.getSession()
             
-            if (session || hasHashToken) {
+            if (session) {
                 setActivated(true)
             } else if (code || token_hash) {
                 setAuthParams({ 
@@ -42,8 +47,8 @@ export default function ResetPasswordClient() {
                     token_hash: token_hash || undefined, 
                     type: type || undefined 
                 })
-            } else {
-                // Si pasan 2 segundos y no hay nada, mostrar error
+            } else if (!hasHashToken) {
+                // Solo mostrar error si no hay rastro de nada después de 2 segundos
                 setTimeout(() => {
                     if (!activated) setError('No se detectó una invitación válida. Usa el enlace de tu correo.')
                 }, 2000)

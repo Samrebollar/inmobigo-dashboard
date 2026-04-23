@@ -20,26 +20,37 @@ export default function ResetPasswordClient() {
     const [authParams, setAuthParams] = useState<{code?: string, token_hash?: string, type?: string} | null>(null)
 
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search)
-        const code = params.get('code')
-        const token_hash = params.get('token_hash')
-        const type = params.get('type')
-        
-        if (code || token_hash) {
-            setAuthParams({ 
-                code: code || undefined, 
-                token_hash: token_hash || undefined, 
-                type: type || undefined 
-            })
-        }
+        const checkAuth = async () => {
+            // 1. Revisar Params (?code=...)
+            const params = new URLSearchParams(window.location.search)
+            const code = params.get('code')
+            const token_hash = params.get('token_hash')
+            const type = params.get('type')
+            
+            // 2. Revisar Fragmento (#access_token=...) muy común en móviles
+            const hash = window.location.hash
+            const hasHashToken = hash.includes('access_token=')
 
-        // Verificar si ya existe una sesión válida
-        const checkSession = async () => {
+            // 3. Si hay sesión vieja o en el hash, marcar como activado
             const { data: { session } } = await supabase.auth.getSession()
-            if (session) setActivated(true)
+            
+            if (session || hasHashToken) {
+                setActivated(true)
+            } else if (code || token_hash) {
+                setAuthParams({ 
+                    code: code || undefined, 
+                    token_hash: token_hash || undefined, 
+                    type: type || undefined 
+                })
+            } else {
+                // Si pasan 2 segundos y no hay nada, mostrar error
+                setTimeout(() => {
+                    if (!activated) setError('No se detectó una invitación válida. Usa el enlace de tu correo.')
+                }, 2000)
+            }
         }
-        checkSession()
-    }, [])
+        checkAuth()
+    }, [activated])
 
     const handleActivateAndProceed = async () => {
         if (!authParams) return

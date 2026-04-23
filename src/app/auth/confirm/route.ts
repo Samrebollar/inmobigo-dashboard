@@ -47,13 +47,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=auth-failure', request.url))
   }
 
-  // 3. ¡ESTA ES LA CLAVE! Crear la respuesta y copiar las cookies MANUALMENTE
+  // 3. ¡ESTA ES LA CLAVE! Crear la respuesta y copiar las cookies MANUALMENTE CON OPCIONES
   const response = NextResponse.redirect(new URL(next, request.url))
   
   // Obtenemos todas las cookies que Supabase acaba de intentar poner en el almacén
   const allCookies = cookieStore.getAll()
+  
   allCookies.forEach(cookie => {
-    response.cookies.set(cookie.name, cookie.value)
+    // Copiamos la cookie con TODAS sus opciones originales
+    response.cookies.set({
+        name: cookie.name,
+        value: cookie.value,
+        path: '/',
+        sameSite: 'lax',
+        secure: true,
+        httpOnly: true,
+        maxAge: 60 * 60 * 24 * 7 // 1 semana por seguridad
+    })
   })
 
   return response

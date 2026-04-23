@@ -9,10 +9,61 @@ export default function ResetPasswordClient() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
+    const [verifying, setVerifying] = useState(false)
+    const [activated, setActivated] = useState(false)
     const [success, setSuccess] = useState(false)
     const [error, setError] = useState('')
     const router = useRouter()
     const supabase = createClient()
+
+    // Detectar si necesitamos activar la cuenta primero
+    const [authParams, setAuthParams] = useState<{code?: string, token_hash?: string, type?: string} | null>(null)
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const code = params.get('code')
+        const token_hash = params.get('token_hash')
+        const type = params.get('type')
+        
+        if (code || token_hash) {
+            setAuthParams({ 
+                code: code || undefined, 
+                token_hash: token_hash || undefined, 
+                type: type || undefined 
+            })
+        } else {
+            // Si no hay parámetros, verificar si ya existe una sesión
+            const checkSession = async () => {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (session) setActivated(true)
+            }
+            checkSession()
+        }
+    }, [])
+
+    const handleActivateAndProceed = async () => {
+        if (!authParams) return
+        setVerifying(true)
+        setError('')
+
+        try {
+            if (authParams.code) {
+                const { error: err } = await supabase.auth.exchangeCodeForSession(authParams.code)
+                if (err) throw err
+            } else if (authParams.token_hash && authParams.type) {
+                const { error: err } = await supabase.auth.verifyOtp({ 
+                    token_hash: authParams.token_hash, 
+                    type: authParams.type as any 
+                })
+                if (err) throw err
+            }
+            setActivated(true)
+        } catch (err: any) {
+            setError('El enlace de seguridad es inválido o ha expirado. Por favor solicita uno nuevo.')
+        } finally {
+            setVerifying(false)
+        }
+    }
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -29,19 +80,12 @@ export default function ResetPasswordClient() {
         setError('')
 
         try {
-            // Como ya hay una sesión de servidor (cookie), Supabase Client la detectará
-            // y podrá realizar el update sin problemas.
             const { error: resetError } = await supabase.auth.updateUser({
                 password: password
             })
-
             if (resetError) throw resetError
-
             setSuccess(true)
-            setTimeout(() => {
-                router.push('/login')
-            }, 3000)
-
+            setTimeout(() => { router.push('/login') }, 3000)
         } catch (err: any) {
             setError(err.message || 'Error al actualizar la contraseña')
         } finally {
@@ -66,6 +110,44 @@ export default function ResetPasswordClient() {
                 <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
                     <div className="h-full bg-emerald-500 animate-[progress_3s_linear_forwards]" />
                 </div>
+            </div>
+        )
+    }
+
+    // --- ESCUDO DE ACTIVACIÓN (PARA MÓVILES) ---
+    if (!activated && authParams) {
+        return (
+            <div className="relative z-10 w-full max-w-sm backdrop-blur-2xl bg-white/[0.04] border border-white/15 rounded-[2.5rem] p-8 shadow-2xl space-y-8 animate-fade-in-up">
+                <div className="flex justify-center">
+                    <div className="h-20 w-20 rounded-3xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                        <ShieldCheck className="h-10 w-10 text-indigo-400" />
+                    </div>
+                </div>
+                <div className="space-y-2 text-center">
+                    <h1 className="text-2xl font-bold text-white">Verificación de Acceso</h1>
+                    <p className="text-zinc-400 text-sm">
+                        Haga clic en el botón de abajo para activar su invitación y configurar su contraseña.
+                    </p>
+                </div>
+                {error && (
+                    <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-400 text-center animate-shake">
+                        {error}
+                    </div>
+                )}
+                <button 
+                    onClick={handleActivateAndProceed}
+                    disabled={verifying}
+                    className="group relative flex items-center justify-center gap-3 w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all active:scale-[0.98] shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                >
+                    {verifying ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                        <>
+                            <span>ACTIVAR MI CUENTA</span>
+                            <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        </>
+                    )}
+                </button>
             </div>
         )
     }

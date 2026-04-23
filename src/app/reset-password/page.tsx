@@ -50,10 +50,15 @@ export default async function ResetPasswordPage({
         )
     }
 
-    // 3. Verificar la sesión real
+    // 1. Verificar la sesión directamente en el SERVIDOR (usando cookies)
     const { data: { session } } = await supabase.auth.getSession()
 
-    if (!session) {
+    // 2. Si no hay sesión Y tampoco hay parámetros de invitación, entonces sí es inválido
+    const codeParam = params.code
+    const token_hashParam = params.token_hash
+    
+    if (!session && !codeParam && !token_hashParam) {
+        console.error('❌ [ResetPasswordPage] No session or auth params found')
         return (
             <div className="relative flex min-h-screen w-full items-center justify-center bg-[#0F172A] p-4 text-center">
                 <div className="max-w-sm space-y-6 animate-fade-in">

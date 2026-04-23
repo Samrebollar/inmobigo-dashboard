@@ -240,6 +240,7 @@ export async function adminCreateResidentAction(payload: any) {
             console.log(`👤 [adminCreateResidentAction] Invitando nuevo usuario: ${cleanEmail}`);
             
             const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/reset-password`,
                 data: {
                     first_name,
                     last_name,

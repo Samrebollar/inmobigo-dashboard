@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Lock, Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
-import { resetPasswordWithCodeAction } from '@/app/actions/auth-actions'
+import { resetPasswordWithCodeAction, adminResetPasswordAction } from '@/app/actions/auth-actions'
 
 export default function ResetPasswordClient() {
     const [password, setPassword] = useState('')
@@ -77,11 +77,10 @@ export default function ResetPasswordClient() {
         setError('')
 
         try {
-            // Intentar obtener el token de acceso más reciente del cliente por si acaso
+            // Intentar primero el método estándar por servidor
             const { data: { session } } = await supabase.auth.getSession()
-
-            // LLAMADA ÚNICA AL SERVIDOR (Validación + Cambio en un solo paso)
-            const result = await resetPasswordWithCodeAction(
+            
+            let result = await resetPasswordWithCodeAction(
                 password,
                 authData?.code,
                 authData?.token_hash,
@@ -89,10 +88,19 @@ export default function ResetPasswordClient() {
                 session?.access_token || authData?.access_token
             )
 
+            // SI FALLA EL MÉTODO ESTÁNDAR (Común en móviles por sesión/tokens)
+            // Pero tenemos el ID del usuario en el cliente, usamos el MODO ADMIN con su ID
+            if (!result.success && session?.user?.id) {
+                console.log('🔄 [ResetPasswordClient] Falló método estándar, intentando MODO ADMIN con UserID:', session.user.id);
+                result = await adminResetPasswordAction(session.user.id, password);
+            }
+
             if (!result.success) throw new Error(result.error)
 
             setSuccess(true)
-            setTimeout(() => { router.push('/login') }, 3000)
+            setTimeout(() => {
+                router.push('/login')
+            }, 3000)
         } catch (err: any) {
             setError(err.message || 'Error al actualizar la contraseña')
         } finally {

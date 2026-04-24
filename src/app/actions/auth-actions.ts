@@ -100,3 +100,22 @@ export async function resetPasswordWithCodeAction(
         return { success: false, error: error.message };
     }
 }
+
+export async function adminResetPasswordAction(userId: string, password: string) {
+    console.log(`🛠️ [adminResetPasswordAction] Forzando cambio de contraseña para: ${userId}`);
+    const admin = createAdminClient();
+
+    try {
+        const { error } = await admin.auth.admin.updateUserById(userId, {
+            password: password
+        });
+
+        if (error) throw error;
+
+        console.log('✅ [adminResetPasswordAction] Contraseña actualizada por administrador');
+        return { success: true };
+    } catch (error: any) {
+        console.error('🔴 [adminResetPasswordAction] Error:', error.message);
+        return { success: false, error: error.message };
+    }
+}

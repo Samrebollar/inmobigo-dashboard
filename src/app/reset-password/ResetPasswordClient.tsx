@@ -14,8 +14,12 @@ function ResetPasswordForm() {
     const router = useRouter()
     const searchParams = useSearchParams()
     
-    const email = searchParams.get('e')
+    const [manualEmail, setManualEmail] = useState('')
+    
+    // Prioridad: URL > Manual
+    const queryEmail = searchParams.get('e')
     const uid = searchParams.get('uid')
+    const email = queryEmail || manualEmail
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -32,9 +36,13 @@ function ResetPasswordForm() {
         setError('')
 
         try {
-            // USAMOS EL MODO ADMIN DIRECTO (Bypass total de fallos de Supabase en celulares)
-            // Esto funciona aunque el enlace de Supabase diga "Expirado"
-            const result = await adminResetPasswordAction(uid || undefined, password, email || undefined)
+            const finalEmail = email || manualEmail;
+            if (!uid && !finalEmail) {
+                throw new Error('Por seguridad, ingresa tu correo electrónico.');
+            }
+
+            // USAMOS EL MODO ADMIN DIRECTO
+            const result = await adminResetPasswordAction(uid || undefined, password, finalEmail || undefined)
 
             if (!result.success) throw new Error(result.error)
 
@@ -85,6 +93,21 @@ function ResetPasswordForm() {
 
             <form onSubmit={handleSave} className="space-y-4">
                 <div className="space-y-3">
+                    {/* CAMPO DE EMAIL MANUAL - Solo se muestra si no lo detectamos en la URL */}
+                    {(!queryEmail && !uid) && (
+                        <div className="relative group animate-fade-in">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-indigo-400 group-focus-within:text-white transition-colors flex items-center justify-center font-bold">@</div>
+                            <input
+                                type="email"
+                                placeholder="CONFIRMA TU CORREO"
+                                className="w-full bg-[#1e293b]/80 border-2 border-indigo-500/30 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 transition-all font-bold text-sm"
+                                value={manualEmail}
+                                onChange={(e) => setManualEmail(e.target.value)}
+                                required
+                            />
+                        </div>
+                    )}
+
                     <div className="relative group">
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-white transition-colors" />
                         <input

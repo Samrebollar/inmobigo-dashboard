@@ -83,7 +83,8 @@ export async function resetPasswordWithCodeAction(
         // VERIFICACIÓN FINAL: ¿Tenemos sesión ahora?
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-            throw new Error('No se pudo validar tu identidad. Es posible que el enlace haya expirado o haya sido usado por tu aplicación de correo. Por favor solicita uno nuevo.');
+            // Ya no lanzamos error aquí para permitir que el cliente intente el MODO ADMIN
+            return { success: false, error: 'SESSION_MISSING' };
         }
 
         // 2. Ejecutar el cambio de contraseña

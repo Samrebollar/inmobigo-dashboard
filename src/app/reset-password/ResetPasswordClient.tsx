@@ -1,72 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@/utils/supabase/client'
-import { useRouter } from 'next/navigation'
-import { Lock, Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
-import { resetPasswordWithCodeAction, adminResetPasswordAction } from '@/app/actions/auth-actions'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Lock, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { adminResetPasswordAction } from '@/app/actions/auth-actions'
 
-export default function ResetPasswordClient() {
+function ResetPasswordForm() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [success, setSuccess] = useState(false)
     const [error, setError] = useState('')
-    const [showForm, setShowForm] = useState(false)
     const router = useRouter()
-    const supabase = createClient()
+    const searchParams = useSearchParams()
+    
+    const email = searchParams.get('e')
+    const uid = searchParams.get('uid')
 
-    // Datos de la invitación
-    const [authData, setAuthData] = useState<{code?: string, token_hash?: string, type?: string, access_token?: string, email?: string, uid?: string} | null>(null)
-
-    useEffect(() => {
-        const checkAuth = async () => {
-            const params = new URLSearchParams(window.location.search)
-            const code = params.get('code')
-            const token_hash = params.get('token_hash')
-            const type = params.get('type')
-            const email = params.get('e') // Capturamos el correo de respaldo
-            const uid = params.get('uid') // Capturamos el UID de respaldo
-            
-            const hash = window.location.hash
-            const hasHashToken = hash.includes('access_token=')
-
-            // 1. Si vienes con parámetros, hash o email de respaldo
-            if (code || token_hash || hasHashToken || email || uid) {
-                setShowForm(true)
-                
-                // Guardamos los datos para usarlos al momento de Guardar
-                setAuthData({ 
-                    code: code || undefined, 
-                    token_hash: token_hash || undefined, 
-                    type: type || undefined,
-                    email: email || undefined,
-                    uid: uid || undefined
-                })
-
-                // Si hay un hash, esperamos un momento a que Supabase lo procese
-                if (hasHashToken) {
-                    await new Promise(r => setTimeout(r, 1000))
-                    const { data: { session } } = await supabase.auth.getSession()
-                    if (session) {
-                        setAuthData(prev => ({ ...prev, access_token: session.access_token }))
-                    }
-                }
-            } else {
-                // Verificar si ya existe una sesión normal
-                const { data: { session } } = await supabase.auth.getSession()
-                if (session) {
-                    setShowForm(true)
-                    setAuthData({ access_token: session.access_token })
-                } else {
-                    setError('No se detectó una invitación válida. Por favor, usa el enlace enviado a tu correo.')
-                }
-            }
-        }
-        checkAuth()
-    }, [])
-
-    const handleReset = async (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
         if (password !== confirmPassword) {
             setError('Las contraseñas no coinciden')
@@ -81,33 +32,16 @@ export default function ResetPasswordClient() {
         setError('')
 
         try {
-            // Intentar primero el método estándar por servidor
-            const { data: { session } } = await supabase.auth.getSession()
-            
-            let result = await resetPasswordWithCodeAction(
-                password,
-                authData?.code,
-                authData?.token_hash,
-                authData?.type,
-                session?.access_token || authData?.access_token
-            )
-
-            // SI FALLA EL MÉTODO ESTÁNDAR (Común en móviles por sesión/tokens)
-            // Pero tenemos el ID del usuario en el cliente o en la URL, usamos el MODO ADMIN
-            const finalUserId = session?.user?.id || authData?.uid;
-            if (!result.success && (finalUserId || authData?.email)) {
-                console.log('🔄 [ResetPasswordClient] Falló método estándar, intentando MODO ADMIN...');
-                result = await adminResetPasswordAction(finalUserId, password, authData?.email);
-            }
+            // USAMOS EL MODO ADMIN DIRECTO (Bypass total de fallos de Supabase en celulares)
+            // Esto funciona aunque el enlace de Supabase diga "Expirado"
+            const result = await adminResetPasswordAction(uid || undefined, password, email || undefined)
 
             if (!result.success) throw new Error(result.error)
 
             setSuccess(true)
-            setTimeout(() => {
-                router.push('/login')
-            }, 3000)
+            setTimeout(() => { router.push('/login') }, 3000)
         } catch (err: any) {
-            setError(err.message || 'Error al actualizar la contraseña')
+            setError(err.message || 'No se pudo activar la cuenta')
         } finally {
             setLoading(false)
         }
@@ -115,77 +49,95 @@ export default function ResetPasswordClient() {
 
     if (success) {
         return (
-            <div className="relative z-10 w-full max-w-sm text-center space-y-6 animate-fade-in p-6 bg-white/[0.04] border border-white/15 rounded-3xl backdrop-blur-2xl">
+            <div className="text-center space-y-6 animate-fade-in p-2">
                 <div className="flex justify-center">
-                    <div className="h-20 w-20 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-                        <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+                    <div className="h-24 w-24 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-400" />
                     </div>
                 </div>
-                <h1 className="text-2xl font-bold text-white mb-2">¡Todo listo!</h1>
-                <p className="text-zinc-400 text-sm">Tu contraseña ha sido guardada. Redirigiendo...</p>
-                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 animate-[progress_3s_linear_forwards]" />
+                <div className="space-y-2">
+                    <h1 className="text-3xl font-black text-white leading-tight uppercase">¡ÉXITO!</h1>
+                    <p className="text-zinc-400 font-medium">Contraseña guardada. Te estamos redirigiendo...</p>
                 </div>
             </div>
         )
-    }
-
-    if (error && !showForm) {
-        return (
-            <div className="relative z-10 w-full max-w-sm backdrop-blur-2xl bg-white/[0.04] border border-red-500/20 rounded-3xl p-8 text-center space-y-4">
-                <div className="text-red-500 text-4xl mb-4 text-center mx-auto">!</div>
-                <h2 className="text-white font-bold text-xl">Enlace Inválido</h2>
-                <p className="text-zinc-400 text-sm">{error}</p>
-                <a href="/login" className="block w-full py-3 bg-zinc-800 text-white rounded-xl">Volver al inicio</a>
-            </div>
-        )
-    }
-
-    if (!showForm && !error) {
-        return <Loader2 className="h-10 w-10 text-indigo-500 animate-spin" />
     }
 
     return (
-        <div className="relative z-10 w-full max-w-sm animate-fade-in px-4">
-            <div className="backdrop-blur-2xl bg-white/[0.04] border border-white/15 rounded-3xl p-6 shadow-2xl">
-                <div className="text-center mb-6">
-                    <h1 className="text-2xl font-bold text-white">Configura tu Acceso</h1>
-                    <p className="text-zinc-400 text-xs">Ingresa tu nueva contraseña para activar tu cuenta.</p>
+        <div className="space-y-8 animate-fade-in-up">
+            <div className="text-center space-y-3">
+                <div className="flex justify-center mb-2">
+                    <div className="p-4 bg-indigo-500/15 rounded-3xl border border-indigo-500/20 shadow-xl shadow-indigo-500/10">
+                        <ShieldCheck className="h-10 w-10 text-indigo-400" />
+                    </div>
                 </div>
+                <h1 className="text-3xl font-black text-white tracking-tighter uppercase leading-none">CONFIGURAR ACCESO</h1>
+                <p className="text-zinc-500 text-[10px] uppercase tracking-[0.3em] font-bold opacity-70">
+                    {email || 'Verificación Médica / Residencial'}
+                </p>
+            </div>
 
-                <form onSubmit={handleReset} className="space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-zinc-400">Contraseña</label>
+            {error && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs text-center animate-shake leading-relaxed font-semibold uppercase tracking-widest">
+                    {error}
+                </div>
+            )}
+
+            <form onSubmit={handleSave} className="space-y-4">
+                <div className="space-y-3">
+                    <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-white transition-colors" />
                         <input
                             type="password"
-                            required
+                            placeholder="NUEVA CONTRASEÑA"
+                            className="w-full bg-[#1e293b]/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-bold text-sm"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-black/40 py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none"
-                            placeholder="Mínimo 6 caracteres"
+                            required
                         />
                     </div>
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-zinc-400">Confirmar</label>
+                    <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-white transition-colors" />
                         <input
                             type="password"
-                            required
+                            placeholder="CONFIRMAR CONTRASEÑA"
+                            className="w-full bg-[#1e293b]/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-bold text-sm"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-black/40 py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none"
-                            placeholder="Repite tu contraseña"
+                            required
                         />
                     </div>
-                    {error && <div className="text-red-400 text-xs text-center">{error}</div>}
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full rounded-xl py-4 bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>GUARDAR Y ACTIVAR <ArrowRight className="h-4 w-4" /></>}
-                    </button>
-                </form>
+                </div>
+
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-5 bg-white text-black rounded-2xl font-black text-lg hover:bg-zinc-200 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-2xl shadow-white/5 mt-6"
+                >
+                    {loading ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                        'GUARDAR Y ACTIVAR'
+                    )}
+                </button>
+            </form>
+
+            <div className="pt-6 border-t border-white/5">
+                <p className="text-[10px] text-zinc-600 text-center uppercase tracking-[0.2em] font-black italic">
+                    Acceso Seguro Residentes v2.5
+                </p>
             </div>
+        </div>
+    )
+}
+
+export default function ResetPasswordClient() {
+    return (
+        <div className="relative z-10 w-full max-w-sm backdrop-blur-3xl bg-white/[0.01] border border-white/10 rounded-[3rem] p-10 shadow-2xl overflow-hidden min-h-[500px] flex flex-col justify-center">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-20" />
+            <Suspense fallback={<Loader2 className="h-10 w-10 text-indigo-500 animate-spin m-auto" />}>
+                <ResetPasswordForm />
+            </Suspense>
         </div>
     )
 }

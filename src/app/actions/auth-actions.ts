@@ -101,21 +101,37 @@ export async function resetPasswordWithCodeAction(
     }
 }
 
-export async function adminResetPasswordAction(userId: string, password: string) {
-    console.log(`🛠️ [adminResetPasswordAction] Forzando cambio de contraseña para: ${userId}`);
+export async function adminResetPasswordAction(userId?: string, password?: string, email?: string) {
+    console.log(`🛠️ [adminResetPasswordAction] Iniciando cambio forzado... ID: ${userId || 'N/A'}, Email: ${email || 'N/A'}`);
     const admin = createAdminClient();
 
     try {
-        const { error } = await admin.auth.admin.updateUserById(userId, {
+        if (!password) throw new Error('La contraseña es requerida');
+        
+        let targetUserId = userId;
+
+        // Si no tenemos ID pero tenemos email, buscamos al usuario
+        if (!targetUserId && email) {
+            const { data: { users }, error: findError } = await admin.auth.admin.listUsers();
+            if (findError) throw findError;
+            
+            const user = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+            if (!user) throw new Error('Usuario no encontrado para el correo proporcionado');
+            targetUserId = user.id;
+        }
+
+        if (!targetUserId) throw new Error('No se pudo identificar al usuario para el cambio de contraseña');
+
+        const { error } = await admin.auth.admin.updateUserById(targetUserId, {
             password: password
         });
 
         if (error) throw error;
 
-        console.log('✅ [adminResetPasswordAction] Contraseña actualizada por administrador');
+        console.log(`✅ [adminResetPasswordAction] Contraseña actualizada con éxito para: ${targetUserId}`);
         return { success: true };
     } catch (error: any) {
-        console.error('🔴 [adminResetPasswordAction] Error:', error.message);
+        console.error('🔴 [adminResetPasswordAction] Falló el cambio forzado:', error.message);
         return { success: false, error: error.message };
     }
 }

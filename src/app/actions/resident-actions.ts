@@ -236,26 +236,24 @@ export async function adminCreateResidentAction(payload: any) {
             userId = existingAuthUser.id;
             console.log(`ℹ️ [adminCreateResidentAction] Usuario ya existe en Auth: ${userId}`);
         } else {
-            // 2. Invitar al usuario por email para que configure su contraseña
-            console.log(`👤 [adminCreateResidentAction] Invitando nuevo usuario: ${cleanEmail}`);
-            
+            // 2. Crear usuario e invitar
             const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/verify`,
+                // Truco maestro: Pasamos el email en la URL para que sea persistente en móviles
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?e=${encodeURIComponent(cleanEmail)}`,
                 data: {
                     first_name,
                     last_name,
-                    full_name: `${first_name} ${last_name}`,
-                    role: business_type === 'propiedades' ? 'tenant' : 'resident',
-                    user_type: business_type === 'propiedades' ? 'tenant' : 'resident'
+                    phone,
+                    role: 'resident'
                 }
             });
             
-            if (authError) {
-                console.error('❌ Error en inviteUserByEmail:', authError);
-                return { success: false, error: `Error de Supabase Auth: ${authError.message}` };
+            if (authError || !authData.user) {
+                return { success: false, error: `Error de Supabase Auth: ${authError?.message || 'No se pudo crear el usuario'}` };
             }
-            
+
             userId = authData.user.id;
+            console.log(`🔗 [adminCreateResidentAction] Usuario invitado con éxito: ${userId}`);
         }
 
         // 3. Determinar campos dinámicos según el tipo de negocio

@@ -54,42 +54,49 @@ export async function resetPasswordWithCodeAction(
     type?: string,
     access_token?: string
 ) {
+    console.log('🔑 [resetPasswordWithCodeAction] Iniciando intento de cambio de contraseña...');
     const supabase = await createClient();
 
     try {
-        // 1. Validar la identidad primero en el servidor
+        // Intento 1: ¿Viene un Access Token directo del cliente?
         if (access_token) {
-            // Si el cliente ya nos pasó la llave maestra, la usamos
-            const { error: authError } = await supabase.auth.setSession({
-                access_token,
-                refresh_token: '' // No necesitamos refresh para esta operación única
-            });
-            if (authError) throw authError;
-        } else if (code) {
-            const { error: authError } = await supabase.auth.exchangeCodeForSession(code);
-            if (authError) throw authError;
-        } else if (token_hash && type) {
-            const { error: authError } = await supabase.auth.verifyOtp({
-                token_hash,
-                type: type as any,
-            });
-            if (authError) throw authError;
-        } else {
-            // Si no hay código ni hash, verificar si ya hay una sesión (para navegadores que sí la guardaron)
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) throw new Error('No se detectó una invitación válida o sesión activa.');
+            console.log('   - Intentando con Access Token...');
+            const { error: err } = await supabase.auth.setSession({ access_token, refresh_token: '' });
+            if (!err) console.log('   ✅ Autenticación por Token exitosa');
+        } 
+        
+        // Intento 2: ¿Viene un Código de Invitación (PKCE)?
+        else if (code) {
+            console.log('   - Intentando con Código de Invitación (PKCE)...');
+            const { error: err } = await supabase.auth.exchangeCodeForSession(code);
+            if (!err) console.log('   ✅ Autenticación por Código exitosa');
+            else console.log('   ❌ Error en Código:', err.message);
         }
 
-        // 2. Una vez validado, actualizar la contraseña
-        const { error: updateError } = await supabase.auth.updateUser({
-            password: password,
-        });
+        // Intento 3: ¿Viene un Token Hash (OTP)?
+        else if (token_hash && type) {
+            console.log('   - Intentando con Token Hash (OTP)...');
+            const { error: err } = await supabase.auth.verifyOtp({ token_hash, type: type as any });
+            if (!err) console.log('   ✅ Autenticación por Hash exitosa');
+        }
+
+        // VERIFICACIÓN FINAL: ¿Tenemos sesión ahora?
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            throw new Error('No se pudo validar tu identidad. Es posible que el enlace haya expirado o haya sido usado por tu aplicación de correo. Por favor solicita uno nuevo.');
+        }
+
+        // 2. Ejecutar el cambio de contraseña
+        console.log('   - Ejecutando updateUser...');
+        const { error: updateError } = await supabase.auth.updateUser({ password });
 
         if (updateError) throw updateError;
 
+        console.log('   🎉 [resetPasswordWithCodeAction] Contraseña actualizada con éxito');
         return { success: true };
+
     } catch (error: any) {
-        console.error('❌ [resetPasswordWithCodeAction] Error:', error.message);
+        console.error('🔴 [resetPasswordWithCodeAction] ERROR CRÍTICO:', error.message);
         return { success: false, error: error.message };
     }
 }

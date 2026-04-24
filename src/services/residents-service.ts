@@ -57,29 +57,6 @@ export const residentsService = {
         })) || []
     },
 
-    async getByCondominiums(condominiumIds: string[]): Promise<Resident[]> {
-        if (condominiumIds.length === 0) return []
-        const supabase = createClient()
-        const { data, error } = await supabase
-            .from('residents')
-            .select(`
-        *,
-        units (
-          unit_number
-        ),
-        vehicles (*)
-      `)
-            .in('condominium_id', condominiumIds)
-            .order('first_name', { ascending: true })
-
-        if (error) throw error
-
-        return data?.map(r => ({
-            ...r,
-            unit_number: r.units?.unit_number
-        })) || []
-    },
-
     async getById(id: string): Promise<Resident | null> {
         if (id.startsWith('demo-')) {
             const residents = demoDb.getResidents()

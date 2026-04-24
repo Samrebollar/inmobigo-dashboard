@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Building, MapPin, Users, ArrowRight, MoreVertical, Edit, Trash, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { useUserRole } from '@/hooks/use-user-role'
 import Link from 'next/link'
 
 export interface PropertyCardProps {
@@ -31,6 +32,7 @@ export function PropertyCard({
     onEdit,
     onDelete
 }: PropertyCardProps) {
+    const { isPropiedades } = useUserRole()
 
     return (
         <motion.div
@@ -47,7 +49,11 @@ export function PropertyCard({
                         <h3 className="font-bold text-white group-hover:text-indigo-300 transition-colors truncate">{name}</h3>
                         <div className="flex items-center gap-1 text-xs text-zinc-500 mt-1 truncate">
                             <MapPin className="h-3 w-3 flex-shrink-0" />
-                            <span className="truncate">{city} • {type === 'residential' ? 'Residencial' : type}</span>
+                            <span className="truncate">{city} • {
+                                type === 'residential' ? 'Residencial' : 
+                                type === 'commercial' ? 'Comercial' : 
+                                type === 'mixed' ? 'Mixto' : type
+                            }</span>
                         </div>
                     </div>
                 </div>
@@ -71,7 +77,7 @@ export function PropertyCard({
                     </div>
                 </div>
                 <div className="space-y-1">
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">Residentes</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">{isPropiedades ? 'Inquilinos' : 'Residentes'}</p>
                     <div className="flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5 text-indigo-400" />
                         <span className="text-sm font-bold text-white">{residentsCount} <span className="text-zinc-500 font-normal">/ {unitsCount}</span></span>
@@ -100,10 +106,10 @@ export function PropertyCard({
                     <Link href={`/dashboard/residentes?condoId=${id}`} className="w-full">
                         <Button variant="outline" className="w-full gap-2 border-zinc-800 hover:bg-zinc-800 text-zinc-300 h-10 text-xs">
                             <Users className="h-3.5 w-3.5" />
-                            Residentes
+                            {isPropiedades ? 'Inquilinos' : 'Residentes'}
                         </Button>
                     </Link>
-                    <Link href={`/dashboard/condominios/${id}`} className="w-full">
+                    <Link href={`/dashboard/propiedades/${id}`} className="w-full">
                         <Button className="w-full gap-2 bg-indigo-600 hover:bg-indigo-500 text-white border-0 transition-all h-10 text-xs">
                             Gestionar
                             <ArrowRight className="h-3.5 w-3.5" />

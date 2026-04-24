@@ -63,6 +63,10 @@ export const propertiesService = {
     },
 
     async getSettings(condominiumId: string): Promise<any> {
+        // Skip DB query for demo properties
+        if (condominiumId.startsWith('demo-')) {
+            return null
+        }
         const supabase = createClient()
         const { data, error } = await supabase
             .from('settings_condominio')
@@ -70,14 +74,20 @@ export const propertiesService = {
             .eq('condominio_id', condominiumId)
             .single()
 
-        if (error && error.code !== 'PGRST116') {
-            console.error('Error fetching settings_condominio:', error)
+        if (error) {
+            // PGRST116: No rows found (Expected if no settings yet)
+            // 42P01: Table does not exist (Expected in some environments)
+            if (error.code === 'PGRST116' || error.code === '42P01') {
+                return null
+            }
+            console.error('Error fetching settings_condominio:', error.message || error.code || error)
             return null
         }
         return data
     },
 
     async updateSettings(condominiumId: string, settings: any): Promise<void> {
+        if (condominiumId.startsWith('demo-')) return
         const supabase = createClient()
         const { error } = await supabase
             .from('settings_condominio')
@@ -93,6 +103,7 @@ export const propertiesService = {
     },
 
     async update(id: string, updates: Partial<UpdateCondominiumDTO>): Promise<Condominium> {
+        if (id.startsWith('demo-')) return updates as any
         const supabase = createClient()
         const { data, error } = await supabase
             .from('condominiums')
@@ -106,6 +117,7 @@ export const propertiesService = {
     },
 
     async deactivate(id: string): Promise<void> {
+        if (id.startsWith('demo-')) return
         const supabase = createClient()
         const { error } = await supabase
             .from('condominiums')
@@ -116,6 +128,7 @@ export const propertiesService = {
     },
 
     async delete(id: string): Promise<void> {
+        if (id.startsWith('demo-')) return
         const supabase = createClient()
         const { error } = await supabase
             .from('condominiums')

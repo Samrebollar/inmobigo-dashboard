@@ -11,12 +11,14 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Resident } from '@/types/residents'
 import { residentsService } from '@/services/residents-service'
+import { useUserRole } from '@/hooks/use-user-role'
 import { CreateResidentModal } from '@/components/residents/CreateResidentModal'
 import { BulkUploadResidentsModal } from '@/components/residents/BulkUploadResidentsModal'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
 
 export function ResidentsTab() {
+    const { isPropiedades } = useUserRole()
     const params = useParams()
     const condominiumId = params.id as string
 
@@ -132,7 +134,7 @@ export function ResidentsTab() {
                 <div className="relative max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                     <Input
-                        placeholder="Buscar residente..."
+                        placeholder={isPropiedades ? 'Buscar inquilino...' : 'Buscar residente...'}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="pl-9 bg-zinc-900 border-zinc-800 focus:border-indigo-500"
@@ -149,7 +151,7 @@ export function ResidentsTab() {
                         <Upload className="mr-2 h-4 w-4" /> Carga Masiva
                     </Button>
                     <Button onClick={() => { setResidentToEdit(null); setIsCreateOpen(true) }} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
-                        <Plus className="mr-2 h-4 w-4" /> Nuevo Residente
+                        <Plus className="mr-2 h-4 w-4" /> {isPropiedades ? 'Nuevo Inquilino' : 'Nuevo Residente'}
                     </Button>
                 </div>
             </div>
@@ -255,7 +257,7 @@ export function ResidentsTab() {
                             ) : (
                                 <tr>
                                     <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
-                                        No se encontraron residentes.
+                                        {isPropiedades ? 'No se encontraron inquilinos.' : 'No se encontraron residentes.'}
                                     </td>
                                 </tr>
                             )}

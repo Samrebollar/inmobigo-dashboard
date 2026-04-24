@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Condominium, CreateCondominiumDTO } from '@/types/properties'
 import { propertiesService } from '@/services/properties-service'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface EditCondominiumModalProps {
     isOpen: boolean
@@ -17,6 +18,7 @@ interface EditCondominiumModalProps {
 }
 
 export function EditCondominiumModal({ isOpen, onClose, onSuccess, condominium, updateProperty }: EditCondominiumModalProps) {
+    const { isPropiedades } = useUserRole()
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState<Partial<CreateCondominiumDTO>>({
         name: '',
@@ -93,7 +95,7 @@ export function EditCondominiumModal({ isOpen, onClose, onSuccess, condominium, 
                         <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl pointer-events-auto flex flex-col max-h-[90vh]">
                             <div className="flex items-center justify-between border-b border-zinc-800 p-6">
                                 <div>
-                                    <h2 className="text-xl font-bold text-white">Editar Condominio</h2>
+                                    <h2 className="text-xl font-bold text-white">{isPropiedades ? 'Editar Propiedad' : 'Editar Condominio'}</h2>
                                     <p className="text-sm text-zinc-400">Actualiza la información operativa.</p>
                                 </div>
                                 <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white">
@@ -109,7 +111,7 @@ export function EditCondominiumModal({ isOpen, onClose, onSuccess, condominium, 
                                     </div>
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div className="space-y-2">
-                                            <label className="text-xs font-medium text-zinc-400">Nombre del Condominio</label>
+                                            <label className="text-xs font-medium text-zinc-400">{isPropiedades ? 'Nombre de la Propiedad' : 'Nombre del Condominio'}</label>
                                             <Input name="name" value={formData.name} onChange={handleChange} className="bg-zinc-950 border-zinc-800" />
                                         </div>
                                         <div className="space-y-2">

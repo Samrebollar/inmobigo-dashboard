@@ -25,8 +25,10 @@ import { FinanceTab } from '@/components/properties/tabs/FinanceTab'
 import { SettingsTab } from '@/components/properties/tabs/SettingsTab'
 import { EditCondominiumModal } from '@/components/properties/EditCondominiumModal'
 import { demoDb } from '@/utils/demo-db'
+import { useUserRole } from '@/hooks/use-user-role'
 
 export default function CondominiumPage() {
+    const { isPropiedades } = useUserRole()
     console.log(">>>>>>>> CONDOMINIUM PAGE SSR/CLIENT MOUNT <<<<<<<<")
     const params = useParams()
     const router = useRouter()
@@ -242,11 +244,11 @@ export default function CondominiumPage() {
             if (data && (id.startsWith('demo-') || user)) {
                 setCondo(data)
             } else {
-                router.push('/dashboard/condominios')
+                router.push('/dashboard/propiedades')
             }
         } catch (error) {
             console.error(error)
-            router.push('/dashboard/condominios')
+            router.push('/dashboard/propiedades')
         } finally {
             setLoading(false)
         }
@@ -272,7 +274,7 @@ export default function CondominiumPage() {
     const tabs = [
         { id: 'summary', label: 'Resumen', icon: TrendingUp },
         { id: 'units', label: 'Unidades', icon: Home },
-        { id: 'residents', label: 'Residentes', icon: Users },
+        { id: 'residents', label: isPropiedades ? 'Inquilinos' : 'Residentes', icon: Users },
         { id: 'finance', label: 'Facturación', icon: AlertCircle },
         { id: 'settings', label: 'Configuración', icon: Settings },
     ]
@@ -285,7 +287,7 @@ export default function CondominiumPage() {
 
                 {/* Breadcrumb / Back */}
                 <button
-                    onClick={() => router.push('/dashboard/condominios')}
+                    onClick={() => router.push('/dashboard/propiedades')}
                     className="relative z-10 mb-6 flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
                     <ArrowLeft className="h-4 w-4" /> Volver a Propiedades
@@ -339,7 +341,7 @@ export default function CondominiumPage() {
                         </p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-sm text-zinc-500">Morosos</p>
+                        <p className="text-sm text-zinc-500">{isPropiedades ? 'Inquilinos Morosos' : 'Residentes Morosos'}</p>
                         <div className="flex items-center gap-2">
                             <p className="text-2xl font-bold text-rose-400">
                                 {(condo as any).morosos_count || 0}

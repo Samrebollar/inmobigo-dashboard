@@ -6,6 +6,7 @@ import { Activity, AlertTriangle, CheckCircle2, TrendingUp, Users } from 'lucide
 import { Condominium } from '@/types/properties'
 import { demoDb } from '@/utils/demo-db'
 import { motion } from 'framer-motion'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface SummaryTabProps {
     condo: Condominium
@@ -25,6 +26,7 @@ const revenueData = [
 ]
 
 export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
+    const { isPropiedades } = useUserRole()
     const isDemo = condo.id.startsWith('demo-')
     
     // Calculate Occupancy
@@ -36,7 +38,9 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
     const incChange = isDemo ? "+20.1% vs mes anterior" : "Aún sin datos"
     
     const morosidad = isDemo ? "$1,250.00" : "$0.00"
-    const morosidadSubtext = isDemo ? "3 residentes con deuda" : "0 residentes con deuda"
+    const morosidadSubtext = isDemo 
+        ? `${isPropiedades ? '3 inquilinos con deuda' : '3 residentes con deuda'}` 
+        : `${isPropiedades ? '0 inquilinos con deuda' : '0 residentes con deuda'}`
     
     const occChange = isDemo ? "+2% vs mes anterior" : "Actualizado"
 

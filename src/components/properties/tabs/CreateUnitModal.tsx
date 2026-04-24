@@ -9,6 +9,7 @@ import { CreateUnitDTO, Unit } from '@/types/units'
 import { unitsService } from '@/services/units-service'
 
 import { useDemoMode } from '@/hooks/use-demo-mode'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface CreateUnitModalProps {
     isOpen: boolean
@@ -22,6 +23,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
     const [loading, setLoading] = useState(false)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const { isDemo } = useDemoMode()
+    const { isPropiedades } = useUserRole()
 
     const [formData, setFormData] = useState<Partial<CreateUnitDTO>>({
         unit_number: '',
@@ -95,7 +97,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                     >
                         <div className="flex items-center justify-between border-b border-zinc-800 p-6 bg-zinc-900/50">
                             <h2 className="text-xl font-bold text-white">
-                                {unitToEdit ? 'Editar Unidad' : 'Nueva Unidad'}
+                                {unitToEdit ? (isPropiedades ? 'Editar Unidad Rentable' : 'Editar Unidad') : (isPropiedades ? 'Nueva Unidad Rentable' : 'Nueva Unidad')}
                             </h2>
                             <button onClick={onClose} className="rounded-full p-2 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors">
                                 <X className="h-5 w-5" />
@@ -118,7 +120,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                             </AnimatePresence>
 
                             <Input
-                                label="Número / Nombre de Unidad"
+                                label={isPropiedades ? 'Número / Nombre de Unidad Rentable' : 'Número / Nombre de Unidad'}
                                 placeholder="Ej. A-101"
                                 value={formData.unit_number}
                                 onChange={(e) => setFormData({ ...formData, unit_number: e.target.value })}
@@ -152,7 +154,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
 
                             <div className="grid grid-cols-2 gap-4">
                                 <Input
-                                    label="Monto mensual ($ renta/cuota)"
+                                    label={isPropiedades ? 'Monto mensual ($ renta)' : 'Monto mensual ($ renta/cuota)'}
                                     type="number"
                                     placeholder="Ej. 5000"
                                     value={formData.monto_mensual || ''}
@@ -193,7 +195,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                             <div className="pt-4">
                                 <Button type="submit" isLoading={loading} className="w-full gap-2 bg-indigo-600 hover:bg-indigo-500 text-white">
                                     <Check className="h-4 w-4" />
-                                    {unitToEdit ? 'Actualizar Unidad' : 'Guardar Unidad'}
+                                    {unitToEdit ? (isPropiedades ? 'Actualizar Unidad Rentable' : 'Actualizar Unidad') : (isPropiedades ? 'Guardar Unidad Rentable' : 'Guardar Unidad')}
                                 </Button>
                             </div>
                         </form>

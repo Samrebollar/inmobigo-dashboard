@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { createClient } from '@/utils/supabase/client'
 import { CreateCondominiumDTO } from '@/types/properties'
 import { useProperties } from '@/hooks/use-properties'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface CreatePropertyModalProps {
     isOpen: boolean
@@ -27,6 +28,7 @@ const steps = [
 ]
 
 export function CreatePropertyModal({ isOpen, onClose, onSuccess, orgId, createProperty }: CreatePropertyModalProps) {
+    const { isPropiedades } = useUserRole()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [step, setStep] = useState(1)
@@ -108,7 +110,7 @@ export function CreatePropertyModal({ isOpen, onClose, onSuccess, orgId, createP
                         {/* Header */}
                         <div className="flex items-center justify-between border-b border-zinc-800 p-6 bg-zinc-900/50">
                             <div>
-                                <h2 className="text-xl font-bold text-white">Nuevo Condominio</h2>
+                                <h2 className="text-xl font-bold text-white">{isPropiedades ? 'Nueva Propiedad' : 'Nuevo Condominio'}</h2>
                                 <p className="text-sm text-zinc-400">Paso {step} de 4: {steps[step - 1].title}</p>
                             </div>
                             <button onClick={onClose} className="rounded-full p-2 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors">
@@ -153,8 +155,8 @@ export function CreatePropertyModal({ isOpen, onClose, onSuccess, orgId, createP
                                             className="space-y-4"
                                         >
                                             <Input
-                                                label="Nombre del Condominio"
-                                                placeholder="Ej. Torres del Valle"
+                                                label={isPropiedades ? 'Nombre de la Propiedad' : 'Nombre del Condominio'}
+                                                placeholder={isPropiedades ? 'Ej. Departamento en Polanco' : 'Ej. Torres del Valle'}
                                                 value={formData.name}
                                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                                 required
@@ -297,7 +299,9 @@ export function CreatePropertyModal({ isOpen, onClose, onSuccess, orgId, createP
                                                     Configuración Final
                                                 </h4>
                                                 <p className="mt-1 text-sm text-blue-300/70">
-                                                    El condominio se creará como <strong>Activo</strong> y podrás comenzar a agregar unidades inmediatamente.
+                                                    {isPropiedades 
+                                                        ? 'La propiedad se creará como Activa y podrás comenzar a agregar unidades de renta inmediatamente.'
+                                                        : 'El condominio se creará como Activo y podrás comenzar a agregar unidades inmediatamente.'}
                                                 </p>
                                             </div>
                                         </motion.div>
@@ -318,7 +322,7 @@ export function CreatePropertyModal({ isOpen, onClose, onSuccess, orgId, createP
                                     </Button>
                                 ) : (
                                     <Button type="submit" isLoading={loading} className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white">
-                                        <Check className="h-4 w-4" /> Crear Condominio
+                                        <Check className="h-4 w-4" /> {isPropiedades ? 'Crear Propiedad' : 'Crear Condominio'}
                                     </Button>
                                 )}
                             </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, AlertTriangle, Trash2, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface DeletePropertyModalProps {
     isOpen: boolean
@@ -13,6 +14,7 @@ interface DeletePropertyModalProps {
 }
 
 export function DeletePropertyModal({ isOpen, onClose, onConfirm, propertyName }: DeletePropertyModalProps) {
+    const { isPropiedades } = useUserRole()
     const [step, setStep] = useState<'info' | 'verify'>('info')
     const [verificationText, setVerificationText] = useState('')
     const [loading, setLoading] = useState(false)
@@ -108,7 +110,7 @@ export function DeletePropertyModal({ isOpen, onClose, onConfirm, propertyName }
                                             exit={{ opacity: 0, x: -20 }}
                                             className="space-y-4"
                                         >
-                                            <h2 className="text-2xl font-bold text-white tracking-tight">¿Eliminar Propiedad?</h2>
+                                            <h2 className="text-2xl font-bold text-white tracking-tight">{isPropiedades ? '¿Eliminar Propiedad?' : '¿Eliminar Condominio?'}</h2>
                                             <p className="text-zinc-400 leading-relaxed">
                                                 Estás a punto de eliminar <span className="text-white font-bold">"{propertyName}"</span>. 
                                                 Esta acción es irreversible y resultará en la pérdida total de:
@@ -119,7 +121,7 @@ export function DeletePropertyModal({ isOpen, onClose, onConfirm, propertyName }
                                                     <span className="text-lg font-bold text-white">Todas</span>
                                                 </div>
                                                 <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
-                                                    <span className="block text-xs font-medium uppercase tracking-wider text-zinc-500">Residentes</span>
+                                                    <span className="block text-xs font-medium uppercase tracking-wider text-zinc-500">{isPropiedades ? 'Inquilinos' : 'Residentes'}</span>
                                                     <span className="text-lg font-bold text-white">Todos</span>
                                                 </div>
                                             </div>
@@ -135,7 +137,7 @@ export function DeletePropertyModal({ isOpen, onClose, onConfirm, propertyName }
                                             <div className="space-y-2">
                                                 <h2 className="text-2xl font-bold text-white tracking-tight">Confirmar Nombre</h2>
                                                 <p className="text-sm text-zinc-400">
-                                                    Para continuar, escribe el nombre del condominio tal cual aparece abajo:
+                                                    Para continuar, escribe el nombre {isPropiedades ? 'de la propiedad' : 'del condominio'} tal cual aparece abajo:
                                                 </p>
                                                 <div className="rounded-lg bg-zinc-900 px-4 py-2 font-mono text-sm text-rose-400 border border-rose-500/10 select-none">
                                                     {propertyName}
@@ -191,7 +193,7 @@ export function DeletePropertyModal({ isOpen, onClose, onConfirm, propertyName }
                                             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/5 text-sm font-medium text-zinc-500 hover:bg-white/5 hover:text-white transition-colors"
                                         >
                                             {step === 'verify' && <ArrowLeft className="h-4 w-4" />}
-                                            {step === 'info' ? 'Cancelar / Mantener Propiedad' : 'Volver'}
+                                            {step === 'info' ? (isPropiedades ? 'Cancelar / Mantener Propiedad' : 'Cancelar / Mantener Condominio') : 'Volver'}
                                         </button>
                                     )}
                                 </div>

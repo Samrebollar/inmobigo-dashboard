@@ -24,6 +24,7 @@ export const unitsService = {
 
     async create(unit: CreateUnitDTO): Promise<Unit> {
         if (unit.condominium_id.startsWith('demo-')) {
+            const existingUnits = demoDb.getUnits(unit.condominium_id)
             if (existingUnits.length >= 5) {
                 throw new Error('Has alcanzado el límite de unidades en el modo demostración. Para administrar más de 5 unidades, te invitamos a crear un condominio real desde tu panel principal.')
             }

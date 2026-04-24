@@ -10,8 +10,10 @@ import { Save } from 'lucide-react'
 import { propertiesService } from '@/services/properties-service'
 import { Condominium, UpdateCondominiumDTO } from '@/types/properties'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useUserRole } from '@/hooks/use-user-role'
 
 export function SettingsTab() {
+    const { isPropiedades } = useUserRole()
     const params = useParams()
     const condominiumId = params.id as string
 
@@ -155,7 +157,7 @@ export function SettingsTab() {
             <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader>
                     <CardTitle>Configuración General</CardTitle>
-                    <CardDescription>Ajustes principales del condominio.</CardDescription>
+                    <CardDescription>{isPropiedades ? 'Ajustes principales de la propiedad.' : 'Ajustes principales del condominio.'}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <motion.div 
@@ -165,7 +167,7 @@ export function SettingsTab() {
                     >
                         <div className="grid gap-4 md:grid-cols-2">
                             <Input
-                                label="Nombre del Condominio"
+                                label={isPropiedades ? 'Nombre de la Propiedad' : 'Nombre del Condominio'}
                                 name="name"
                                 value={formData.name || ''}
                                 onChange={handleChange}

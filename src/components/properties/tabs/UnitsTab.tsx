@@ -186,7 +186,13 @@ export function UnitsTab() {
                                             {unit.floor}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="capitalize text-zinc-300">{unit.type}</span>
+                                            <span className="text-zinc-300">
+                                                {unit.type === 'apartment' ? 'Departamento' :
+                                                 unit.type === 'house' ? 'Casa' :
+                                                 unit.type === 'commercial' ? 'Local Comercial' :
+                                                 unit.type === 'parking' ? 'Estacionamiento' :
+                                                 unit.type === 'storage' ? 'Bodega' : unit.type}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-zinc-300">
                                             {unit.monto_mensual ? `$${unit.monto_mensual.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : '-'}

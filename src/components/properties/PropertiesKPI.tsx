@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { Building2, Home, Users, TrendingUp, AlertCircle } from 'lucide-react'
+import { useUserRole } from '@/hooks/use-user-role'
 
 interface KPIProps {
     totalCondos: number
@@ -13,9 +14,10 @@ interface KPIProps {
 }
 
 export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinquentResidents = 0, occupancyRate, unitsLimit = 0 }: KPIProps) {
+    const { isPropiedades } = useUserRole()
     const stats = [
         {
-            label: 'Total Condominios',
+            label: isPropiedades ? 'Total Propiedades' : 'Total Condominios',
             value: totalCondos,
             icon: Building2,
             color: 'text-blue-400',
@@ -25,7 +27,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             hoverBorder: 'hover:border-blue-500/50'
         },
         {
-            label: 'Total Unidades',
+            label: isPropiedades ? 'Total Unidades Rentables' : 'Total Unidades',
             value: totalUnits,
             icon: Home,
             color: 'text-purple-400',
@@ -35,7 +37,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             hoverBorder: 'hover:border-purple-500/50'
         },
         {
-            label: 'Residentes al corriente',
+            label: isPropiedades ? 'Inquilinos al corriente' : 'Residentes al corriente',
             value: totalResidents,
             icon: Users,
             color: 'text-emerald-400',
@@ -45,7 +47,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             hoverBorder: 'hover:border-emerald-500/50'
         },
         {
-            label: 'Residentes con morosidad',
+            label: isPropiedades ? 'Inquilinos morosos' : 'Residentes con morosidad',
             value: delinquentResidents,
             icon: AlertCircle,
             color: 'text-rose-400',

@@ -36,9 +36,9 @@ interface ResidentDashboardClientProps {
     userName: string
 }
 
-export default function ResidentDashboardClient({ resident, userName }: ResidentDashboardClientProps) {
+export default function ResidentDashboardCondominioClient({ resident, userName }: ResidentDashboardClientProps) {
     const supabase = createClient()
-    const { isPropiedades } = useUserRole()
+    const isPropiedades = false
     const [announcements, setAnnouncements] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())

@@ -147,11 +147,11 @@ export default async function DashboardLayout({
 
                 {showProperties && (
                     <Link
-                        href="/dashboard/condominios"
+                        href="/dashboard/propiedades"
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                     >
                         <Building2 size={18} />
-                        <span>Propiedades</span>
+                        <span>{isPropiedades ? 'Portafolio de Propiedades' : 'Propiedades'}</span>
                     </Link>
                 )}
 
@@ -203,7 +203,7 @@ export default async function DashboardLayout({
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
                         >
                             <BarChart3 size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                            <span>{isPropiedades ? 'Finanzas de la Propiedad' : 'Finanzas del Condominio'}</span>
+                            <span>{isPropiedades ? 'Finanzas del Portafolio' : 'Finanzas del Condominio'}</span>
                         </Link>
                         <Link
                             href="/dashboard/amenidades"

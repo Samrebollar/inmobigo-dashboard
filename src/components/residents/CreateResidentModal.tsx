@@ -112,8 +112,14 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                 // Remove vehicles for update as it goes directly to the residents table
                 const { vehicles, ...updatePayload } = submitData
                 result = await residentsService.update(residentToEdit.id, updatePayload as any)
+            } else if (condominiumId.startsWith('demo-')) {
+                // MODO DEMO: Usar el servicio directamente para persistir en localStorage
+                result = await residentsService.create({
+                    ...submitData,
+                    condominium_id: condominiumId
+                } as CreateResidentDTO)
             } else {
-                // USAR ACCIÓN DE SERVIDOR PARA CREACIÓN (Maneja Invitaciones)
+                // MODO REAL: USAR ACCIÓN DE SERVIDOR PARA CREACIÓN (Maneja Invitaciones)
                 const resAction = await adminCreateResidentAction({
                     ...submitData,
                     condominium_id: condominiumId,

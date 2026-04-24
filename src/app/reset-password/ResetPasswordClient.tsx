@@ -17,7 +17,7 @@ export default function ResetPasswordClient() {
     const supabase = createClient()
 
     // Datos de la invitación
-    const [authData, setAuthData] = useState<{code?: string, token_hash?: string, type?: string, access_token?: string, email?: string} | null>(null)
+    const [authData, setAuthData] = useState<{code?: string, token_hash?: string, type?: string, access_token?: string, email?: string, uid?: string} | null>(null)
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -26,12 +26,13 @@ export default function ResetPasswordClient() {
             const token_hash = params.get('token_hash')
             const type = params.get('type')
             const email = params.get('e') // Capturamos el correo de respaldo
+            const uid = params.get('uid') // Capturamos el UID de respaldo
             
             const hash = window.location.hash
             const hasHashToken = hash.includes('access_token=')
 
             // 1. Si vienes con parámetros, hash o email de respaldo
-            if (code || token_hash || hasHashToken || email) {
+            if (code || token_hash || hasHashToken || email || uid) {
                 setShowForm(true)
                 
                 // Guardamos los datos para usarlos al momento de Guardar
@@ -39,7 +40,8 @@ export default function ResetPasswordClient() {
                     code: code || undefined, 
                     token_hash: token_hash || undefined, 
                     type: type || undefined,
-                    email: email || undefined
+                    email: email || undefined,
+                    uid: uid || undefined
                 })
 
                 // Si hay un hash, esperamos un momento a que Supabase lo procese
@@ -90,10 +92,12 @@ export default function ResetPasswordClient() {
                 session?.access_token || authData?.access_token
             )
 
-            // Pero tenemos el ID del usuario en el cliente, usamos el MODO ADMIN con su ID o Email
-            if (!result.success && (session?.user?.id || authData?.email)) {
+            // SI FALLA EL MÉTODO ESTÁNDAR (Común en móviles por sesión/tokens)
+            // Pero tenemos el ID del usuario en el cliente o en la URL, usamos el MODO ADMIN
+            const finalUserId = session?.user?.id || authData?.uid;
+            if (!result.success && (finalUserId || authData?.email)) {
                 console.log('🔄 [ResetPasswordClient] Falló método estándar, intentando MODO ADMIN...');
-                result = await adminResetPasswordAction(session?.user?.id, password, authData?.email);
+                result = await adminResetPasswordAction(finalUserId, password, authData?.email);
             }
 
             if (!result.success) throw new Error(result.error)

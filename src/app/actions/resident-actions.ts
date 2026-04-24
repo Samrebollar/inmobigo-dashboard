@@ -238,8 +238,8 @@ export async function adminCreateResidentAction(payload: any) {
         } else {
             // 2. Crear usuario e invitar
             const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-                // Truco maestro: Pasamos el email en la URL para que sea persistente en móviles
-                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?e=${encodeURIComponent(cleanEmail)}`,
+                // Truco maestro final: El ID de usuario y el email viajan en la URL desde el origen
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?uid=${authData?.user?.id}&e=${encodeURIComponent(cleanEmail)}`,
                 data: {
                     first_name,
                     last_name,

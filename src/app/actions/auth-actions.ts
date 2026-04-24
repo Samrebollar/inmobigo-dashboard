@@ -110,28 +110,39 @@ export async function adminResetPasswordAction(userId?: string, password?: strin
         
         let targetUserId = userId;
 
-        // Si no tenemos ID pero tenemos email, buscamos al usuario
+        // Si no tenemos el ID, lo buscamos directamente en nuestra tabla de residentes (más rápido y seguro)
         if (!targetUserId && email) {
-            const { data: { users }, error: findError } = await admin.auth.admin.listUsers();
-            if (findError) throw findError;
-            
-            const user = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-            if (!user) throw new Error('Usuario no encontrado para el correo proporcionado');
-            targetUserId = user.id;
+            const { data: residentData, error: dbError } = await admin
+                .from('residents')
+                .select('auth_user_id')
+                .eq('email', email.toLowerCase())
+                .single();
+
+            if (dbError || !residentData?.auth_user_id) {
+                console.log('   ⚠️ No se encontró en tabla residents, intentando búsqueda global en Auth...');
+                // Respaldo: Búsqueda global si no está en la tabla de residentes
+                const { data: { users }, error: authError } = await admin.auth.admin.listUsers();
+                const user = users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+                if (!user) throw new Error('No se pudo localizar tu cuenta. Por favor verifica que el enlace sea el más reciente enviado a tu correo.');
+                targetUserId = user.id;
+            } else {
+                targetUserId = residentData.auth_user_id;
+            }
         }
 
-        if (!targetUserId) throw new Error('No se pudo identificar al usuario para el cambio de contraseña');
+        if (!targetUserId) throw new Error('Identificación de seguridad no encontrada.');
 
-        const { error } = await admin.auth.admin.updateUserById(targetUserId, {
+        // Forzar el cambio de contraseña con privilegios de administrador
+        const { error: updateError } = await admin.auth.admin.updateUserById(targetUserId, {
             password: password
         });
 
-        if (error) throw error;
+        if (updateError) throw updateError;
 
         console.log(`✅ [adminResetPasswordAction] Contraseña actualizada con éxito para: ${targetUserId}`);
         return { success: true };
     } catch (error: any) {
-        console.error('🔴 [adminResetPasswordAction] Falló el cambio forzado:', error.message);
+        console.error('🔴 [adminResetPasswordAction] ERROR CRÍTICO:', error.message);
         return { success: false, error: error.message };
     }
 }

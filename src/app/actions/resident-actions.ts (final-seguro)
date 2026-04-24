@@ -1,0 +1,29 @@
+        let userId: string | null = null;
+        const existingAuthUser = userData.users.find(u => u.email?.toLowerCase() === cleanEmail);
+        
+        if (existingAuthUser) {
+            userId = existingAuthUser.id;
+            console.log(`ℹ️ [adminCreateResidentAction] Usuario ya existe en Auth: ${userId}`);
+        } else {
+            // 2. Invitar al usuario (Paso Crítico)
+            console.log(`👤 [adminCreateResidentAction] Invitando: ${cleanEmail}`);
+            
+            const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
+                // Truco de estabilidad: Pasamos el email en la URL como salvavidas
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?e=${encodeURIComponent(cleanEmail)}`,
+                data: {
+                    first_name,
+                    last_name,
+                    phone,
+                    role: 'resident'
+                }
+            });
+
+            if (authError || !authData?.user) {
+                console.error('❌ Error en Auth:', authError);
+                return { success: false, error: authError?.message || 'Error al crear credenciales' };
+            }
+
+            userId = authData.user.id;
+            console.log(`✅ [adminCreateResidentAction] Usuario creado con ID: ${userId}`);
+        }

@@ -236,10 +236,12 @@ export async function adminCreateResidentAction(payload: any) {
             userId = existingAuthUser.id;
             console.log(`ℹ️ [adminCreateResidentAction] Usuario ya existe en Auth: ${userId}`);
         } else {
-            // 2. Crear usuario e invitar
+            // 2. Invitar al usuario (Paso Crítico)
+            console.log(`👤 [adminCreateResidentAction] Invitando: ${cleanEmail}`);
+            
             const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-                // Truco maestro final: El ID de usuario y el email viajan en la URL desde el origen
-                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?uid=${authData?.user?.id}&e=${encodeURIComponent(cleanEmail)}`,
+                // Pasamos el email en la URL como salvavidas de identidad
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?e=${encodeURIComponent(cleanEmail)}`,
                 data: {
                     first_name,
                     last_name,
@@ -247,13 +249,14 @@ export async function adminCreateResidentAction(payload: any) {
                     role: 'resident'
                 }
             });
-            
-            if (authError || !authData.user) {
-                return { success: false, error: `Error de Supabase Auth: ${authError?.message || 'No se pudo crear el usuario'}` };
+
+            if (authError || !authData?.user) {
+                console.error('❌ Error en Auth:', authError);
+                return { success: false, error: authError?.message || 'Error al crear credenciales' };
             }
 
             userId = authData.user.id;
-            console.log(`🔗 [adminCreateResidentAction] Usuario invitado con éxito: ${userId}`);
+            console.log(`✅ [adminCreateResidentAction] Usuario creado con ID: ${userId}`);
         }
 
         // 3. Determinar campos dinámicos según el tipo de negocio

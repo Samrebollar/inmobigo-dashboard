@@ -1,0 +1,24 @@
+            // 1. Invitar al usuario (Paso Crítico)
+            console.log(`👤 [adminCreateResidentAction] Invitando: ${cleanEmail}`);
+            
+            const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
+                // Pasamos los datos de identificación directamente en la URL
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+                data: {
+                    first_name,
+                    last_name,
+                    phone,
+                    role: 'resident'
+                }
+            });
+
+            if (authError || !authData?.user) {
+                console.error('❌ Error en Auth:', authError);
+                return { success: false, error: authError?.message || 'Error al crear credenciales' };
+            }
+
+            userId = authData.user.id;
+            console.log(`✅ [adminCreateResidentAction] Usuario creado: ${userId}`);
+
+            // TRUCO DE SEGURIDAD MÓVIL: Añadimos la identidad al enlace que se usará en el cliente
+            // (Nota: Supabase usa el redirectTo base, pero nosotros capturaremos el UID en el cliente)

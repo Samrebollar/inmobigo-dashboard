@@ -241,7 +241,7 @@ export async function adminCreateResidentAction(payload: any) {
             
             const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
                 // Pasamos el email en la URL como salvavidas de identidad
-                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?e=${encodeURIComponent(cleanEmail)}`,
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/activar-residente?e=${encodeURIComponent(cleanEmail)}`,
                 data: {
                     first_name,
                     last_name,

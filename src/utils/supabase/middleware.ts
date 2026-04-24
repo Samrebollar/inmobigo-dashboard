@@ -58,6 +58,7 @@ export async function updateSession(request: NextRequest) {
         pathname.startsWith('/auth/confirm') || 
         pathname.startsWith('/auth/verify') || 
         pathname.startsWith('/acceso-residente') || 
+        pathname.startsWith('/activar-residente') || 
         pathname.startsWith('/api/debug-limits') ||
         pathname.includes('.')
 

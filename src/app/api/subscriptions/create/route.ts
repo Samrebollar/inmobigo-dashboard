@@ -215,7 +215,9 @@ export async function POST(req: Request) {
                     reason: `InmobiGo ${planKey}`,
                     external_reference: subscription.id,
                     payer_email: user.email,
-                    back_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?subscription=success`,
+                    back_url: process.env.NEXT_PUBLIC_APP_URL?.includes('localhost') 
+                        ? 'https://inmobigo.mx/dashboard?subscription=success' 
+                        : `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?subscription=success`,
                     auto_recurring: {
                         frequency: 1,
                         frequency_type: 'months',

@@ -210,7 +210,7 @@ export default function MorososPage() {
             </div>
             <div className="space-y-1">
               <div className="text-3xl font-bold tracking-tight text-white">
-                {stats.topRiskCount} {stats.topRiskCount === 1 ? 'residente' : 'residentes'}
+                {stats.topRiskCount} {stats.topRiskCount === 1 ? 'inquilino' : 'inquilinos'}
               </div>
               <div className="text-xs font-medium text-zinc-500 mt-2">
                 {stats.topRiskLevel === 'low' ? '+7' : stats.topRiskLevel === 'medium' ? '+15' : `+${stats.maxDaysOverdue}`} días de atraso
@@ -222,7 +222,7 @@ export default function MorososPage() {
                   stats.topRiskLevel === 'medium' ? 'text-amber-500' : 'text-emerald-500'}`}>
               {stats.topRiskLevel === 'critical' ? '¡Requiere atención inmediata!' : 
                stats.topRiskLevel === 'medium' ? 'Atención prioritaria' : 
-               stats.totalMorosos > 0 ? 'Atención programada' : 'Sin residentes morosos'}
+               stats.totalMorosos > 0 ? 'Atención programada' : 'Sin inquilinos morosos'}
             </div>
           </div>
         </motion.div>

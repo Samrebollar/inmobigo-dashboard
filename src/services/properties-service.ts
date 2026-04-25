@@ -3,6 +3,10 @@ import { Condominium, CreateCondominiumDTO, UpdateCondominiumDTO } from '@/types
 
 export const propertiesService = {
     async getByOrganization(organizationId: string): Promise<any[]> {
+        if (organizationId?.startsWith('demo-')) {
+            const { demoDb } = await import('@/utils/demo-db')
+            return demoDb.getProperties()
+        }
         const supabase = createClient()
         const { data: condos, error } = await supabase
             .from('condominiums')

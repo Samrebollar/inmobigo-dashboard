@@ -56,6 +56,7 @@ export default function SettingsPage() {
     const [loadingAmenities, setLoadingAmenities] = useState(false)
     const [showAmenityModal, setShowAmenityModal] = useState(false)
     const [editingAmenity, setEditingAmenity] = useState<any>(null)
+    const [businessType, setBusinessType] = useState('condominio')
 
     useEffect(() => {
         initialize()
@@ -65,25 +66,54 @@ export default function SettingsPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        // Get Org Info
+        let orgData: any = null
+        let userOrgId: string | null = null
+
+        // 1. Try organization_users
         const { data: orgUser } = await supabase
             .from('organization_users')
             .select(`
                 organization_id,
                 role,
-                organizations (name)
+                organizations (name, business_type)
             `)
             .eq('user_id', user.id)
-            .single()
+            .maybeSingle()
 
         if (orgUser && orgUser.organizations) {
-            // @ts-ignore
-            const orgName = Array.isArray(orgUser.organizations) ? orgUser.organizations[0]?.name : orgUser.organizations.name
+            orgData = Array.isArray(orgUser.organizations) ? orgUser.organizations[0] : orgUser.organizations
+            userOrgId = orgUser.organization_id
+        } else {
+            // 2. Fallback to owner directly
+            const { data: ownerOrg } = await supabase
+                .from('organizations')
+                .select('id, name, business_type')
+                .eq('owner_id', user.id)
+                .maybeSingle()
+            
+            if (ownerOrg) {
+                orgData = ownerOrg
+                userOrgId = ownerOrg.id
+            }
+        }
+
+        if (orgData && userOrgId) {
+            const orgName = orgData.name
+            
+            // Check metadata as an ultimate fallback for businessType
+            const metadataRole = user.user_metadata?.role || user.user_metadata?.user_type
+            const isMetadataPropiedades = metadataRole === 'admin_propiedad' || metadataRole === 'admin_propiedades'
+            const bType = orgData.business_type || (isMetadataPropiedades ? 'propiedades' : 'condominio')
+            
             setOrgName(orgName || 'Mi Organización')
-            setOrgId(orgUser.organization_id)
-            fetchTeam(orgUser.organization_id)
-            fetchBillingSettings(orgUser.organization_id)
-            fetchAmenities(orgUser.organization_id)
+            setBusinessType(bType)
+            setOrgId(userOrgId)
+            fetchTeam(userOrgId)
+            fetchBillingSettings(userOrgId)
+            
+            if (bType !== 'propiedades') {
+                fetchAmenities(userOrgId)
+            }
         }
 
         // Get Subscription
@@ -263,8 +293,8 @@ export default function SettingsPage() {
                 return {
                     id: tm.id,
                     user_id: tm.user_id,
-                    role: tm.role,
-                    status: tm.status,
+                    role: tm.role_new || tm.role || 'viewer',
+                    status: tm.status || 'active',
                     created_at: tm.created_at,
                     email: profile?.email || 'N/A',
                     first_name,
@@ -274,7 +304,7 @@ export default function SettingsPage() {
 
             // Sort so owner/admin are at top
             merged.sort((a, b) => {
-                const roleWeight = { 'owner': 0, 'admin': 1, 'manager': 2, 'staff': 3, 'user': 4 }
+                const roleWeight = { 'owner': 0, 'admin': 1, 'admin_condominio': 1, 'admin_propiedad': 1, 'manager': 2, 'staff': 3, 'user': 4, 'viewer': 5 }
                 return (roleWeight[a.role as keyof typeof roleWeight] || 99) - (roleWeight[b.role as keyof typeof roleWeight] || 99)
             })
 
@@ -394,8 +424,8 @@ export default function SettingsPage() {
                                     <div className="flex items-center gap-4">
                                         <div className="flex flex-col items-end gap-1">
                                             <Badge variant="default" className="border-zinc-700 bg-zinc-800 text-zinc-300">
-                                                {member.role === 'admin' || member.role === 'owner' ? <Shield className="mr-1 h-3 w-3 text-indigo-400" /> : <User className="mr-1 h-3 w-3" />}
-                                                {member.role.toUpperCase()}
+                                                {['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) ? <Shield className="mr-1 h-3 w-3 text-indigo-400" /> : <User className="mr-1 h-3 w-3" />}
+                                                {(member.role || 'viewer').toUpperCase().replace('_', ' ')}
                                             </Badge>
                                             <span className={`text-xs ${member.status === 'active' ? 'text-emerald-500' : 'text-amber-500'}`}>
                                                 {member.status === 'active' ? '● Activo' : '● Pendiente'}
@@ -573,108 +603,112 @@ export default function SettingsPage() {
             </Card>
 
             {/* Menu Amenidades */}
-            <Card className="bg-zinc-900 border-zinc-800 overflow-hidden relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-indigo-500/0 to-indigo-500/0 group-hover:from-indigo-500/5 group-hover:to-emerald-500/5 transition-colors duration-700 pointer-events-none" />
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 relative z-10">
-                    <div>
-                        <CardTitle className="text-white flex items-center gap-2">
-                            <span className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                                <Zap className="h-5 w-5" />
-                            </span> 
-                            Espacios y Amenidades
-                        </CardTitle>
-                        <CardDescription className="text-zinc-400 mt-1">
-                            Crea instalaciones reservables (Gimnasio, Salón de Eventos) y configura sus costos y normativas.
-                        </CardDescription>
-                    </div>
-                    <motion.div
-                        animate={{ y: [0, -4, 0] }}
-                        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-                    >
-                        <Button 
-                            onClick={() => { setEditingAmenity(null); setShowAmenityModal(true); }} 
-                            className="whitespace-nowrap shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)] border border-indigo-400/30 px-6 hover:scale-105 transition-all duration-300"
-                        >
-                            Registrar Amenidad
-                        </Button>
-                    </motion.div>
-                </CardHeader>
-                <CardContent className="space-y-6 relative z-10">
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {loadingAmenities ? (
-                            <div className="text-zinc-500 text-sm py-4 animate-pulse md:col-span-2">Cargando amenidades...</div>
-                        ) : amenities.length === 0 ? (
-                            <div className="border border-dashed border-zinc-800 rounded-xl p-8 flex flex-col items-center justify-center text-center space-y-3 bg-zinc-900/50 md:col-span-2">
-                                <span className="p-4 bg-zinc-800/80 rounded-full text-zinc-500">
-                                    <Plus className="h-8 w-8" />
-                                </span>
-                                <h3 className="font-bold text-white">Ningún Espacio Registrado</h3>
-                                <p className="text-sm text-zinc-400 max-w-sm">No has agregado amenidades a tu condominio. Comienza creando un espacio para que los residentes puedan reservar.</p>
+            {businessType !== 'propiedades' && (
+                <>
+                    <Card className="bg-zinc-900 border-zinc-800 overflow-hidden relative group">
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-indigo-500/0 to-indigo-500/0 group-hover:from-indigo-500/5 group-hover:to-emerald-500/5 transition-colors duration-700 pointer-events-none" />
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 relative z-10">
+                            <div>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <span className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                                        <Zap className="h-5 w-5" />
+                                    </span> 
+                                    Espacios y Amenidades
+                                </CardTitle>
+                                <CardDescription className="text-zinc-400 mt-1">
+                                    Crea instalaciones reservables (Gimnasio, Salón de Eventos) y configura sus costos y normativas.
+                                </CardDescription>
                             </div>
-                        ) : (
-                            amenities.map(amenity => (
-                                <motion.div 
-                                    key={amenity.id}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    onClick={() => { setEditingAmenity(amenity); setShowAmenityModal(true); }}
-                                    className={`relative p-5 rounded-2xl border bg-zinc-950 transition-all duration-300 cursor-pointer group/card flex flex-col justify-between overflow-hidden ${amenity.status === 'maintenance' ? 'border-orange-500/30 opacity-80 hover:opacity-100 hover:border-orange-500/60 shadow-[inset_0_0_20px_rgba(249,115,22,0.05)]' : 'border-zinc-800/80 hover:bg-zinc-900/90 shadow-none hover:shadow-[0_8px_30px_rgb(0,0,0,0.4)] hover:-translate-y-1 hover:border-indigo-500/30'}`}
+                            <motion.div
+                                animate={{ y: [0, -4, 0] }}
+                                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                <Button 
+                                    onClick={() => { setEditingAmenity(null); setShowAmenityModal(true); }} 
+                                    className="whitespace-nowrap shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)] border border-indigo-400/30 px-6 hover:scale-105 transition-all duration-300"
                                 >
-                                    <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent ${amenity.status === 'maintenance' ? 'via-orange-500' : 'via-indigo-500'} to-transparent opacity-0 group-hover:opacity-100 translate-x-[-100%] group-hover:translate-x-[100%] transition-all duration-1000 ease-in-out`} />
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-inner ${amenity.status === 'maintenance' ? 'from-orange-800 to-orange-950 grayscale-[0.5]' : amenity.color || 'from-zinc-700 to-zinc-900'} text-white`}>
-                                                <Zap className="h-5 w-5" />
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <h4 className="text-base font-bold text-white truncate max-w-[140px]">{amenity.name}</h4>
-                                                    {amenity.status === 'maintenance' && (
-                                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center gap-1 shrink-0 animate-pulse">
-                                                            Pausado
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${amenity.status === 'maintenance' ? 'text-orange-500/60' : 'text-emerald-400'}`}>
-                                                    {amenity.base_price > 0 ? `$${amenity.base_price} • ` : 'Gratis • '} 
-                                                    Depósito: {amenity.deposit_required ? `$${amenity.deposit_amount}` : 'NO'}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            onClick={(e) => handleDeleteAmenity(amenity.id, e)}
-                                            className="text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover/card:opacity-100 transition-all rounded-full shrink-0"
+                                    Registrar Amenidad
+                                </Button>
+                            </motion.div>
+                        </CardHeader>
+                        <CardContent className="space-y-6 relative z-10">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                {loadingAmenities ? (
+                                    <div className="text-zinc-500 text-sm py-4 animate-pulse md:col-span-2">Cargando amenidades...</div>
+                                ) : amenities.length === 0 ? (
+                                    <div className="border border-dashed border-zinc-800 rounded-xl p-8 flex flex-col items-center justify-center text-center space-y-3 bg-zinc-900/50 md:col-span-2">
+                                        <span className="p-4 bg-zinc-800/80 rounded-full text-zinc-500">
+                                            <Plus className="h-8 w-8" />
+                                        </span>
+                                        <h3 className="font-bold text-white">Ningún Espacio Registrado</h3>
+                                        <p className="text-sm text-zinc-400 max-w-sm">No has agregado amenidades a tu condominio. Comienza creando un espacio para que los residentes puedan reservar.</p>
+                                    </div>
+                                ) : (
+                                    amenities.map(amenity => (
+                                        <motion.div 
+                                            key={amenity.id}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            onClick={() => { setEditingAmenity(amenity); setShowAmenityModal(true); }}
+                                            className={`relative p-5 rounded-2xl border bg-zinc-950 transition-all duration-300 cursor-pointer group/card flex flex-col justify-between overflow-hidden ${amenity.status === 'maintenance' ? 'border-orange-500/30 opacity-80 hover:opacity-100 hover:border-orange-500/60 shadow-[inset_0_0_20px_rgba(249,115,22,0.05)]' : 'border-zinc-800/80 hover:bg-zinc-900/90 shadow-none hover:shadow-[0_8px_30px_rgb(0,0,0,0.4)] hover:-translate-y-1 hover:border-indigo-500/30'}`}
                                         >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                    <div className="flex items-center justify-between text-xs font-medium text-zinc-500 bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 group-hover/card:border-zinc-700 transition-colors mt-auto">
-                                        <div className="flex items-center gap-1.5 truncate">
-                                            <span className="opacity-70">Aforo:</span> 
-                                            <span className="text-white">{amenity.capacity} pers.</span>
-                                        </div>
-                                        <div className="w-1 h-1 rounded-full bg-zinc-700 shrink-0"></div>
-                                        <div className="flex items-center gap-1.5 truncate">
-                                            <span className="opacity-70">Horario:</span> 
-                                            <span className="text-white truncate max-w-[100px]">{amenity.use_hours || 'ND'}</span>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+                                            <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent ${amenity.status === 'maintenance' ? 'via-orange-500' : 'via-indigo-500'} to-transparent opacity-0 group-hover:opacity-100 translate-x-[-100%] group-hover:translate-x-[100%] transition-all duration-1000 ease-in-out`} />
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`h-10 w-10 flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-inner ${amenity.status === 'maintenance' ? 'from-orange-800 to-orange-950 grayscale-[0.5]' : amenity.color || 'from-zinc-700 to-zinc-900'} text-white`}>
+                                                        <Zap className="h-5 w-5" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="text-base font-bold text-white truncate max-w-[140px]">{amenity.name}</h4>
+                                                            {amenity.status === 'maintenance' && (
+                                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center gap-1 shrink-0 animate-pulse">
+                                                                    Pausado
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${amenity.status === 'maintenance' ? 'text-orange-500/60' : 'text-emerald-400'}`}>
+                                                            {amenity.base_price > 0 ? `$${amenity.base_price} • ` : 'Gratis • '} 
+                                                            Depósito: {amenity.deposit_required ? `$${amenity.deposit_amount}` : 'NO'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    onClick={(e) => handleDeleteAmenity(amenity.id, e)}
+                                                    className="text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover/card:opacity-100 transition-all rounded-full shrink-0"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs font-medium text-zinc-500 bg-zinc-900 p-2.5 rounded-lg border border-zinc-800 group-hover/card:border-zinc-700 transition-colors mt-auto">
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    <span className="opacity-70">Aforo:</span> 
+                                                    <span className="text-white">{amenity.capacity} pers.</span>
+                                                </div>
+                                                <div className="w-1 h-1 rounded-full bg-zinc-700 shrink-0"></div>
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    <span className="opacity-70">Horario:</span> 
+                                                    <span className="text-white truncate max-w-[100px]">{amenity.use_hours || 'ND'}</span>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
 
-            <AmenityModal 
-                isOpen={showAmenityModal}
-                onClose={() => { setShowAmenityModal(false); setEditingAmenity(null); }}
-                orgId={orgId || ''}
-                amenityToEdit={editingAmenity}
-                onSave={handleSaveAmenity}
-            />
+                    <AmenityModal 
+                        isOpen={showAmenityModal}
+                        onClose={() => { setShowAmenityModal(false); setEditingAmenity(null); }}
+                        orgId={orgId || ''}
+                        amenityToEdit={editingAmenity}
+                        onSave={handleSaveAmenity}
+                    />
+                </>
+            )}
 
             {/* Subscription */}
             <Card className="bg-zinc-900 border-zinc-800 flex flex-col justify-between overflow-hidden relative">

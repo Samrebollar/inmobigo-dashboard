@@ -24,6 +24,7 @@ import {
     Users,
     Upload,
     File,
+    FileText,
     ImageIcon,
     Edit2,
     Trash2,
@@ -43,8 +44,13 @@ import { QRCodeDisplay } from '@/components/ui/qr-code-display'
 import { VisitorPassesAdmin } from './servicios/visitor-passes-admin'
 import { PackageAlertsAdmin } from './servicios/package-alerts-admin'
 import { propertiesService } from '@/services/properties-service'
+import { useDemoMode } from '@/hooks/use-demo-mode'
+import { useUserRole } from '@/hooks/use-user-role'
+import { ContractsAdmin } from './servicios/contracts-admin'
+import { InventoryAdmin } from './servicios/inventory-admin'
+import { ClipboardList } from 'lucide-react'
 
-type TabType = 'announcements' | 'packages' | 'access' | 'amenities'
+type TabType = 'announcements' | 'packages' | 'access' | 'amenities' | 'contracts' | 'inventory'
 
 interface Announcement {
     id: string
@@ -267,19 +273,41 @@ export function AvisosClient({
     }
 
     const [managedCondos, setManagedCondos] = useState<string[]>([])
+    const { isDemo } = useDemoMode()
+    const { isPropiedades } = useUserRole()
 
     useEffect(() => {
         const fetchCondos = async () => {
-            if (!admin?.organization_id) return
+            if (!admin?.organization_id && !isDemo) return
             try {
+                // Manejo especial para modo demo
+                if (isDemo || admin?.organization_id?.startsWith('demo-')) {
+                    const { demoDb } = await import('@/utils/demo-db')
+                    const demoProperties = demoDb.getProperties()
+                    if (demoProperties.length > 0) {
+                        setManagedCondos(demoProperties.map(c => c.name))
+                        return
+                    }
+                }
+
                 const condos = await propertiesService.getByOrganization(admin.organization_id)
-                setManagedCondos(condos.map(c => c.name))
+                
+                if (condos.length === 0 && isDemo) {
+                    const { demoDb } = await import('@/utils/demo-db')
+                    setManagedCondos(demoDb.getProperties().map(p => p.name))
+                } else {
+                    setManagedCondos(condos.map(c => c.name))
+                }
             } catch (err) {
                 console.error("Error fetching condos for visibility:", err)
+                if (isDemo) {
+                    const { demoDb } = await import('@/utils/demo-db')
+                    setManagedCondos(demoDb.getProperties().map(p => p.name))
+                }
             }
         }
         fetchCondos()
-    }, [admin?.organization_id])
+    }, [admin?.organization_id, isDemo])
 
     const fetchAmenityReservations = async () => {
         setLoadingAmenities(true)
@@ -565,12 +593,20 @@ export function AvisosClient({
 
 
 
-    const tabs = [
+    const condoTabs = [
         { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
         { id: 'packages', label: 'Paquetería', icon: Package, color: 'text-amber-400', bg: 'bg-amber-500/10' },
         { id: 'access', label: 'Accesos', icon: QrCode, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         { id: 'amenities', label: 'Amenidades', icon: PartyPopper, color: 'text-rose-400', bg: 'bg-rose-500/10' }
     ]
+
+    const propTabs = [
+        { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+        { id: 'contracts', label: 'Contratos', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+        { id: 'inventory', label: 'Inventario', icon: ClipboardList, color: 'text-emerald-400', bg: 'bg-emerald-500/10' }
+    ]
+
+    const tabs = isPropiedades ? propTabs : condoTabs
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -975,12 +1011,20 @@ export function AvisosClient({
                         </div>
                     )}
 
-                    {activeTab === 'packages' && (
+                    {activeTab === 'packages' && !isPropiedades && (
                         <PackageAlertsAdmin admin={admin} initialAlerts={packageAlerts} />
                     )}
 
-                    {activeTab === 'access' && (
+                    {activeTab === 'access' && !isPropiedades && (
                         <VisitorPassesAdmin admin={admin} initialPasses={visitorPasses} />
+                    )}
+
+                    {activeTab === 'contracts' && isPropiedades && (
+                        <ContractsAdmin admin={admin} />
+                    )}
+
+                    {activeTab === 'inventory' && isPropiedades && (
+                        <InventoryAdmin admin={admin} />
                     )}
                 </motion.div>
             </AnimatePresence>

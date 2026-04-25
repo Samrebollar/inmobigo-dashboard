@@ -8,10 +8,60 @@
 const STORAGE_KEYS = {
     PROPERTIES: 'inmobigo_demo_properties',
     UNITS: 'inmobigo_demo_units',
-    RESIDENTS: 'inmobigo_demo_residents'
+    RESIDENTS: 'inmobigo_demo_residents',
+    CONTRACTS: 'inmobigo_demo_contracts',
+    INVENTORY: 'inmobigo_demo_inventory'
 }
 
 export const demoDb = {
+    // ... existentes ...
+    
+    // Contracts
+    getContracts: (): any[] => {
+        if (typeof window === 'undefined') return []
+        const stored = localStorage.getItem(STORAGE_KEYS.CONTRACTS)
+        return stored ? JSON.parse(stored) : []
+    },
+    saveContract: (contract: any) => {
+        const contracts = demoDb.getContracts()
+        const exists = contracts.findIndex(c => c.id === contract.id)
+        if (exists >= 0) {
+            contracts[exists] = contract
+        } else {
+            contracts.unshift(contract)
+        }
+        localStorage.setItem(STORAGE_KEYS.CONTRACTS, JSON.stringify(contracts))
+    },
+    deleteContract: (id: string) => {
+        const contracts = demoDb.getContracts().filter(c => c.id !== id)
+        localStorage.setItem(STORAGE_KEYS.CONTRACTS, JSON.stringify(contracts))
+    },
+
+    // Inventory
+    getInventory: (propertyId?: string): any[] => {
+        if (typeof window === 'undefined') return []
+        const stored = localStorage.getItem(STORAGE_KEYS.INVENTORY)
+        const items = stored ? JSON.parse(stored) : []
+        if (propertyId) {
+            return items.filter((i: any) => i.property_id === propertyId)
+        }
+        return items
+    },
+    saveInventoryItem: (item: any) => {
+        const items = demoDb.getInventory()
+        const exists = items.findIndex(i => i.id === item.id)
+        if (exists >= 0) {
+            items[exists] = item
+        } else {
+            items.unshift(item)
+        }
+        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(items))
+    },
+    deleteInventoryItem: (id: string) => {
+        const items = demoDb.getInventory().filter(i => i.id !== id)
+        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(items))
+    },
+
     // Properties
     getProperties: (): any[] => {
         if (typeof window === 'undefined') return []

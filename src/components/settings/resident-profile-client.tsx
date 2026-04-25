@@ -30,6 +30,7 @@ import { normalizeMexicanPhone } from '@/utils/phone-utils'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 
 export default function ResidentProfileClient({ 
     user, 
@@ -131,11 +132,11 @@ export default function ResidentProfileClient({
             
             setTimeout(() => {
                 router.refresh()
-                alert("Foto de perfil actualizada correctamente")
+                toast.success('Fotografía de perfil actualizada con éxito. Los cambios ya son visibles en su cuenta.')
             }, 800)
         } catch (error: any) {
             console.error('Error uploading avatar:', error)
-            alert(`Error al subir imagen: ${error.message || 'Error desconocido'}`)
+            toast.error(`No se pudo actualizar la fotografía: ${error.message || 'Error de red'}`)
         } finally {
             setLoading(false)
         }
@@ -170,10 +171,10 @@ export default function ResidentProfileClient({
             }
 
             router.refresh()
-            alert("Cambios guardados correctamente")
+            toast.success('Perfil actualizado con éxito. Sus datos han sido guardados de forma segura.')
         } catch (error: any) {
             console.error('Error saving profile:', error)
-            alert(`Error al guardar: ${error.message}`)
+            toast.error(`Ocurrió un error al guardar los cambios: ${error.message}`)
         } finally {
             setLoading(false)
         }

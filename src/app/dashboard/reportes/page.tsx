@@ -46,7 +46,7 @@ export default function ReportsPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-white">Centro de Reportes</h1>
-                    <p className="text-zinc-400">Genera y descarga informes detallados de tu organización.</p>
+                    <p className="text-zinc-400">Genera y descarga informes detallados de tus propiedades.</p>
                 </div>
             </div>
 

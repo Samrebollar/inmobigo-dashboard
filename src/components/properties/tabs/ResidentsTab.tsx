@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle } from 'lucide-react'
+import { Plus, Search, Filter, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
+import { resendInvitationAction } from '@/app/actions/auth-actions'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -111,6 +113,24 @@ export function ResidentsTab() {
         }
     }
 
+    const handleResendInvitation = async (email: string) => {
+        if (!email) {
+            toast.error('Este residente no tiene un correo electrónico configurado.');
+            return;
+        }
+
+        const promise = resendInvitationAction(email);
+
+        toast.promise(promise, {
+            loading: 'Reenviando invitación...',
+            success: (data) => {
+                if (!data.success) throw new Error(data.error);
+                return 'Correo de invitación enviado exitosamente.';
+            },
+            error: (err) => `No se pudo enviar la invitación: ${err.message}`
+        });
+    }
+
     if (loading) {
         return (
             <div className="space-y-4">
@@ -168,7 +188,7 @@ export function ResidentsTab() {
                                 <th className="px-6 py-4 font-medium">Vehículos</th>
                                 <th className="px-6 py-4 font-medium">Estado</th>
                                 <th className="px-6 py-4 font-medium">Saldo Pendiente</th>
-                                <th className="px-6 py-4 font-medium text-right">Acciones</th>
+                                <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800/50">
@@ -226,8 +246,15 @@ export function ResidentsTab() {
                                                 {resident.debt_amount > 0 ? `$${resident.debt_amount.toLocaleString()}` : '$0.00'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    onClick={() => handleResendInvitation(resident.email)}
+                                                    className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition-colors"
+                                                    title="Reenviar invitación de acceso"
+                                                >
+                                                    <Send className="h-4 w-4" />
+                                                </button>
                                                 {resident.status === 'delinquent' && (
                                                     <button
                                                         onClick={() => openWhatsApp(resident.phone)}
@@ -239,13 +266,15 @@ export function ResidentsTab() {
                                                 )}
                                                 <button
                                                     onClick={() => handleEdit(resident)}
-                                                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg"
+                                                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                                                    title="Editar residente"
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => confirmDelete(resident)}
-                                                    className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg"
+                                                    className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                                    title="Eliminar residente"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>

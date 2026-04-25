@@ -166,3 +166,27 @@ export async function updateUserRoleAdminAction(userId: string, role: string) {
         return { success: false, error: error.message };
     }
 }
+
+export async function resendInvitationAction(email: string) {
+    console.log(`✉️ [resendInvitationAction] Reenviando invitación a: ${email}`);
+    const admin = createAdminClient();
+
+    try {
+        if (!email) throw new Error('El correo electrónico es requerido');
+
+        // Intentamos enviar un correo de recuperación de contraseña (que funciona como invitación para establecer password)
+        const { error } = await admin.auth.resetPasswordForEmail(email, {
+            redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password`,
+        });
+
+        if (error) {
+            console.error('🔴 [resendInvitationAction] Error al enviar reset password:', error.message);
+            throw new Error('No se pudo enviar el correo de invitación. Verifica que el residente tenga una cuenta de acceso creada.');
+        }
+        
+        return { success: true };
+    } catch (error: any) {
+        console.error('🔴 [resendInvitationAction] ERROR:', error.message);
+        return { success: false, error: error.message };
+    }
+}

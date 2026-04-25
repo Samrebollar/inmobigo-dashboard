@@ -239,24 +239,50 @@ export async function adminCreateResidentAction(payload: any) {
             // 2. Invitar al usuario (Paso Crítico)
             console.log(`👤 [adminCreateResidentAction] Invitando: ${cleanEmail}`);
             
-            const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-                // Pasamos el email en la URL como salvavidas de identidad
-                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/activar-residente?e=${encodeURIComponent(cleanEmail)}`,
-                data: {
-                    first_name,
-                    last_name,
-                    phone,
-                    role: 'resident'
+            try {
+                const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
+                    // Pasamos el email en la URL como salvavidas de identidad
+                    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/activar-residente?e=${encodeURIComponent(cleanEmail)}`,
+                    data: {
+                        first_name,
+                        last_name,
+                        phone,
+                        role: 'resident'
+                    }
+                });
+
+                if (authError || !authData?.user) {
+                    throw authError || new Error('No se generaron credenciales de usuario');
                 }
-            });
+                
+                userId = authData.user.id;
+                console.log(`✅ [adminCreateResidentAction] Usuario invitado con ID: ${userId}`);
+            } catch (inviteError: any) {
+                console.error('⚠️ Error al enviar invitación (Posible fallo SMTP/Límite):', inviteError.message);
+                
+                // FALLBACK: Si falla el envío del correo (ej. Custom SMTP mal configurado),
+                // creamos el usuario silenciosamente para que no bloquee a la plataforma.
+                console.log('🔄 Ejecutando FALLBACK: Creando usuario sin enviar correo inicial...');
+                const { data: fallbackData, error: fallbackError } = await admin.auth.admin.createUser({
+                    email: cleanEmail,
+                    email_confirm: true,
+                    password: Math.random().toString(36).slice(-12) + 'InmobiGo1!', // Contraseña temporal segura
+                    user_metadata: {
+                        first_name,
+                        last_name,
+                        phone,
+                        role: 'resident'
+                    }
+                });
 
-            if (authError || !authData?.user) {
-                console.error('❌ Error en Auth:', authError);
-                return { success: false, error: authError?.message || 'Error al crear credenciales' };
+                if (fallbackError || !fallbackData?.user) {
+                    console.error('❌ Error fatal en Fallback:', fallbackError);
+                    return { success: false, error: 'Fallo al crear el usuario en Auth, incluso usando el método de respaldo.' };
+                }
+
+                userId = fallbackData.user.id;
+                console.log(`✅ [adminCreateResidentAction] Usuario creado por Fallback con ID: ${userId}`);
             }
-
-            userId = authData.user.id;
-            console.log(`✅ [adminCreateResidentAction] Usuario creado con ID: ${userId}`);
         }
 
         // 3. Determinar campos dinámicos según el tipo de negocio

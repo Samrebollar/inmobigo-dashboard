@@ -614,10 +614,12 @@ export function AvisosClient({
             <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-2">
                 <div>
                     <h1 className="text-4xl font-extrabold tracking-tight text-white mb-2 bg-gradient-to-r from-white via-zinc-400 to-zinc-500 bg-clip-text text-transparent">
-                        Comunicación y Operaciones
+                        {isPropiedades ? 'Administración de Propiedades' : 'Comunicación y Operaciones'}
                     </h1>
                     <p className="text-zinc-500 text-sm md:text-base max-w-2xl font-medium">
-                        Centraliza avisos, paquetería, accesos y gestión de amenidades en un solo lugar
+                        {isPropiedades 
+                            ? 'Centraliza avisos, contratos e inventario y mantén el control total de tus rentas' 
+                            : 'Centraliza avisos, paquetería, accesos y gestión de amenidades en un solo lugar'}
                     </p>
                 </div>
                 

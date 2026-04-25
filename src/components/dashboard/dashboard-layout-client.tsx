@@ -41,17 +41,27 @@ export function DashboardLayoutClient({
         return () => window.removeEventListener('keydown', handleEscape)
     }, [])
 
-    // Prevent scrolling when mobile sidebar is open
+    // Prevent scrolling when mobile sidebar is open, but be very careful not to freeze the app
     useEffect(() => {
+        // Force cleanup any leftover Radix UI scroll locks
+        document.body.removeAttribute('data-scroll-locked')
+        document.body.style.pointerEvents = 'auto'
+        
         if (isSidebarOpen) {
             document.body.style.overflow = 'hidden'
         } else {
             document.body.style.overflow = ''
         }
+        
+        // Safety cleanup to ensure body never stays frozen when component unmounts
+        return () => {
+            document.body.style.overflow = ''
+            document.body.style.pointerEvents = 'auto'
+        }
     }, [isSidebarOpen])
 
     return (
-        <div className="flex h-screen w-full bg-zinc-950 text-white overflow-hidden">
+        <div className="flex h-screen w-full bg-zinc-950 text-white overflow-hidden pointer-events-auto">
             {/* Desktop Sidebar */}
             <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-zinc-800 bg-zinc-900/50 backdrop-blur-xl flex-col">
                 {sidebarContent}

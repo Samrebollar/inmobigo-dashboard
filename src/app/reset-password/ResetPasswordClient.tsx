@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Lock, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react'
 import { adminResetPasswordAction } from '@/app/actions/auth-actions'
+import { createClient } from '@/utils/supabase/client'
 
 function ResetPasswordForm() {
     const [password, setPassword] = useState('')
@@ -41,13 +42,25 @@ function ResetPasswordForm() {
                 throw new Error('Por seguridad, ingresa tu correo electrónico.');
             }
 
-            // USAMOS EL MODO ADMIN DIRECTO
             const result = await adminResetPasswordAction(uid || undefined, password, finalEmail || undefined)
 
             if (!result.success) throw new Error(result.error)
 
+            // Auto-login inmediato para llevarlo a su panel sin pasar por el login
+            const supabase = createClient()
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email: finalEmail!,
+                password: password,
+            })
+
             setSuccess(true)
-            setTimeout(() => { router.push('/login') }, 3000)
+            
+            if (signInError) {
+                console.error("Auto-login failed:", signInError.message)
+                setTimeout(() => { router.push('/login') }, 2000)
+            } else {
+                setTimeout(() => { router.push('/dashboard') }, 2000)
+            }
         } catch (err: any) {
             setError(err.message || 'No se pudo activar la cuenta')
         } finally {

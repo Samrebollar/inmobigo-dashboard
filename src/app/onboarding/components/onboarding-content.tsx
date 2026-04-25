@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { UserTypeSelection } from './user-type-selection'
 import { createClient } from '@/utils/supabase/client'
+import { updateUserRoleAdminAction } from '@/app/actions/auth-actions'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 type UserType = 'admin_condominio' | 'admin_propiedades'
@@ -40,6 +42,7 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
 
             if (profileError) {
                 console.error('ERROR PERFIL (UPSERT) MESSAGE:', profileError.message)
+                toast.error(`Error al actualizar perfil: ${profileError.message}`)
                 throw profileError
             }
 
@@ -81,10 +84,7 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
 
                 if (orgError) {
                     console.error('!!! ERROR INSERT ORG !!!')
-                    console.error('CODE:', orgError.code)
-                    console.error('MESSAGE:', orgError.message)
-                    console.error('DETAILS:', orgError.details)
-                    console.error('HINT:', orgError.hint)
+                    toast.error(`Error al crear organización: ${orgError.message}`)
                     throw orgError
                 }
                 orgId = newOrg.id
@@ -133,17 +133,11 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
             
             const commonRole = type // 'admin_condominio' o 'admin_propiedades'
             
-            // Actualizar tabla public.users (donde se guarda el rol del sistema)
-            const { error: userTableError } = await supabase
-                .from('users')
-                .update({ 
-                    role: commonRole 
-                    // NO usamos condominium_id ni property_id
-                })
-                .eq('id', userId)
+            // Actualizar tabla public.users usando Server Action para saltar reglas RLS infinitas
+            const roleUpdateResult = await updateUserRoleAdminAction(userId, commonRole)
 
-            if (userTableError) {
-                console.error('ERROR TABLA USERS MESSAGE:', userTableError.message)
+            if (!roleUpdateResult.success) {
+                console.error('ERROR TABLA USERS MESSAGE:', roleUpdateResult.error)
             }
 
             // Actualizar tabla public.profiles (usada para el contexto del frontend)
@@ -172,13 +166,19 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
             })
 
             console.log('Onboarding completado con éxito.')
+            toast.success('Entorno configurado correctamente')
             
             // Forzar actualización total para que useUserRole capture los cambios desde organization_users
             window.location.href = '/dashboard'
         } catch (err: any) {
             console.error('--- FALLO CRITICO EN ONBOARDING ---')
             console.error('OBJETO ERROR:', err)
-            if (err.message) console.error('MENSAJE:', err.message)
+            if (err.message) {
+                console.error('MENSAJE:', err.message)
+                toast.error(`Error al configurar: ${err.message}`)
+            } else {
+                toast.error('Ocurrió un error inesperado al guardar tu selección.')
+            }
         } finally {
             setLoading(false)
         }

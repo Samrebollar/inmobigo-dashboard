@@ -147,3 +147,22 @@ export async function adminResetPasswordAction(userId?: string, password?: strin
         return { success: false, error: error.message };
     }
 }
+
+export async function updateUserRoleAdminAction(userId: string, role: string) {
+    console.log(`🛠️ [updateUserRoleAdminAction] Actualizando rol del sistema para: ${userId} a ${role}`);
+    const admin = createAdminClient();
+
+    try {
+        const { error } = await admin
+            .from('users')
+            .update({ role })
+            .eq('id', userId);
+
+        if (error) throw error;
+        
+        return { success: true };
+    } catch (error: any) {
+        console.error('🔴 [updateUserRoleAdminAction] ERROR:', error.message);
+        return { success: false, error: error.message };
+    }
+}

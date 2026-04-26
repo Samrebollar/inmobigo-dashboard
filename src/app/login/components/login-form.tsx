@@ -86,7 +86,7 @@ export function LoginForm() {
                         )}
                     >
                         <Building2 size={16} />
-                        <span>Administración</span>
+                        <span>Administradores</span>
                     </button>
                     <button
                         onClick={() => setUserType('resident')}
@@ -96,7 +96,7 @@ export function LoginForm() {
                         )}
                     >
                         <Home size={16} />
-                        <span>Residentes</span>
+                        <span>Residentes / Inquilinos</span>
                     </button>
                 </div>
 
@@ -104,15 +104,17 @@ export function LoginForm() {
                     <div className="text-center mb-6">
                         <div className="transition-all duration-300">
                             <h1 className="text-2xl font-bold tracking-tight text-white">
-                                <span>{userType === 'admin' ? 'Portal Corporativo' : 'Portal de Residentes'}</span>
+                                <span>{userType === 'admin' ? 'Panel de Administración' : 'Mi Espacio'}</span>
                             </h1>
+
                             <p className="mt-1 text-sm text-zinc-400">
                                 <span>{userType === 'admin'
-                                    ? 'Gestiona tus condominios y finanzas.'
-                                    : 'Accede a tus pagos y avisos.'}</span>
+                                    ? 'Administra condominios, propiedades y cobros desde un solo lugar.'
+                                    : 'Accede a tus pagos, avisos y servicios desde un solo lugar.'}</span>
                             </p>
                         </div>
                     </div>
+
 
                     <form onSubmit={handleLogin} className="space-y-5 relative z-10">
 

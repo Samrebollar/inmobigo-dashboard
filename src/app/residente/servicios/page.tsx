@@ -1,0 +1,36 @@
+import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
+import ServiciosClient from '@/components/dashboard/servicios/servicios-client'
+
+export const metadata = {
+    title: 'Servicios | InmobiGo',
+    description: 'Generación de QRs y Avisos de Paquetería',
+}
+
+export default async function ServiciosPage() {
+    const supabase = await createClient()
+
+    const {
+        data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+        redirect('/login')
+    }
+
+    const { data: resident, error: residentError } = await supabase
+        .from('residents')
+        .select(`
+            *,
+            condominiums(name, organization_id),
+            units(unit_number)
+        `)
+        .eq('user_id', user.id)
+        .single()
+
+    if (residentError || !resident) {
+        redirect('/residente')
+    }
+
+    return <ServiciosClient resident={resident} />
+}

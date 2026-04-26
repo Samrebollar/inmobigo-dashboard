@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { createAdminClient } from './admin'
 
 export async function updateSession(request: NextRequest) {
     let supabaseResponse = NextResponse.next({
@@ -7,6 +8,7 @@ export async function updateSession(request: NextRequest) {
     })
 
     const supabase = createServerClient(
+
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
@@ -77,66 +79,117 @@ export async function updateSession(request: NextRequest) {
     }
 
     // RBAC Check
-    if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    if (user) {
+        const path = request.nextUrl.pathname
+
         // 1. Fetch Role from multiple layers (Strict to Weak)
-        
-        // A. Organization Users (Staff/Admin)
-        const { data: orgUser } = await supabase
+        const adminSupabase = createAdminClient()
+
+        const { data: orgUser } = await adminSupabase
             .from('organization_users')
-            .select('role_new')
+            .select('role_new, organization_id')
             .eq('user_id', user.id)
             .maybeSingle()
 
-        // B. Profiles (Fallback for Global Roles)
-        const { data: profile } = await supabase
+        const { data: profile } = await adminSupabase
             .from('profiles')
             .select('role_new, user_type')
             .eq('id', user.id)
             .maybeSingle()
 
-        // C. Residents (Specific for residents)
-        const { data: resident } = await supabase
+        const { data: resident } = await adminSupabase
             .from('residents')
-            .select('id')
+            .select('id, condominiums(organization_id)')
             .eq('user_id', user.id)
             .maybeSingle()
 
         let role = 'viewer'
-        
         if (orgUser?.role_new) {
             role = orgUser.role_new
-        } else if (profile?.role_new && profile.role_new !== 'resident') {
+        } else if (profile?.role_new && profile.role_new !== 'resident' && profile.role_new !== 'tenant') {
             role = profile.role_new
         } else if (user.user_metadata?.role === 'admin') {
             role = 'admin'
-        } else if (resident || profile?.role_new === 'resident' || user.user_metadata?.role === 'resident') {
-            role = 'resident'
+        } else if (resident || profile?.role_new === 'resident' || profile?.role_new === 'tenant' || user.user_metadata?.role === 'resident' || user.user_metadata?.role === 'tenant') {
+            role = 'resident' 
         }
+
+        // Determine associated business_type
+        let orgId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
+        let businessType = 'condominio'
+
+        if (orgId) {
+            const { data: org } = await adminSupabase
+                .from('organizations')
+                .select('business_type')
+                .eq('id', orgId)
+                .maybeSingle()
+            if (org?.business_type) {
+                businessType = org.business_type
+            }
+        }
+
+
+        if (role === 'resident' || role === 'tenant') {
+            if (businessType === 'propiedades') {
+                role = 'tenant'
+            } else {
+                role = 'resident'
+            }
+        }
+
+
 
         const isAdmin = ['owner', 'admin', 'admin_condominio', 'admin_propiedad', 'admin_propiedades'].includes(role)
         const userType = profile?.user_type || user.user_metadata?.user_type
 
-        // --- NEW ONBOARDING REDIRECTION ---
-        // If logged in as admin/staff but no user_type or organization, force onboarding
-        if (isAdmin && !userType && !request.nextUrl.pathname.startsWith('/onboarding')) {
-            return NextResponse.redirect(new URL('/onboarding', request.url))
+        // --- GLOBAL REDIRECTIONS BASED ON ROLES ---
+        if (role === 'resident' && !path.startsWith('/residente') && !isPublicStaticOrAuth) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/residente'
+            return NextResponse.redirect(url)
         }
 
-        const path = request.nextUrl.pathname
-        const isResident = role === 'resident' || role === 'tenant'
-        const isStaff = isAdmin || ['manager', 'accountant', 'staff', 'security'].includes(role)
+        if (role === 'tenant' && !path.startsWith('/inquilino') && !isPublicStaticOrAuth) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/inquilino'
+            return NextResponse.redirect(url)
+        }
 
-        // RESTRICTED ROUTES FOR RESIDENTS & VIEWERS
-        // Note: New admin roles (admin_condominio, admin_propiedad) pass this check
-        if (!isStaff && (isResident || role === 'viewer')) {
-            if (path.startsWith('/dashboard/condominios') ||
-                path.startsWith('/dashboard/residentes') ||
-                path.startsWith('/dashboard/configuracion') ||
-                path.startsWith('/dashboard/reportes')) {
-                console.log(`Middleware: Redirecting ${role} from ${path} to /dashboard`)
-                return NextResponse.redirect(new URL('/dashboard', request.url))
+        // Bloquear acceso a /residente/* si no es residente
+        if (path.startsWith('/residente') && role !== 'resident') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/dashboard'
+            return NextResponse.redirect(url)
+        }
+
+        // Bloquear acceso a /inquilino/* si no es inquilino
+        if (path.startsWith('/inquilino') && role !== 'tenant') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/dashboard'
+            return NextResponse.redirect(url)
+        }
+
+        if (path.startsWith('/dashboard')) {
+            // --- NEW ONBOARDING REDIRECTION ---
+            if (isAdmin && !userType && !path.startsWith('/onboarding')) {
+                return NextResponse.redirect(new URL('/onboarding', request.url))
+            }
+
+            const isResidentRole = role === 'resident' || role === 'tenant'
+            const isStaff = isAdmin || ['manager', 'accountant', 'staff', 'security'].includes(role)
+
+            // RESTRICTED ROUTES FOR VIEWERS
+            if (!isStaff && role === 'viewer') {
+                if (path.startsWith('/dashboard/condominios') ||
+                    path.startsWith('/dashboard/residentes') ||
+                    path.startsWith('/dashboard/configuracion') ||
+                    path.startsWith('/dashboard/reportes')) {
+                    return NextResponse.redirect(new URL('/dashboard', request.url))
+                }
             }
         }
+
 
         // Settings (Org): Owner, Admin Only
         if (path.startsWith('/dashboard/configuracion') && !isAdmin) {

@@ -214,7 +214,9 @@ export async function POST(req: Request) {
                 body: JSON.stringify({
                     reason: `InmobiGo ${planKey}`,
                     external_reference: subscription.id,
-                    payer_email: user.email,
+                    payer_email: (user.email?.includes('admin') || user.email?.includes('sam32') || user.email?.includes('inmobigo'))
+                        ? 'test_user_mx@testuser.com' 
+                        : user.email,
                     back_url: process.env.NEXT_PUBLIC_APP_URL?.includes('localhost') 
                         ? 'https://inmobigo.mx/dashboard?subscription=success' 
                         : `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?subscription=success`,

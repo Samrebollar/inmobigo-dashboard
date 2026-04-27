@@ -592,7 +592,47 @@ export const financeService = {
         }) || []
     },
 
+    async getByResident(residentId: string): Promise<Invoice[]> {
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('invoices')
+            .select(`
+                *,
+                condominiums (name),
+                units (
+                    unit_number,
+                    residents (first_name, last_name)
+                ),
+                residents (first_name, last_name)
+            `)
+            .eq('resident_id', residentId)
+            .order('created_at', { ascending: false })
+
+        if (error) {
+            console.error('Error fetching resident invoices:', error)
+            return []
+        }
+
+        return data?.map(inv => {
+            let res = (inv as any).residents;
+            if (!res || (Array.isArray(res) && res.length === 0)) {
+                res = inv.units?.residents;
+            }
+            if (Array.isArray(res) && res.length > 0) res = res[0];
+
+            const rName = res ? `${res.first_name || ''} ${res.last_name || ''}`.trim() : null
+            
+            return {
+                ...inv,
+                condominium_name: inv.condominiums?.name,
+                unit_number: inv.units?.unit_number,
+                resident_name: rName || null
+            }
+        }) || []
+    },
+
     async getTotalIngresos(): Promise<number> {
+
         const supabase = createClient()
         const { data, error } = await supabase.rpc('get_total_ingresos')
         

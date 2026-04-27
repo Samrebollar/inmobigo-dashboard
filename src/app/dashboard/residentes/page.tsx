@@ -169,14 +169,17 @@ export default function ResidentsPage() {
                 // Filter invoices for this resident's unit
                 // We assume residents are linked to units, and invoices are linked to units
                 const unitInvoices = invoicesData.filter(inv =>
-                    resident.unit_id && inv.unit_id === resident.unit_id
+                    (resident.unit_id && inv.unit_id === resident.unit_id) ||
+                    ((inv as any).resident_id === resident.id)
                 )
+
 
                 const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
                 const overdueInvoices = unitInvoices.filter(i => i.status === 'overdue')
                 const paidInvoices = unitInvoices.filter(i => i.status === 'paid').sort((a, b) => new Date(b.paid_at || '').getTime() - new Date(a.paid_at || '').getTime())
 
-                const debt = pendingInvoices.reduce((sum, inv) => sum + inv.amount, 0)
+                                                                const debt = pendingInvoices.reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0) + Number(resident.debt_amount || 0)
+
                 const lastPayment = paidInvoices.length > 0 ? paidInvoices[0].paid_at : undefined
 
                 let maxDays = 0

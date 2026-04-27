@@ -8,9 +8,10 @@ interface ModalProps {
     onClose: () => void
     title: string
     children: React.ReactNode
+    className?: string
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, className }: ModalProps) {
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -21,7 +22,8 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 
     return createPortal(
         <div className="fixed inset-0 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" style={{ zIndex: 9998 }}>
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl relative" style={{ zIndex: 9999 }}>
+            <div className={`w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl relative ${className || 'max-w-md'}`} style={{ zIndex: 9999 }}>
+
                 <div className="flex items-center justify-between border-b border-zinc-800 p-4">
                     <h2 className="text-lg font-semibold text-white">{title}</h2>
                     <button onClick={onClose} className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">

@@ -69,36 +69,43 @@ export default function ResidentMovementsPage() {
                 }
             }
 
-            if (residentData?.unit_id) {
-                const invoicesData = await financeService.getByUnit(residentData.unit_id)
-                setInvoices(invoicesData)
+            let invoicesData: Invoice[] = []
+            const [invoicesByUnit, invoicesByResident] = await Promise.all([
+                residentData?.unit_id ? financeService.getByUnit(residentData.unit_id) : Promise.resolve([]),
+                financeService.getByResident(residentId)
+            ])
 
-                // Calculate Stats
-                const totalBilled = invoicesData.reduce((sum, inv) => sum + inv.amount, 0)
-                const totalPaid = invoicesData
-                    .filter(inv => inv.status === 'paid')
-                    .reduce((sum, inv) => sum + inv.amount, 0)
-                const totalPending = invoicesData
-                    .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
-                    .reduce((sum, inv) => sum + inv.amount, 0)
-                const overdueInvoices = invoicesData.filter(inv => inv.status === 'overdue')
+            const invoiceMap = new Map<string, Invoice>()
+            invoicesByUnit.forEach(inv => invoiceMap.set(inv.id, inv))
+            invoicesByResident.forEach(inv => invoiceMap.set(inv.id, inv))
+            invoicesData = Array.from(invoiceMap.values())
+            setInvoices(invoicesData)
 
-                let maxDays = 0
-                if (overdueInvoices.length > 0) {
-                    const oldest = overdueInvoices.reduce((prev, curr) =>
-                        new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
-                    )
-                    maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
-                }
+                                    const totalBilled = invoicesData.reduce((sum, inv) => sum + inv.amount, 0) + Number(residentData?.debt_amount || 0)
+            const totalPaid = invoicesData
+                .filter(inv => inv.status === 'paid')
+                .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
+            const totalPending = invoicesData
+                .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0) + Number(residentData?.debt_amount || 0)
+            const overdueInvoices = invoicesData.filter(inv => inv.status === 'overdue')
 
-                setStats({
-                    totalBilled,
-                    totalPaid,
-                    totalPending,
-                    overdueCount: overdueInvoices.length,
-                    maxDaysOverdue: maxDays
-                })
+            let maxDays = 0
+            if (overdueInvoices.length > 0) {
+                const oldest = overdueInvoices.reduce((prev, curr) =>
+                    new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
+                )
+                maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
             }
+
+            setStats({
+                totalBilled,
+                totalPaid,
+                totalPending,
+                overdueCount: overdueInvoices.length,
+                maxDaysOverdue: maxDays
+            })
+
         } catch (error) {
             console.error(error)
         } finally {

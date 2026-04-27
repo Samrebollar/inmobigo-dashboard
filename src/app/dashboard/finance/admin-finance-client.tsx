@@ -49,7 +49,7 @@ export default function AdminFinanceClient({
                         className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all flex-1 sm:flex-none"
                     >
                         <Plus size={16} />
-                        Nueva Factura
+                        Nuevo Recibo
                     </button>
                     <button
                         onClick={() => setIsReportModalOpen(true)}
@@ -60,8 +60,9 @@ export default function AdminFinanceClient({
                     </button>
                     <Link href="/dashboard/finance/billing" className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all flex-[2] sm:flex-none">
                         <FileText size={16} />
-                        <span className="hidden xs:inline">Gestionar Facturación</span><span className="xs:hidden">Facturación</span>
+                        <span>Detalles</span>
                     </Link>
+
                 </div>
             </div>
 

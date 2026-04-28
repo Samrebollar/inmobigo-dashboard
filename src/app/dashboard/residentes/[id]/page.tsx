@@ -19,6 +19,9 @@ import { CommunicationLog } from '@/types/residents'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import * as XLSX from 'xlsx'
 
 export default function ResidentMovementsPage() {
     const params = useParams()
@@ -31,6 +34,7 @@ export default function ResidentMovementsPage() {
     const [logs, setLogs] = useState<CommunicationLog[]>([])
     const [search, setSearch] = useState('')
     const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false)
+    const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
     const [sendingReminder, setSendingReminder] = useState(false)
     const [organizationId, setOrganizationId] = useState('')
     const [condominiumName, setCondominiumName] = useState('')
@@ -119,6 +123,68 @@ export default function ResidentMovementsPage() {
 
     const formatDate = (dateStr: string) => {
         return format(parseISO(dateStr), 'dd/MM/yyyy', { locale: es })
+    }
+
+    const exportToPDF = () => {
+        const doc = new jsPDF()
+        doc.setFontSize(18)
+        doc.text(`Estado de Cuenta - ${resident?.first_name} ${resident?.last_name}`, 14, 22)
+        doc.setFontSize(11)
+        doc.text(`Unidad: ${resident?.unit_number || 'S/N'}`, 14, 32)
+        doc.text(`Fecha de emisión: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 38)
+        
+        const tableData = filteredInvoices.map(inv => {
+            const statusLabel = inv.status === 'paid' ? 'Pagado' : inv.status === 'overdue' ? 'Vencida' : 'Pendiente'
+            const daysOverdue = (inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
+                ? `${Math.max(0, differenceInDays(new Date(), parseISO(inv.due_date)))} días`
+                : '-'
+                
+            return [
+                inv.folio,
+                inv.description,
+                statusLabel,
+                formatMoney(inv.amount),
+                inv.status === 'paid' ? formatMoney(inv.amount) : '-',
+                formatDate(inv.due_date),
+                daysOverdue
+            ]
+        })
+        
+        autoTable(doc, {
+            head: [['Folio', 'Concepto', 'Estado', 'Monto', 'Pago', 'Vencimiento', 'Días de atraso']],
+            body: tableData,
+            startY: 45,
+            theme: 'striped',
+            headStyles: { fillColor: [79, 70, 229] },
+        })
+        
+        doc.save(`estado_cuenta_${resident?.first_name}_${resident?.last_name}.pdf`)
+        setIsExportDropdownOpen(false)
+    }
+
+    const exportToExcel = () => {
+        const data = filteredInvoices.map(inv => {
+            const statusLabel = inv.status === 'paid' ? 'Pagado' : inv.status === 'overdue' ? 'Vencida' : 'Pendiente'
+            const daysOverdue = (inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
+                ? Math.max(0, differenceInDays(new Date(), parseISO(inv.due_date)))
+                : 0
+                
+            return {
+                'Folio': inv.folio,
+                'Concepto': inv.description,
+                'Estado': statusLabel,
+                'Monto': inv.amount,
+                'Pago': inv.status === 'paid' ? inv.amount : 0,
+                'Vencimiento': formatDate(inv.due_date),
+                'Días de atraso': daysOverdue
+            }
+        })
+        
+        const worksheet = XLSX.utils.json_to_sheet(data)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Estado de Cuenta')
+        XLSX.writeFile(workbook, `estado_cuenta_${resident?.first_name}_${resident?.last_name}.xlsx`)
+        setIsExportDropdownOpen(false)
     }
 
     const handleSmartReminder = async () => {
@@ -318,7 +384,7 @@ export default function ResidentMovementsPage() {
                             onClick={() => setShowCreateInvoiceModal(true)}
                             className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 shadow-lg shadow-indigo-500/20"
                         >
-                            <Plus size={16} /> Crear Factura
+                            <Plus size={16} /> Crear Recibo
                         </Button>
                     </div>
                 </div>
@@ -458,9 +524,60 @@ export default function ResidentMovementsPage() {
                     <Button variant="outline" className="border-zinc-800 bg-zinc-900 text-zinc-300 gap-2">
                         <Filter size={16} /> Este Año
                     </Button>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
-                        <Download size={16} /> Exportar Por
-                    </Button>
+                    <div className="relative">
+                        <Button 
+                            onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 shadow-lg shadow-indigo-500/20 transition-all duration-200"
+                        >
+                            <Download size={16} /> Exportar
+                        </Button>
+                        
+                        <AnimatePresence>
+                            {isExportDropdownOpen && (
+                                <>
+                                    {/* Backdrop for closing */}
+                                    <div 
+                                        className="fixed inset-0 z-10" 
+                                        onClick={() => setIsExportDropdownOpen(false)}
+                                    />
+                                    
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                        transition={{ duration: 0.2, ease: "easeOut" }}
+                                        className="absolute right-0 mt-2 w-48 rounded-xl border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl p-1.5 shadow-2xl z-20 flex flex-col gap-1 overflow-hidden"
+                                    >
+                                        <motion.button
+                                            whileHover={{ backgroundColor: "rgba(79, 70, 229, 0.1)", color: "#818cf8" }}
+                                            onClick={exportToPDF}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-300 transition-colors text-left cursor-pointer"
+                                        >
+                                            <div className="p-1.5 rounded-md bg-red-500/10 text-red-400">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            Exportar en PDF
+                                        </motion.button>
+                                        
+                                        <motion.button
+                                            whileHover={{ backgroundColor: "rgba(16, 185, 129, 0.1)", color: "#34d399" }}
+                                            onClick={exportToExcel}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-300 transition-colors text-left cursor-pointer"
+                                        >
+                                            <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            Exportar en Excel
+                                        </motion.button>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
 
                 {/* Table */}

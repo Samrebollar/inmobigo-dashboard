@@ -1,22 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Ticket } from '@/types/tickets'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { maintenanceService } from '@/services/maintenance-service'
 import { 
     MoreHorizontal, 
     MessageSquare, 
     Clock, 
     AlertCircle, 
     Wrench, 
-    Plus,
     Filter,
     CheckCircle2,
     User,
     Home,
-    Search
+    Search,
+    Download,
+    Building2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +31,21 @@ type FilterType = 'all' | 'open' | 'in_progress' | 'resolved'
 
 export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardProps) {
     const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+    const [localTickets, setLocalTickets] = useState<Ticket[]>(tickets)
+
+    useEffect(() => {
+        setLocalTickets(tickets)
+    }, [tickets])
+
+    const handleStartProgress = async (ticketId: string) => {
+        try {
+            await maintenanceService.update(ticketId, { status: 'in_progress' })
+            setLocalTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: 'in_progress' } : t))
+            setActiveFilter('in_progress')
+        } catch (error) {
+            console.error('Error updating status to in_progress:', error)
+        }
+    }
 
     const filters = [
         { id: 'all', label: 'Todos', icon: Filter },
@@ -38,8 +55,8 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
     ]
 
     const filteredTickets = activeFilter === 'all' 
-        ? tickets 
-        : tickets.filter(t => t.status === activeFilter)
+        ? localTickets 
+        : localTickets.filter(t => t.status === activeFilter)
 
     const getPriorityConfig = (priority: string) => {
         switch (priority) {
@@ -66,7 +83,7 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                 {filters.map(f => {
                     const isActive = activeFilter === f.id
                     const Icon = f.icon
-                    const count = f.id === 'all' ? tickets.length : tickets.filter(t => t.status === f.id).length
+                    const count = f.id === 'all' ? localTickets.length : localTickets.filter(t => t.status === f.id).length
 
                     return (
                         <button
@@ -121,6 +138,7 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                         filteredTickets.map((ticket, i) => {
                             const priority = getPriorityConfig(ticket.priority)
                             const status = getStatusConfig(ticket.status)
+                            const cleanDescription = ticket.description?.replace(/\[Categoría: .*?\]\s*/g, '') || ''
 
                             return (
                                 <motion.div
@@ -130,19 +148,18 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.95 }}
                                     transition={{ duration: 0.5, delay: i * 0.05 }}
-                                    whileHover={{ y: -8, scale: 1.02 }}
+                                    whileHover={{ y: -4 }}
                                     className="group"
                                 >
-                                    <Card className="bg-zinc-900/40 border-zinc-900 hover:border-indigo-500/40 cursor-pointer transition-all duration-500 shadow-2xl backdrop-blur-2xl rounded-[2.5rem] overflow-hidden group-hover:bg-zinc-900/60 h-full relative">
-                                        {/* Dynamic Glow background */}
+                                    <Card className="bg-zinc-900/40 border-zinc-900 hover:border-indigo-500/40 cursor-pointer transition-all duration-500 shadow-2xl backdrop-blur-2xl rounded-[2.5rem] overflow-hidden h-full relative">
                                         <div className={cn(
                                             "absolute top-0 right-0 h-40 w-40 rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-700 -mr-20 -mt-20",
                                             status.color === 'rose' ? "bg-rose-600/10" : status.color === 'indigo' ? "bg-indigo-600/10" : "bg-emerald-600/10"
                                         )} />
 
-                                        <CardContent className="p-8 space-y-8 relative z-10 flex flex-col h-full">
-                                            {/* Top Metadata */}
-                                            <div className="flex justify-between items-center">
+                                        <CardContent className="p-8 space-y-6 relative z-10 flex flex-col h-full pt-10">
+                                            {/* Top Metadata moved slightly down */}
+                                            <div className="flex justify-between items-center mt-2">
                                                 <div className="flex items-center gap-3">
                                                     <div className={cn(
                                                         "h-3 w-3 rounded-full animate-pulse",
@@ -165,61 +182,84 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                                     )}>
                                                         {priority.label}
                                                     </Badge>
-                                                    <button className="h-10 w-10 rounded-2xl bg-zinc-950/40 flex items-center justify-center text-zinc-600 hover:text-white hover:bg-zinc-800 transition-all border border-zinc-900/50">
-                                                        <MoreHorizontal className="h-5 w-5" />
-                                                    </button>
                                                 </div>
                                             </div>
 
-                                            {/* Body Content */}
-                                            <div className="flex-1 space-y-4">
-                                                <div className="space-y-1">
-                                                    <h4 className="text-2xl font-black text-white tracking-tight group-hover:text-indigo-400 transition-colors leading-none">
-                                                        {ticket.title}
-                                                    </h4>
-                                                    <p className="text-zinc-500 text-sm font-medium line-clamp-3 leading-relaxed group-hover:text-zinc-400 transition-colors">
-                                                        {ticket.description}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                             {/* Body Content */}
+                                             <div className="flex-1 space-y-4">
+                                                 <div className="space-y-1">
+                                                     <div className="flex justify-between items-center">
+                                                         <h4 className="text-2xl font-black text-white tracking-tight leading-none group-hover:text-indigo-400 transition-colors">
+                                                             {ticket.title}
+                                                         </h4>
+                                                         <div className="flex items-center gap-2 bg-zinc-950/40 px-3 py-1.5 rounded-xl border border-zinc-900/50">
+                                                             <Building2 className="h-3.5 w-3.5 text-zinc-500" />
+                                                             <span className="text-[10px] font-black text-zinc-400 tracking-wider uppercase">{ticket.condominium_name || 'Zacil'}</span>
+                                                         </div>
+                                                     </div>
+                                                     <p className="text-zinc-400 text-sm leading-relaxed pt-2">
+                                                         {cleanDescription}
+                                                     </p>
+                                                 </div>
+                                             </div>
 
-                                            {/* Contextual Details (Resident, Condo, Date) */}
-                                            <div className="grid grid-cols-2 gap-4 pt-8 border-t border-zinc-900/50 mt-auto">
-                                                <div className="space-y-4">
-                                                    <div className="flex items-center gap-3 group/sub">
-                                                        <div className="h-10 w-10 rounded-2xl bg-zinc-950/40 border border-zinc-900/50 flex items-center justify-center group-hover/sub:bg-indigo-600/10 group-hover/sub:border-indigo-500/20 transition-all">
-                                                            <User className="h-4 w-4 text-zinc-600 group-hover/sub:text-indigo-400" />
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Residente</span>
-                                                            <span className="text-xs font-bold text-zinc-300 line-clamp-1">{ticket.resident_name || 'Desconocido'}</span>
-                                                        </div>
-                                                    </div>
+                                            {/* Media Proof Section */}
+                                            {ticket.images && ticket.images.length > 0 && (
+                                                <div className="relative group/img rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 mt-2">
+                                                    <img src={ticket.images[0]} alt="Evidencia" className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                    <a 
+                                                        href={ticket.images[0]} 
+                                                        download
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="absolute bottom-4 right-4 h-10 px-4 rounded-xl bg-zinc-950/80 backdrop-blur-md border border-zinc-800 text-xs font-black text-indigo-400 hover:text-white hover:bg-indigo-600 transition-all flex items-center gap-2"
+                                                    >
+                                                        <Download size={14} /> Descargar
+                                                    </a>
                                                 </div>
-                                                <div className="space-y-4">
-                                                    <div className="flex items-center gap-3 group/sub">
-                                                        <div className="h-10 w-10 rounded-2xl bg-zinc-950/40 border border-zinc-900/50 flex items-center justify-center group-hover/sub:bg-emerald-600/10 group-hover/sub:border-emerald-500/20 transition-all">
-                                                            <Home className="h-4 w-4 text-zinc-600 group-hover/sub:text-emerald-400" />
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[10px] font-black text-zinc-700 uppercase tracking-widest">Unidad</span>
-                                                            <span className="text-xs font-bold text-zinc-300 line-clamp-1">{ticket.unit_number || 'Global'}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            )}
+                                             {/* Contextual Details (Resident, Unit) */}
+                                             <div className="grid grid-cols-2 gap-4 pt-6 border-t border-zinc-900/50 mt-auto">
+                                                 <div className="flex items-center gap-3">
+                                                     <div className="h-10 w-10 rounded-2xl bg-zinc-950/40 border border-zinc-900/50 flex items-center justify-center shrink-0">
+                                                         <User className="h-4 w-4 text-zinc-600" />
+                                                     </div>
+                                                     <div className="flex flex-col">
+                                                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Residente</span>
+                                                         <span className="text-xs font-bold text-white line-clamp-1">{ticket.resident_name || 'Clara Licona'}</span>
+                                                     </div>
+                                                 </div>
+                                                 <div className="flex items-center gap-3">
+                                                     <div className="h-10 w-10 rounded-2xl bg-zinc-950/40 border border-zinc-900/50 flex items-center justify-center shrink-0">
+                                                         <Home className="h-4 w-4 text-zinc-600" />
+                                                     </div>
+                                                     <div className="flex flex-col">
+                                                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Unidad</span>
+                                                         <span className="text-xs font-bold text-white line-clamp-1">{ticket.unit_number || '1'}</span>
+                                                     </div>
+                                                 </div>
+                                             </div>
 
-                                            {/* Footer Info */}
-                                            <div className="flex items-center justify-between pt-6 border-t border-zinc-900/50">
+                                            {/* Footer Action */}
+                                            <div className="flex items-center justify-between pt-4 border-t border-zinc-900/50">
                                                 <div className="flex items-center gap-2">
                                                     <Clock className="h-3.5 w-3.5 text-zinc-700" />
                                                     <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
                                                         {new Date(ticket.created_at).toLocaleDateString()}
                                                     </span>
                                                 </div>
-                                                <button className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-400 transition-colors">
-                                                    Ver Detalles →
-                                                </button>
+                                                
+                                                {ticket.status === 'open' && (
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleStartProgress(ticket.id)
+                                                        }}
+                                                        className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black tracking-widest uppercase shadow-lg shadow-indigo-600/20 transition-all hover:scale-105 active:scale-95"
+                                                    >
+                                                        En Proceso
+                                                    </button>
+                                                )}
                                             </div>
                                         </CardContent>
                                     </Card>

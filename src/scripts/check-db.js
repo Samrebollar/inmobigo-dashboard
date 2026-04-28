@@ -9,8 +9,12 @@ async function run() {
   console.log(invErr ? invErr : invoices);
 
   console.log("Fetching units...");
-  const { data: units, error: unitErr } = await supabase.from('units').select('id, name, status, organization_id, condominium_id');
+  const { data: units, error: unitErr } = await supabase.from('units').select('*');
   console.log(unitErr ? unitErr : units);
+
+  console.log("Fetching residents...");
+  const { data: residents, error: resErr } = await supabase.from('residents').select('*');
+  console.log(resErr ? resErr : residents);
 }
 
 run();

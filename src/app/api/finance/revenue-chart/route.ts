@@ -26,6 +26,15 @@ export async function GET(request: Request) {
         
         if (error) throw error
 
+        let resQuery = supabase.from('residents').select('debt_amount')
+        if (condominiumId) {
+            resQuery = resQuery.eq('condominium_id', condominiumId)
+        } else if (organizationId) {
+            resQuery = resQuery.eq('organization_id', organizationId)
+        }
+        const { data: residents } = await resQuery
+        const baseDebts = residents?.reduce((acc, curr) => acc + Number(curr.debt_amount || 0), 0) || 0
+
         const currentYear = new Date().getFullYear()
 
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -59,6 +68,10 @@ export async function GET(request: Request) {
                 chartData[monthIndex].pendiente += Number(inv.balance_due ?? inv.amount ?? 0)
             }
         })
+
+        // Agregar deudas iniciales directas de residentes al mes actual
+        const currentMonthIndex = new Date().getMonth()
+        chartData[currentMonthIndex].pendiente += baseDebts
 
         return NextResponse.json(chartData)
     } catch (error: any) {

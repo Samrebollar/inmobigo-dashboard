@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell } from 'lucide-react'
+import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function ResidenteLayout({
@@ -68,6 +68,14 @@ export default async function ResidenteLayout({
                 >
                     <CreditCard size={18} />
                     <span>Pagos</span>
+                </Link>
+
+                <Link
+                    href="/residente/subir-comprobante"
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                >
+                    <Upload size={18} />
+                    <span>Subir Comprobante</span>
                 </Link>
 
                 <Link

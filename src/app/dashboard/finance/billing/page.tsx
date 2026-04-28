@@ -42,6 +42,7 @@ const getPaymentMethod = (inv: any) => {
     const desc = (inv.description || '').toLowerCase()
     const resident = (inv.resident_name || '').toLowerCase()
     
+    if (desc.includes('manual') || inv.payment_provider === 'Manual') return 'Manual'
     if (desc.includes('efectivo') || resident.includes('panchito')) return 'Efectivo'
     if (desc.includes('transferencia')) return 'Transferencia bancaria'
     if (desc.includes('tarjeta')) return 'Tarjeta'

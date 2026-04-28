@@ -288,14 +288,16 @@ export default function InvoiceDetailPage() {
                     </Button>
                 </Link>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button 
-                        variant="outline" 
-                        onClick={handleDownloadPDF} 
-                        className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white gap-2"
-                    >
-                        <Download size={14} /> 
-                        <span className="hidden xs:inline">Descargar PDF</span>
-                    </Button>
+                    <motion.div whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}>
+                        <Button 
+                            variant="default" 
+                            onClick={handleDownloadPDF} 
+                            className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 text-white font-bold gap-2 border-0 shadow-lg shadow-indigo-500/30 transition-all duration-300 px-5"
+                        >
+                            <Download size={16} className="shrink-0 animate-pulse" /> 
+                            <span>Descargar PDF</span>
+                        </Button>
+                    </motion.div>
                 </div>
             </div>
 
@@ -428,17 +430,22 @@ export default function InvoiceDetailPage() {
                         transition={{ duration: 0.2 }}
                     >
                         <Card className={`overflow-hidden border-2 shadow-2xl rounded-2xl ${isPaid ? 'border-emerald-500/20 bg-emerald-500/5' : isOverdue ? 'border-rose-500/20 bg-rose-500/5' : 'border-indigo-500/20 bg-indigo-500/5'} print:shadow-none print:border-zinc-300 print:bg-zinc-50`}>
-                            <CardContent className="p-8 pt-10 pb-10 text-center space-y-4">
-                                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total a Pagar</p>
-                                <h1 className="text-5xl font-extrabold text-white tracking-tighter">
+                            <CardContent className="p-6 sm:p-8 pt-10 pb-10 flex flex-col items-center justify-center space-y-6">
+                                <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{isPaid ? 'Total Pagado' : 'Total a Pagar'}</p>
+                                <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
                                     {formatCurrency(isPaid ? Number(invoice.amount) : Number(invoice.balance_due ?? invoice.amount))}
                                 </h1>
                                 
                                 <AnimatePresence mode="wait">
                                     {isPaid ? (
-                                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="pt-2">
-                                            <div className="inline-flex items-center gap-2 bg-emerald-500/10 text-emerald-400 px-4 py-2 rounded-full text-sm font-medium border border-emerald-500/20">
-                                                <CheckCircle size={16} /> Factura pagada el {formatDate(invoice.paid_at || invoice.updated_at)}
+                                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="pt-2 w-full flex justify-center">
+                                            <div className="flex flex-col items-center gap-2 bg-emerald-500/10 text-emerald-400 px-6 py-4 rounded-2xl text-sm font-semibold border border-emerald-500/20 shadow-lg shadow-emerald-950/30 max-w-[240px]">
+                                                <div className="bg-emerald-500/20 p-2 rounded-full border border-emerald-500/30">
+                                                    <CheckCircle size={18} className="shrink-0 text-emerald-300" />
+                                                </div>
+                                                <span className="text-center leading-relaxed text-xs">
+                                                    Factura pagada el <span className="block text-emerald-300 font-bold mt-0.5 text-sm">{formatDate(invoice.paid_at || invoice.updated_at)}</span>
+                                                </span>
                                             </div>
                                         </motion.div>
                                     ) : isOverdue ? (

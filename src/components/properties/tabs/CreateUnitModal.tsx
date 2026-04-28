@@ -42,7 +42,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                     unit_number: unitToEdit.unit_number,
                     floor: unitToEdit.floor,
                     type: unitToEdit.type,
-                    status: unitToEdit.status,
+                    status: unitToEdit.status === 'maintenance' ? 'vacant' : unitToEdit.status,
                     monto_mensual: unitToEdit.monto_mensual,
                     billing_day: unitToEdit.billing_day
                 })
@@ -173,19 +173,19 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
 
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-zinc-400">Estado</label>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {['vacant', 'occupied', 'maintenance'].map((status) => (
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['vacant', 'occupied'].map((status) => (
                                         <button
                                             key={status}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, status: status as any })}
-                                            className={`rounded-lg border p-2 text-sm transition-all ${formData.status === status
-                                                ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
+                                            className={`rounded-lg border p-2.5 text-sm transition-all font-medium ${formData.status === status
+                                                ? 'border-indigo-500 bg-indigo-500/20 text-indigo-400 font-bold shadow-sm'
                                                 : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:bg-zinc-800'
                                                 }`}
                                         >
-                                            <span className="capitalize">
-                                                {status === 'vacant' ? 'Disponible' : status === 'occupied' ? 'Ocupada' : 'Mantenimiento'}
+                                            <span>
+                                                {status === 'vacant' ? 'Vacía' : 'Habitada'}
                                             </span>
                                         </button>
                                     ))}

@@ -12,7 +12,8 @@ import {
     ChevronRight,
     MessageSquare,
     AlertCircle,
-    Loader2
+    Loader2,
+    Eye
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -56,6 +57,15 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
             case 'in_progress': return { label: 'En proceso', color: 'amber' }
             case 'resolved': return { label: 'Resuelto', color: 'emerald' }
             default: return { label: status, color: 'zinc' }
+        }
+    }
+
+    const getPriorityInfo = (priority: string) => {
+        switch (priority) {
+            case 'critical': return { label: 'Crítica', color: 'rose' }
+            case 'high': return { label: 'Alta', color: 'amber' }
+            case 'medium': return { label: 'Media', color: 'indigo' }
+            default: return { label: 'Baja', color: 'zinc' }
         }
     }
 
@@ -167,14 +177,20 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                     ) : (
                         <div className="w-full">
                             <div className="grid grid-cols-12 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
-                                <div className="col-span-3 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</div>
-                                <div className="col-span-5 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Problema</div>
-                                <div className="col-span-4 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</div>
+                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</div>
+                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Categoría</div>
+                                <div className="col-span-3 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Problema</div>
+                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Prioridad</div>
+                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</div>
+                                <div className="col-span-1 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-center">Imagen</div>
                             </div>
                             
                             <div className="divide-y divide-zinc-800/30">
                                 {tickets.map((ticket, i) => {
                                     const statusInfo = getStatusInfo(ticket.status)
+                                    const priorityInfo = getPriorityInfo(ticket.priority)
+                                    const cleanDescription = ticket.description?.replace(/\[Categoría: .*?\]\s*/g, '') || ''
+                                    
                                     return (
                                         <motion.div 
                                             key={ticket.id}
@@ -183,34 +199,54 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                             transition={{ delay: 0.1 * i }}
                                             className="grid grid-cols-12 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
                                         >
-                                            <div className="col-span-3 text-zinc-400 font-medium">
+                                            <div className="col-span-2 text-zinc-400 font-medium text-sm">
                                                 {format(parseISO(ticket.created_at), 'd MMM yyyy', { locale: es })}
                                             </div>
-                                            <div className="col-span-5 flex items-center gap-6">
-                                                <div className={cn(
-                                                    "h-14 w-14 rounded-2xl flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform",
-                                                    statusInfo.color === 'rose' ? "bg-rose-500/10 text-rose-400" : 
-                                                    statusInfo.color === 'amber' ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"
-                                                )}>
-                                                    <Wrench className="h-7 w-7 relative z-10" />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <h4 className="text-xl font-black text-white group-hover:text-indigo-400 transition-colors">
-                                                        {ticket.title}
-                                                    </h4>
-                                                    <p className="text-sm text-zinc-500 line-clamp-1">{ticket.description}</p>
-                                                </div>
+                                            <div className="col-span-2">
+                                                <Badge className="bg-zinc-800/50 border-zinc-700/50 text-zinc-300 font-bold px-3 py-1 rounded-lg">
+                                                    {ticket.category || 'Mantenimiento'}
+                                                </Badge>
                                             </div>
-                                            <div className="col-span-4 flex justify-between items-center">
+                                            <div className="col-span-3 space-y-1">
+                                                <h4 className="text-base font-black text-white group-hover:text-indigo-400 transition-colors truncate">
+                                                    {ticket.title}
+                                                </h4>
+                                                <p className="text-xs text-zinc-500 truncate">{cleanDescription}</p>
+                                            </div>
+                                            <div className="col-span-2">
                                                 <Badge className={cn(
-                                                    "px-4 py-2 rounded-xl font-bold text-sm border shadow-lg",
+                                                    "px-3 py-1 rounded-xl font-bold text-xs border shadow-sm",
+                                                    priorityInfo.color === 'rose' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                                    priorityInfo.color === 'amber' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : 
+                                                    priorityInfo.color === 'indigo' ? "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" :
+                                                    "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+                                                )}>
+                                                    {priorityInfo.label}
+                                                </Badge>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <Badge className={cn(
+                                                    "px-3 py-1 rounded-xl font-bold text-xs border shadow-sm",
                                                     statusInfo.color === 'rose' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
-                                                    statusInfo.color === 'amber' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : 
-                                                    "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                                    statusInfo.color === 'amber' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" : 
+                                                    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                                 )}>
                                                     {statusInfo.label}
                                                 </Badge>
-                                                <ChevronRight className="h-5 w-5 text-zinc-700 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
+                                            </div>
+                                            <div className="col-span-1 flex justify-center">
+                                                {ticket.images && ticket.images.length > 0 ? (
+                                                    <a 
+                                                        href={ticket.images[0]} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="h-10 w-10 rounded-xl bg-zinc-950/50 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/30 transition-all shadow-md group/img"
+                                                    >
+                                                        <Eye className="h-5 w-5 transform group-hover/img:scale-110 transition-transform" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-zinc-700 text-xs">-</span>
+                                                )}
                                             </div>
                                         </motion.div>
                                     )

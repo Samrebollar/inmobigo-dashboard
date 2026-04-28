@@ -51,20 +51,15 @@ export default function AdminMaintenanceClient() {
     }
 
     return (
-        <div className="h-[calc(100vh-6rem)] flex flex-col space-y-6 p-6">
+        <div className="min-h-screen space-y-6 p-6 pb-20">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-white">Gestión de Mantenimiento</h1>
                     <p className="text-zinc-400">Administra los reportes y solicitudes de los residentes.</p>
                 </div>
-                <div className="flex gap-2">
-                    <Button onClick={() => setIsCreateOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 rounded-2xl h-12 font-bold shadow-lg shadow-indigo-600/20 transition-all border-none">
-                        <Plus className="mr-2 h-5 w-5" /> Nuevo Ticket
-                    </Button>
-                </div>
             </div>
 
-            <div className="flex-1 overflow-hidden">
+            <div className="w-full">
                 {loading ? (
                     <div className="flex h-full items-center justify-center">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-800 border-t-indigo-500"></div>

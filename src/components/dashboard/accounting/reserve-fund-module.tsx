@@ -14,11 +14,15 @@ import {
     AlertTriangle,
     Info,
     ChevronDown,
-    Settings
+    Settings,
+    Pencil,
+    Trash2
 } from 'lucide-react'
 import { ReserveFund, ReserveFundTransaction } from '@/types/accounting'
 import { ConfigureFundModal } from './configure-fund-modal'
 import { cn } from '@/lib/utils'
+import { DeleteTransactionModal } from './delete-transaction-modal'
+import { EditTransactionModal } from './edit-transaction-modal'
 
 interface ReserveFundModuleProps {
     fundData: {
@@ -32,6 +36,9 @@ interface ReserveFundModuleProps {
 
 export function ReserveFundModule({ fundData, condominiumId, isAdmin = false }: ReserveFundModuleProps) {
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+    const [selectedTx, setSelectedTx] = useState<ReserveFundTransaction | null>(null)
     const { fund, transactions, exists } = fundData
     
     const balance = Number(fund?.balance || 0)
@@ -182,9 +189,12 @@ export function ReserveFundModule({ fundData, condominiumId, isAdmin = false }: 
                         <thead>
                             <tr className="bg-white/[0.01] border-b border-white/5">
                                 <th className="px-8 py-4 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Fecha</th>
-                                <th className="px-8 py-4 text-left text-[9px) font-black text-zinc-500 uppercase tracking-widest">Tipo</th>
+                                <th className="px-8 py-4 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Tipo</th>
                                 <th className="px-8 py-4 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Motivo / Descripción</th>
                                 <th className="px-8 py-4 text-right text-[9px] font-black text-zinc-500 uppercase tracking-widest">Monto</th>
+                                {isAdmin && (
+                                    <th className="px-8 py-4 text-center text-[9px] font-black text-zinc-500 uppercase tracking-widest">Acciones</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -222,6 +232,34 @@ export function ReserveFundModule({ fundData, condominiumId, isAdmin = false }: 
                                                 {tx.type === 'deposit' ? '+' : '-'}${Number(tx.amount).toLocaleString()}
                                             </span>
                                         </td>
+                                        {isAdmin && (
+                                            <td className="px-8 py-4 text-center">
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    <button 
+                                                        className="p-1.5 rounded-xl text-zinc-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all duration-200 hover:scale-110"
+                                                        title="Editar"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedTx(tx);
+                                                            setIsEditModalOpen(true);
+                                                        }}
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                    <button 
+                                                        className="p-1.5 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-200 hover:scale-110"
+                                                        title="Eliminar"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedTx(tx);
+                                                            setIsDeleteModalOpen(true);
+                                                        }}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             ) : null}
@@ -314,6 +352,24 @@ export function ReserveFundModule({ fundData, condominiumId, isAdmin = false }: 
                 onClose={() => setIsConfigModalOpen(false)}
                 condominiumId={condominiumId}
                 currentConfig={fund}
+            />
+
+            <DeleteTransactionModal 
+                isOpen={isDeleteModalOpen}
+                onClose={() => {
+                    setIsDeleteModalOpen(false);
+                    setSelectedTx(null);
+                }}
+                transaction={selectedTx}
+            />
+
+            <EditTransactionModal 
+                isOpen={isEditModalOpen}
+                onClose={() => {
+                    setIsEditModalOpen(false);
+                    setSelectedTx(null);
+                }}
+                transaction={selectedTx}
             />
         </div>
     )

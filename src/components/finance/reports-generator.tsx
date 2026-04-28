@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Modal } from '@/components/ui/modal'
-import { FileText, Calendar, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { FileText, Calendar, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, X, ChevronDown } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/utils/supabase/client'
@@ -437,88 +438,146 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
     const titlePrefix = reportType === 'executive' ? 'Reporte Financiero' : reportType === 'delinquency' ? 'Reporte de Morosidad' : 'Reporte de Whatsapp'
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Generar ${titlePrefix}`}>
-            <div className="space-y-6">
+        <AnimatePresence>
+            {isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                    />
+                    
+                    <motion.div 
+                        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                        className="relative bg-zinc-950 border border-white/10 rounded-[2rem] p-6 md:p-8 max-w-md w-full shadow-2xl overflow-hidden"
+                    >
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500/10 blur-3xl rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
 
-                {errorMsg && (
-                    <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-500 flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span>{errorMsg}</span>
-                    </div>
-                )}
+                        <div className="flex justify-between items-center mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-400">
+                                    <FileText size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-white">Generar Reporte</h3>
+                                    <p className="text-zinc-500 text-xs">{titlePrefix}</p>
+                                </div>
+                            </div>
+                            <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
 
-                {/* Configurations */}
-                <div className="space-y-4 p-4 bg-zinc-900/30 rounded-lg border border-zinc-800/50">
-                    <div className="space-y-2">
-                        <label className="text-xs font-medium text-zinc-400">Condominio</label>
-                        <select
-                            value={selectedCondo}
-                            onChange={(e) => setSelectedCondo(e.target.value)}
-                            disabled={condominiums.length === 0}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 pl-3 pr-8 text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 appearance-none disabled:opacity-50"
+                        {errorMsg && (
+                            <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-400 flex items-center gap-2">
+                                <AlertCircle className="h-4 w-4 shrink-0" />
+                                <span>{errorMsg}</span>
+                            </div>
+                        )}
+
+                        <div className="space-y-4 mb-6">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                    Condominio
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        value={selectedCondo}
+                                        onChange={(e) => setSelectedCondo(e.target.value)}
+                                        disabled={condominiums.length === 0}
+                                        className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-indigo-500 transition-all appearance-none disabled:opacity-50 cursor-pointer"
+                                    >
+                                        <option value="all" className="bg-zinc-900">Todos los condominios</option>
+                                        {condominiums.map(c => (
+                                            <option key={c.id} value={c.id} className="bg-zinc-900">{c.name}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-zinc-500">
+                                        <ChevronDown size={16} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {reportType === 'executive' && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                        Periodo
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={dateRange}
+                                            onChange={(e) => setDateRange(e.target.value as any)}
+                                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                        >
+                                            <option value="this-month" className="bg-zinc-900">Este Mes</option>
+                                            <option value="last-month" className="bg-zinc-900">Mes Anterior</option>
+                                            <option value="quarter" className="bg-zinc-900">Este Trimestre</option>
+                                            <option value="year" className="bg-zinc-900">Año Actual</option>
+                                        </select>
+                                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-zinc-500">
+                                            <ChevronDown size={16} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                    Formato de Descarga
+                                </label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setFormatOption('pdf')}
+                                        className={`flex items-center justify-center gap-3 p-4 rounded-xl border transition-all font-bold text-sm ${formatOption === 'pdf' ? 'bg-rose-500/10 border-rose-500/50 text-rose-400' : 'bg-white/[0.03] border-white/5 text-zinc-500 hover:border-white/10'}`}
+                                    >
+                                        <FileText size={18} className={formatOption === 'pdf' ? 'text-rose-400' : 'text-zinc-500'} />
+                                        <span>PDF</span>
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setFormatOption('excel')}
+                                        className={`flex items-center justify-center gap-3 p-4 rounded-xl border transition-all font-bold text-sm ${formatOption === 'excel' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-white/[0.03] border-white/5 text-zinc-500 hover:border-white/10'}`}
+                                    >
+                                        <FileSpreadsheet size={18} className={formatOption === 'excel' ? 'text-emerald-400' : 'text-zinc-500'} />
+                                        <span>Excel</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleGenerate}
+                            disabled={isGenerating || isSuccess}
+                            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold transition-all shadow-lg disabled:opacity-50 ${isSuccess
+                                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                                    : 'bg-white text-black hover:bg-zinc-200'
+                                }`}
                         >
-                            <option value="all">Todos los condominios</option>
-                            {condominiums.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {reportType === 'executive' && (
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-zinc-400">Periodo</label>
-                            <select
-                                value={dateRange}
-                                onChange={(e) => setDateRange(e.target.value as any)}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 pl-3 pr-8 text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 appearance-none"
-                            >
-                                <option value="this-month">Este Mes</option>
-                                <option value="last-month">Mes Anterior</option>
-                                <option value="quarter">Este Trimestre</option>
-                                <option value="year">Año Actual</option>
-                            </select>
-                        </div>
-                    )}
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-medium text-zinc-400">Formato</label>
-                        <div className="flex gap-4">
-                            <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                                <input type="radio" name="format" checked={formatOption === 'pdf'} onChange={() => setFormatOption('pdf')} className="accent-indigo-500" />
-                                <FileText size={16} className="text-rose-400" /> PDF
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-                                <input type="radio" name="format" checked={formatOption === 'excel'} onChange={() => setFormatOption('excel')} className="accent-indigo-500" />
-                                <FileSpreadsheet size={16} className="text-emerald-400" /> Excel (.xlsx)
-                            </label>
-                        </div>
-                    </div>
+                            {isGenerating ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin text-zinc-400" /> 
+                                    <span>Generando Reporte...</span>
+                                </>
+                            ) : isSuccess ? (
+                                <>
+                                    <CheckCircle2 size={18} /> 
+                                    <span>¡Reporte Descargado!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Download size={18} /> 
+                                    <span>Descargar Reporte</span>
+                                </>
+                            )}
+                        </button>
+                    </motion.div>
                 </div>
-
-                {/* Generate Button */}
-                <button
-                    onClick={handleGenerate}
-                    disabled={isGenerating || isSuccess}
-                    className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-medium transition-all ${isSuccess
-                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
-                            : 'bg-white text-black hover:bg-zinc-200'
-                        }`}
-                >
-                    {isGenerating ? (
-                        <>
-                            <Loader2 size={18} className="animate-spin text-zinc-400" /> Generando Reporte...
-                        </>
-                    ) : isSuccess ? (
-                        <>
-                            <CheckCircle2 size={18} /> ¡Reporte Descargado!
-                        </>
-                    ) : (
-                        <>
-                            <Download size={18} /> Descargar Reporte
-                        </>
-                    )}
-                </button>
-            </div>
-        </Modal>
+            )}
+        </AnimatePresence>
     )
 }

@@ -116,8 +116,8 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
                         if (typeRaw?.toLowerCase().includes('local')) type = 'commercial'
 
                         let status: 'vacant' | 'occupied' | 'maintenance' = 'vacant'
-                        if (statusRaw?.toLowerCase().includes('ocupad')) status = 'occupied'
-                        if (statusRaw?.toLowerCase().includes('mantenimiento')) status = 'maintenance'
+                        if (statusRaw?.toLowerCase().includes('ocupad') || statusRaw?.toLowerCase().includes('habitada')) status = 'occupied'
+                        if (statusRaw?.toLowerCase().includes('vacía') || statusRaw?.toLowerCase().includes('vacia')) status = 'vacant'
 
                         let monto_mensual: number | undefined = undefined;
                         if (rentRaw) {
@@ -170,7 +170,7 @@ export function BulkUploadUnitsModal({ isOpen, onClose, onSuccess, condominiumId
     }
 
     const downloadTemplate = () => {
-        const csvContent = "data:text/csv;charset=utf-8,Unidad,Piso,Tipo,Monto / Cuota,Día Cobro,Estado\nA-101,1,Departamento,5000.00,5,Disponible\nB-202,2,Casa,8500.00,1,Ocupada\nC-001,PB,Local,,15,Mantenimiento"
+        const csvContent = "data:text/csv;charset=utf-8,Unidad,Piso,Tipo,Monto / Cuota,Día Cobro,Estado\nA-101,1,Departamento,5000.00,5,Vacía\nB-202,2,Casa,8500.00,1,Habitada\nC-001,PB,Local,,15,Vacía"
         const encodedUri = encodeURI(csvContent)
         const link = document.createElement("a")
         link.setAttribute("href", encodedUri)

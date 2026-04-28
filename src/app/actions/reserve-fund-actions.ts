@@ -172,10 +172,131 @@ export async function recordFundTransaction(condominiumId: string, data: {
 
         if (updateError) throw updateError
 
-        revalidatePath('/dashboard/contabilidad-inteligente')
+        revalidatePath('/', 'layout')
         return { success: true }
     } catch (error) {
         console.error('[ReserveFund] Error recording transaction:', error)
         return { success: false, error: 'Error al registrar movimiento' }
+    }
+}
+
+/**
+ * Delete a fund transaction and revert the balance
+ */
+export async function deleteFundTransaction(transactionId: string) {
+    const adminClient = createAdminClient()
+    
+    try {
+        const { data: tx, error: txError } = await adminClient
+            .from('reserve_fund_transactions')
+            .select('*')
+            .eq('id', transactionId)
+            .single()
+
+        if (txError) throw txError
+        if (!tx) throw new Error('Transacción no encontrada')
+
+        const { data: fund, error: fundError } = await adminClient
+            .from('reserve_fund')
+            .select('id, balance')
+            .eq('id', tx.fund_id)
+            .single()
+
+        if (fundError) throw fundError
+
+        const newBalance = tx.type === 'deposit'
+            ? Number(fund.balance) - Number(tx.amount)
+            : Number(fund.balance) + Number(tx.amount)
+
+        const { error: updateError } = await adminClient
+            .from('reserve_fund')
+            .update({ 
+                balance: newBalance,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', fund.id)
+
+        if (updateError) throw updateError
+
+        const { error: deleteError } = await adminClient
+            .from('reserve_fund_transactions')
+            .delete()
+            .eq('id', transactionId)
+
+        if (deleteError) throw deleteError
+
+        revalidatePath('/', 'layout')
+        return { success: true }
+    } catch (error) {
+        console.error('[ReserveFund] Error deleting transaction:', error)
+        return { success: false, error: 'Error al eliminar el movimiento' }
+    }
+}
+
+/**
+ * Update a fund transaction and adjust the balance
+ */
+export async function updateFundTransaction(transactionId: string, data: {
+    type: 'deposit' | 'withdrawal',
+    amount: number,
+    reason: string,
+    description?: string
+}) {
+    const adminClient = createAdminClient()
+    
+    try {
+        const { data: oldTx, error: txError } = await adminClient
+            .from('reserve_fund_transactions')
+            .select('*')
+            .eq('id', transactionId)
+            .single()
+
+        if (txError) throw txError
+        if (!oldTx) throw new Error('Transacción no encontrada')
+
+        const { data: fund, error: fundError } = await adminClient
+            .from('reserve_fund')
+            .select('id, balance')
+            .eq('id', oldTx.fund_id)
+            .single()
+
+        if (fundError) throw fundError
+
+        let tempBalance = oldTx.type === 'deposit'
+            ? Number(fund.balance) - Number(oldTx.amount)
+            : Number(fund.balance) + Number(oldTx.amount)
+        
+        const newBalance = data.type === 'deposit'
+            ? tempBalance + Number(data.amount)
+            : tempBalance - Number(data.amount)
+
+        const { error: updateError } = await adminClient
+            .from('reserve_fund')
+            .update({ 
+                balance: newBalance,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', fund.id)
+
+        if (updateError) throw updateError
+
+        const { error: updateTxError } = await adminClient
+            .from('reserve_fund_transactions')
+            .update({
+                type: data.type,
+                amount: data.amount,
+                reason: data.reason,
+                description: data.description,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', transactionId)
+
+        if (updateTxError) throw updateTxError
+
+        revalidatePath('/', 'layout')
+        return { success: true }
+    } catch (error) {
+        console.error('[ReserveFund] Error updating transaction:', error)
+        return { success: false, error: 'Error al actualizar el movimiento' }
     }
 }

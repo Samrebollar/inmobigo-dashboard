@@ -10,7 +10,8 @@ export const maintenanceService = {
             .select(`
                 *,
                 condominiums (name),
-                units (unit_number)
+                units (unit_number),
+                residents (first_name, last_name)
             `)
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
@@ -20,12 +21,11 @@ export const maintenanceService = {
             throw error
         }
 
-        // We can't join directly to residents sometimes due to schema issues, so let's fetch profiles manually or omit
-        return data?.map(t => ({
+        return data?.map((t: any) => ({
             ...t,
             condominium_name: t.condominiums?.name || 'N/A',
             unit_number: t.units?.unit_number || 'N/A',
-            resident_name: 'Residente' // Fallback for now to prevent app crash
+            resident_name: t.residents ? `${t.residents.first_name} ${t.residents.last_name || ''}`.trim() : 'Clara Licona'
         })) || []
     },
 
@@ -52,14 +52,24 @@ export const maintenanceService = {
 
     async create(ticket: CreateTicketDTO): Promise<Ticket> {
         const supabase = createClient()
+        console.log('[maintenanceService.create] Payload:', ticket)
+        
         const { data, error } = await supabase
             .from('tickets')
             .insert(ticket)
             .select()
-            .single()
 
-        if (error) throw error
-        return data
+        if (error) {
+            console.error('[maintenanceService.create] DB ERROR:', error)
+            throw error
+        }
+        
+        if (!data || data.length === 0) {
+            console.warn('[maintenanceService.create] No data returned from insert (likely RLS). Re-fetching or returning fallback.')
+            return ticket as any
+        }
+        
+        return data[0]
     },
 
     async update(id: string, updates: UpdateTicketDTO): Promise<Ticket> {

@@ -62,6 +62,39 @@ export const financeService = {
                     type: 'reserve_fund'
                 }
             ]
+            try {
+                const fs = require('fs')
+                const path = require('path')
+                const filePath = path.join(process.cwd(), 'src', 'data', 'payment-validations.json')
+                if (fs.existsSync(filePath)) {
+                    const fileData = fs.readFileSync(filePath, 'utf8')
+                    const validations = JSON.parse(fileData)
+                    
+                    const approvedValidations = validations.filter((v: any) => v.status === 'aprobado')
+                    
+                    const approvedInvoices = approvedValidations.map((v: any) => ({
+                        id: `demo-inv-valid-${v.id}`,
+                        organization_id: 'demo-org',
+                        condominium_id: condominiumId,
+                        unit_id: `demo-unit-${v.unit}`,
+                        unit_number: v.unit || 'N/A',
+                        resident_name: v.resident_name || 'Residente',
+                        amount: v.amount,
+                        paid_amount: v.amount,
+                        balance_due: 0,
+                        status: 'paid',
+                        due_date: v.date || new Date().toISOString(),
+                        created_at: v.date || new Date().toISOString(),
+                        folio: `INV-VAL-${Math.floor(1000 + Math.random() * 9000)}`,
+                        type: 'maintenance',
+                        description: v.nota ? `Pago manual validado - ${v.nota}` : 'Pago manual validado'
+                    }))
+                    
+                    return [...mockInvoices, ...approvedInvoices]
+                }
+            } catch (e) {
+                console.error('[financeService.getByCondominium] error loading validations:', e)
+            }
             return mockInvoices
         }
         const supabase = createClient()
@@ -236,7 +269,7 @@ export const financeService = {
                 return date.toISOString()
             }
 
-            return [
+            const demoInvoices = [
                 {
                     id: 'demo-inv-max-1',
                     condominium_id: 'demo-condo-1',
@@ -347,6 +380,39 @@ export const financeService = {
                     description: 'Mantenimiento Mensual'
                 }
             ]
+            try {
+                const fs = require('fs')
+                const path = require('path')
+                const filePath = path.join(process.cwd(), 'src', 'data', 'payment-validations.json')
+                if (fs.existsSync(filePath)) {
+                    const fileData = fs.readFileSync(filePath, 'utf8')
+                    const validations = JSON.parse(fileData)
+                    
+                    const approvedValidations = validations.filter((v: any) => v.status === 'aprobado')
+                    
+                    const approvedInvoices = approvedValidations.map((v: any) => ({
+                        id: `demo-inv-valid-${v.id}`,
+                        condominium_id: 'demo-condo-1',
+                        condominium_name: 'Torre Altura',
+                        unit_number: v.unit || 'N/A',
+                        resident_name: v.resident_name || 'Residente',
+                        amount: v.amount,
+                        paid_amount: v.amount,
+                        balance_due: 0,
+                        status: 'paid',
+                        due_date: v.date || new Date().toISOString(),
+                        created_at: v.date || new Date().toISOString(),
+                        folio: `INV-VAL-${Math.floor(1000 + Math.random() * 9000)}`,
+                        type: 'maintenance',
+                        description: v.nota ? `Pago manual validado - ${v.nota}` : 'Pago manual validado'
+                    }))
+                    
+                    return [...demoInvoices, ...approvedInvoices]
+                }
+            } catch (e) {
+                console.error('[financeService.getGlobalInvoices] error loading validations:', e)
+            }
+            return demoInvoices
         }
         const supabase = createClient()
 
@@ -554,6 +620,56 @@ export const financeService = {
     },
 
     async getByUnit(unitId: string): Promise<Invoice[]> {
+        if (unitId.startsWith('demo-')) {
+            const mockInvoices: Invoice[] = [
+                {
+                    id: 'demo-inv-unit-1',
+                    condominium_id: 'demo-condo-1',
+                    unit_id: unitId,
+                    amount: 2500,
+                    status: 'paid',
+                    description: 'Mantenimiento Mensual - Enero',
+                    due_date: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
+                    folio: 'INV-DEMO-001'
+                }
+            ]
+            
+            try {
+                const fs = require('fs')
+                const path = require('path')
+                const filePath = path.join(process.cwd(), 'src', 'data', 'payment-validations.json')
+                if (fs.existsSync(filePath)) {
+                    const fileData = fs.readFileSync(filePath, 'utf8')
+                    const validations = JSON.parse(fileData)
+                    
+                    const { demoDb } = require('@/utils/demo-db')
+                    const unit = demoDb.getUnits().find((u: any) => u.id === unitId)
+                    const unitNumber = unit?.unit_number
+                    
+                    const approved = validations.filter((v: any) => v.status === 'aprobado' && v.unit === unitNumber)
+                    const approvedInvoices = approved.map((v: any) => ({
+                        id: `demo-inv-valid-${v.id}`,
+                        condominium_id: 'demo-condo-1',
+                        unit_id: unitId,
+                        amount: v.amount,
+                        paid_amount: v.amount,
+                        balance_due: 0,
+                        status: 'paid',
+                        description: v.nota ? `Pago manual validado - ${v.nota}` : 'Pago manual validado',
+                        due_date: v.date || new Date().toISOString(),
+                        created_at: v.date || new Date().toISOString(),
+                        folio: `INV-VAL-${Math.floor(1000 + Math.random() * 9000)}`
+                    }))
+                    
+                    return [...mockInvoices, ...approvedInvoices]
+                }
+            } catch (e) {
+                console.error('[financeService.getByUnit] error loading validations:', e)
+            }
+            
+            return mockInvoices
+        }
         const supabase = createClient()
         const { data, error } = await supabase
             .from('invoices')

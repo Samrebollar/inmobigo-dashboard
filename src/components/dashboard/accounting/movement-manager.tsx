@@ -401,26 +401,20 @@ export function MovementManager({
                                                             href={record.receipt_url}
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="p-2 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all"
+                                                            className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 bg-indigo-500/10 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-md border border-indigo-500/20"
                                                             title="Ver Comprobante"
                                                         >
-                                                            <Eye size={16} />
+                                                            <Eye size={16} className="animate-pulse" />
                                                         </a>
                                                     )}
                                                     
-                                                    {!record.is_invoice ? (
-                                                        <button 
-                                                            onClick={() => handleDeleteClick(record.id, false)}
-                                                            className="p-2 text-zinc-600 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                                            title="Eliminar registro manual"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    ) : (
-                                                        <div className="p-2 text-zinc-800 opacity-0 group-hover:opacity-40 cursor-help" title="Factura automática">
-                                                            <Shield size={16} />
-                                                        </div>
-                                                    )}
+                                                    <button 
+                                                        onClick={() => handleDeleteClick(record.id, false)}
+                                                        className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 bg-rose-500/10 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-md border border-rose-500/20"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </motion.tr>
@@ -530,19 +524,19 @@ export function MovementManager({
                                                     href={record.receipt_url} 
                                                     target="_blank" 
                                                     rel="noreferrer" 
-                                                    className="h-9 w-9 bg-zinc-800 text-zinc-400 rounded-xl flex items-center justify-center hover:text-white transition-all shadow-lg"
+                                                    className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 bg-indigo-500/10 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-md border border-indigo-500/20"
+                                                    title="Ver Comprobante"
                                                 >
-                                                    <ExternalLink size={16} />
+                                                    <Eye size={16} className="animate-pulse" />
                                                 </a>
                                             )}
-                                            {!record.is_invoice && (
-                                                <button 
-                                                    onClick={() => handleDeleteClick(record.id, false)} 
-                                                    className="h-9 w-9 bg-rose-500/10 text-rose-500 rounded-xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-lg shadow-rose-600/5"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            )}
+                                            <button 
+                                                onClick={() => handleDeleteClick(record.id, false)} 
+                                                className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 bg-rose-500/10 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-md border border-rose-500/20"
+                                                title="Eliminar"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </div>
                                     </div>
                                 </motion.div>

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -181,6 +181,15 @@ export default async function DashboardLayout({
                             >
                                 <Brain size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
                                 <span>Contabilidad Inteligente</span>
+                            </Link>
+                        )}
+                        {!isResident && (
+                            <Link
+                                href="/dashboard/validacion-pagos"
+                                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                            >
+                                <CheckCircle size={18} className="text-zinc-400" />
+                                <span>Validación de Pagos</span>
                             </Link>
                         )}
                     </>

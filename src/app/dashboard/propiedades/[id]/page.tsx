@@ -124,14 +124,24 @@ export default function CondominiumPage() {
                             ; (data as any).ingresos_mes = invoices?.filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
                                 .reduce((acc, curr) => acc + (curr.paid_amount || 0), 0) || 0
 
-                            // Deuda Total: sum(balance_due or amount if pending)
-                            ; (data as any).deuda_total = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due || 0) > 0)
-                                .reduce((acc, curr) => acc + (curr.balance_due && curr.balance_due > 0 ? curr.balance_due : (curr.amount || 0)), 0) || 0
+                            // Deuda Total: sum(balance_due or amount if pending) + residents base debt_amount
+                            const residentsDebtSum = residentsList?.reduce((acc, curr) => acc + Number(curr.debt_amount || 0), 0) || 0;
+                            const invoicesDebtSum = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due || 0) > 0)
+                                .reduce((acc, curr) => acc + (curr.balance_due && curr.balance_due > 0 ? curr.balance_due : (curr.amount || 0)), 0) || 0;
 
-                        // Residentes Morosos: count(distinct resident_id) with pending/overdue invoices (saldo pendiente)
+                            ; (data as any).deuda_total = residentsDebtSum + invoicesDebtSum
+
+                        // Residentes Morosos: count(distinct resident_id) with pending/overdue invoices (saldo pendiente) OR direct debt
                         const overdueInvoices = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due && i.balance_due > 0)) || []
                         const uniqueMorosos = new Set(overdueInvoices.map(item => item.resident_id).filter(Boolean))
-                            ; (data as any).morosos_count = uniqueMorosos.size
+                        
+                        residentsList?.forEach(r => {
+                            if (Number(r.debt_amount || 0) > 0) {
+                                uniqueMorosos.add(r.id)
+                            }
+                        })
+                        
+                        ; (data as any).morosos_count = uniqueMorosos.size
 
                         // Generar lista detallada de Alertas de Morosidad cruzando facturas con residentes
                         const morosidadAlerts = overdueInvoices.map(inv => {
@@ -228,6 +238,14 @@ export default function CondominiumPage() {
                                     }
                                 }
                             })
+                        }
+
+                        // Distribuir deudas base de residentes en el mes actual
+                        const currentMonthIndex = new Date().getMonth()
+                        const currentMonthTarget = last6Months.find(m => m.month === currentMonthIndex) || last6Months[last6Months.length - 1]
+                        if (currentMonthTarget && residentsList) {
+                            const baseDebts = residentsList.reduce((acc, curr) => acc + Number(curr.debt_amount || 0), 0)
+                            currentMonthTarget.pending += baseDebts
                         }
                         
                         setRevenueData(last6Months)

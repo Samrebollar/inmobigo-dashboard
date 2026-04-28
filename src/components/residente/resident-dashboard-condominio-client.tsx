@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
 import { getAnnouncementsAction, acknowledgeAnnouncementAction } from '@/app/actions/announcement-actions'
+import { getValidations } from '@/app/actions/payment-validation-actions'
 import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -44,6 +45,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
     const [acknowledgingIds, setAcknowledgingIds] = useState<Set<string>>(new Set())
     const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set())
+    const [movements, setMovements] = useState<any[]>([])
 
     const toggleExpand = (id: string) => {
         setExpandedIds(prev => {
@@ -93,6 +95,33 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
         }
 
         fetchAnnouncements();
+
+        async function fetchMovements() {
+            const res = await getValidations()
+            if (res.success && isMounted) {
+                const myApproved = res.data.filter((v: any) => 
+                    v.status === 'aprobado' && 
+                    (v.resident_name === `${resident.first_name} ${resident.last_name}`.trim() || 
+                     v.unit === resident.units?.unit_number)
+                )
+                
+                const mappedMovements = myApproved.map((v: any) => ({
+                    title: 'Pago Verificado',
+                    desc: v.nota || 'Cuota de Mantenimiento',
+                    amount: v.amount,
+                    date: v.date,
+                    icon: CheckCircle2,
+                    color: 'emerald'
+                }))
+
+                setMovements([
+                    ...mappedMovements,
+                    { title: 'Incidencia Reportada', desc: 'Fuga en el área común', date: 'Ayer', icon: MessageSquare, color: 'amber' },
+                    { title: 'Aviso Importante', desc: 'Mantenimiento preventivo', date: '24 Mar', icon: Bell, color: 'indigo' }
+                ])
+            }
+        }
+        fetchMovements();
 
         return () => {
             isMounted = false;
@@ -376,11 +405,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
                             </div>
 
                             <div className="space-y-3">
-                                {[
-                                    { title: 'Pago Verificado', desc: isPropiedades ? 'Renta de Abril confirmada' : 'Cuota de Abril confirmada', date: 'Hoy', icon: CheckCircle2, color: 'emerald' },
-                                    { title: 'Incidencia Reportada', desc: 'Fuga en el área común', date: 'Ayer', icon: MessageSquare, color: 'amber' },
-                                    { title: 'Aviso Importante', desc: 'Mantenimiento preventivo', date: '24 Mar', icon: Bell, color: 'indigo' }
-                                ].map((act, i) => (
+                                {movements.map((act, i) => (
                                     <div 
                                         key={i}
                                         className="bg-zinc-900/20 border border-white/5 p-4 rounded-xl flex items-center justify-between group hover:bg-zinc-900/40 transition-all border-l-2"

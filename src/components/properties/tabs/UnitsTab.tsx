@@ -167,7 +167,7 @@ export function UnitsTab() {
                                 <th className="px-6 py-4 font-medium">Monto / Cuota</th>
                                 <th className="px-6 py-4 font-medium">Día Cobro</th>
                                 <th className="px-6 py-4 font-medium">Estado</th>
-                                <th className="px-6 py-4 font-medium text-right">Acciones</th>
+                                <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800/50">
@@ -201,25 +201,23 @@ export function UnitsTab() {
                                             {unit.billing_day ? `Día ${unit.billing_day}` : '-'}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <Badge variant={
-                                                unit.status === 'occupied' ? 'default' :
-                                                    unit.status === 'vacant' ? 'warning' : 'destructive'
-                                            }>
-                                                {unit.status === 'occupied' ? 'Ocupada' :
-                                                    unit.status === 'vacant' ? 'Disponible' : 'Mantenimiento'}
+                                            <Badge variant={unit.status === 'occupied' ? 'default' : 'warning'}>
+                                                {unit.status === 'occupied' ? 'Habitada' : 'Vacía'}
                                             </Badge>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex items-center justify-center gap-2.5">
                                                 <button
                                                     onClick={() => handleEdit(unit)}
-                                                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg"
+                                                    title="Editar Unidad"
+                                                    className="p-2.5 text-indigo-400 hover:text-indigo-100 bg-indigo-500/10 hover:bg-indigo-600 rounded-xl transition-all duration-300 transform hover:scale-110 shadow-sm border border-indigo-500/20"
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => confirmDelete(unit)}
-                                                    className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg"
+                                                    title="Eliminar Unidad"
+                                                    className="p-2.5 text-rose-400 hover:text-rose-100 bg-rose-500/10 hover:bg-rose-600 rounded-xl transition-all duration-300 transform hover:scale-110 shadow-sm border border-rose-500/20"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>

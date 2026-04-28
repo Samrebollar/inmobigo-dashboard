@@ -16,11 +16,25 @@ export default async function MaintenancePage() {
         redirect('/login')
     }
 
-    const { data: resident } = await supabase
+    let resident = null
+    const { data: resByUid } = await supabase
         .from('residents')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle()
+
+    if (resByUid) {
+        resident = resByUid
+    } else if (user.email) {
+        const { data: resByEmail } = await supabase
+            .from('residents')
+            .select('*')
+            .eq('email', user.email)
+            .maybeSingle()
+        if (resByEmail) {
+            resident = resByEmail
+        }
+    }
 
     const mockResident = resident || {
         first_name: user.user_metadata?.full_name?.split(' ')[0] || 'Inquilino',

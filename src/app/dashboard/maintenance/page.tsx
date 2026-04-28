@@ -25,11 +25,25 @@ export default async function MaintenancePage() {
         .single()
 
     // 2. Check if Resident
-    const { data: resident } = await supabase
+    let resident = null
+    const { data: resByUid } = await supabase
         .from('residents')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle()
+
+    if (resByUid) {
+        resident = resByUid
+    } else if (user.email) {
+        const { data: resByEmail } = await supabase
+            .from('residents')
+            .select('*')
+            .eq('email', user.email)
+            .maybeSingle()
+        if (resByEmail) {
+            resident = resByEmail
+        }
+    }
 
     const isMetadataResident = user.user_metadata?.role === 'resident'
     const isResident = !!resident || isMetadataResident

@@ -55,6 +55,7 @@ export function CreateTicketModal({
     const [isUploading, setIsUploading] = useState(false)
     const [condominiums, setCondominiums] = useState<{ id: string, name: string }[]>([])
     const [orgId, setOrgId] = useState<string | null>(defaultOrganizationId || null)
+    const [resolvedResidentId, setResolvedResidentId] = useState<string | null>(residentId || null)
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -73,9 +74,7 @@ export function CreateTicketModal({
     useEffect(() => {
         if (isOpen) {
             fetchCondominiums()
-            if (residentId) {
-                fetchResidentUnit()
-            }
+            fetchResidentUnit()
         }
     }, [isOpen])
 
@@ -107,13 +106,40 @@ export function CreateTicketModal({
 
     const fetchResidentUnit = async () => {
         try {
-            const { data: resData } = await supabase
-                .from('residents')
-                .select('unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
-                .eq('id', residentId)
-                .maybeSingle()
+            const { data: { user } } = await supabase.auth.getUser()
+            let resData = null
+
+            const finalId = residentId || resolvedResidentId
+
+            if (finalId) {
+                const { data } = await supabase
+                    .from('residents')
+                    .select('unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
+                    .eq('id', finalId)
+                    .maybeSingle()
+                if (data) resData = data
+            }
+
+            if (!resData && user) {
+                const { data } = await supabase
+                    .from('residents')
+                    .select('id, unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
+                    .eq('user_id', user.id)
+                    .maybeSingle()
+                if (data) resData = data
+            }
+
+            if (!resData && user?.email) {
+                const { data } = await supabase
+                    .from('residents')
+                    .select('id, unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
+                    .eq('email', user.email)
+                    .maybeSingle()
+                if (data) resData = data
+            }
 
             if (resData) {
+                setResolvedResidentId(resData.id)
                 setFormData(prev => ({
                     ...prev,
                     unit_id: resData.unit_id || '',
@@ -172,6 +198,11 @@ export function CreateTicketModal({
         if (!orgId) return toast.error('Falta ID de organización.')
         if (!formData.title) return toast.error('Ingresa un título.')
 
+        const finalResidentId = resolvedResidentId || residentId
+        if (!finalResidentId) {
+            return toast.error('No se pudo determinar tu perfil de residente. Contacta al administrador.')
+        }
+
         try {
             setLoading(true)
             let imageUrl = ''
@@ -179,7 +210,7 @@ export function CreateTicketModal({
             if (selectedFile) {
                 setIsUploading(true)
                 const fileExt = selectedFile.name.split('.').pop()
-                const fileName = `${residentId}-${Math.random().toString(36).substring(2)}.${fileExt}`
+                const fileName = `${finalResidentId}-${Math.random().toString(36).substring(2)}.${fileExt}`
                 const filePath = `maintenance/${fileName}`
 
                 const { error: uploadError } = await supabase.storage
@@ -207,7 +238,7 @@ export function CreateTicketModal({
                 organization_id: orgId,
                 condominium_id: formData.condominium_id,
                 unit_id: formData.unit_id || undefined,
-                resident_id: residentId,
+                resident_id: finalResidentId,
                 title: formData.title,
                 description: finalDescription,
                 priority: formData.priority,

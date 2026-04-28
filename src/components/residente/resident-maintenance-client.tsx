@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
     Wrench, 
     Plus, 
@@ -13,7 +13,8 @@ import {
     MessageSquare,
     AlertCircle,
     Loader2,
-    Eye
+    Eye,
+    Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,31 +24,108 @@ import { maintenanceService } from '@/services/maintenance-service'
 import { CreateTicketModal } from '@/components/maintenance/CreateTicketModal'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { createClient } from '@/utils/supabase/client'
 
 interface ResidentMaintenanceClientProps {
     resident: any
 }
 
+import { getTicketsByResidentServer, deleteMaintenanceTicketServer } from '@/app/actions/maintenance-actions'
+
 export default function ResidentMaintenanceClient({ resident }: ResidentMaintenanceClientProps) {
     const [loading, setLoading] = useState(true)
     const [tickets, setTickets] = useState<Ticket[]>([])
     const [isCreateOpen, setIsCreateOpen] = useState(false)
+    
+    const [ticketToDelete, setTicketToDelete] = useState<string | null>(null)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
 
     useEffect(() => {
         if (resident?.id) {
             fetchTickets()
+
+            // Setup Realtime Subscription
+            const supabase = createClient()
+            const channel = supabase
+                .channel(`realtime_resident_tickets_${resident.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'tickets',
+                        filter: `resident_id=eq.${resident.id}`
+                    },
+                    (payload) => {
+                        console.log('[Realtime] postgres change detected:', payload)
+                        if (payload.eventType === 'UPDATE') {
+                            setTickets((prev) =>
+                                prev.map((t) => (t.id === payload.new.id ? { ...t, ...payload.new } : t))
+                            )
+                        } else if (payload.eventType === 'DELETE') {
+                            setTickets((prev) => prev.filter((t) => t.id === payload.old.id))
+                        } else if (payload.eventType === 'INSERT') {
+                            fetchTickets()
+                        }
+                    }
+                )
+                .subscribe()
+
+            // Setup Polling Fallback (every 10 seconds)
+            const pollInterval = setInterval(() => {
+                console.log('[ResidentMaintenanceClient] Polling for updates...')
+                fetchTicketsSilently()
+            }, 10000)
+
+            return () => {
+                supabase.removeChannel(channel)
+                clearInterval(pollInterval)
+            }
         }
     }, [resident?.id])
+
+    const fetchTicketsSilently = async () => {
+        try {
+            const response = await getTicketsByResidentServer(resident.id)
+            if (response.success && response.tickets) {
+                setTickets(response.tickets)
+            }
+        } catch (error) {
+            console.error('Error silent polling:', error)
+        }
+    }
 
     const fetchTickets = async () => {
         try {
             setLoading(true)
-            const data = await maintenanceService.getByResident(resident.id)
-            setTickets(data)
+            console.log('[ResidentMaintenanceClient] Fetching tickets for resident:', resident.id)
+            const response = await getTicketsByResidentServer(resident.id)
+            if (response.success && response.tickets) {
+                setTickets(response.tickets)
+            } else {
+                console.error('Error fetching tickets from server:', response.error)
+            }
         } catch (error) {
             console.error('Error fetching tickets:', error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleDelete = async (id: string) => {
+        try {
+            setDeletingId(id)
+            const res = await deleteMaintenanceTicketServer(id)
+            if (res.success) {
+                setTickets(prev => prev.filter(t => t.id !== id))
+                setTicketToDelete(null)
+            } else {
+                alert('No se pudo eliminar el reporte.')
+            }
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setDeletingId(null)
         }
     }
 
@@ -112,7 +190,7 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                 <div className="h-5 w-5 rounded-full bg-blue-500/20 flex items-center justify-center">
                                     <MessageSquare className="h-3 w-3 text-blue-400" />
                                 </div>
-                                Soporte técnico disponible 24/7
+                                Seguimiento continuo a tus reportes
                             </div>
                         </div>
                     </div>
@@ -176,20 +254,20 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                         </div>
                     ) : (
                         <div className="w-full">
-                            <div className="grid grid-cols-12 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
-                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</div>
-                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Categoría</div>
-                                <div className="col-span-3 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Problema</div>
-                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Prioridad</div>
-                                <div className="col-span-2 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</div>
-                                <div className="col-span-1 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-center">Imagen</div>
+                            <div className="grid grid-cols-6 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Categoría</div>
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Reporte</div>
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Prioridad</div>
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Fecha</div>
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Estatus</div>
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Acciones</div>
                             </div>
                             
                             <div className="divide-y divide-zinc-800/30">
                                 {tickets.map((ticket, i) => {
                                     const statusInfo = getStatusInfo(ticket.status)
                                     const priorityInfo = getPriorityInfo(ticket.priority)
-                                    const cleanDescription = ticket.description?.replace(/\[Categoría: .*?\]\s*/g, '') || ''
+                                    const categoryLabel = ticket.description?.match(/\[Categoría: (.*?)\]/)?.[1] || 'Mantenimiento'
                                     
                                     return (
                                         <motion.div 
@@ -197,23 +275,17 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                             initial={{ opacity: 0, x: -10 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: 0.1 * i }}
-                                            className="grid grid-cols-12 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
+                                            className="grid grid-cols-6 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
                                         >
-                                            <div className="col-span-2 text-zinc-400 font-medium text-sm">
-                                                {format(parseISO(ticket.created_at), 'd MMM yyyy', { locale: es })}
-                                            </div>
-                                            <div className="col-span-2">
+                                            <div className="flex items-center justify-center text-center">
                                                 <Badge className="bg-zinc-800/50 border-zinc-700/50 text-zinc-300 font-bold px-3 py-1 rounded-lg">
-                                                    {ticket.category || 'Mantenimiento'}
+                                                    {categoryLabel}
                                                 </Badge>
                                             </div>
-                                            <div className="col-span-3 space-y-1">
-                                                <h4 className="text-base font-black text-white group-hover:text-indigo-400 transition-colors truncate">
-                                                    {ticket.title}
-                                                </h4>
-                                                <p className="text-xs text-zinc-500 truncate">{cleanDescription}</p>
+                                            <div className="text-base font-black text-white group-hover:text-indigo-400 transition-colors flex items-center justify-center text-center truncate px-2">
+                                                {ticket.title}
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="flex items-center justify-center text-center">
                                                 <Badge className={cn(
                                                     "px-3 py-1 rounded-xl font-bold text-xs border shadow-sm",
                                                     priorityInfo.color === 'rose' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
@@ -224,7 +296,10 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                                     {priorityInfo.label}
                                                 </Badge>
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="text-zinc-400 font-medium text-sm flex items-center justify-center text-center">
+                                                {format(parseISO(ticket.created_at), 'd MMM yyyy', { locale: es })}
+                                            </div>
+                                            <div className="flex items-center justify-center text-center">
                                                 <Badge className={cn(
                                                     "px-3 py-1 rounded-xl font-bold text-xs border shadow-sm",
                                                     statusInfo.color === 'rose' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
@@ -234,19 +309,29 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                                     {statusInfo.label}
                                                 </Badge>
                                             </div>
-                                            <div className="col-span-1 flex justify-center">
-                                                {ticket.images && ticket.images.length > 0 ? (
-                                                    <a 
+                                            <div className="flex items-center justify-center gap-3">
+                                                {ticket.images && ticket.images.length > 0 && (
+                                                    <motion.a 
                                                         href={ticket.images[0]} 
                                                         target="_blank" 
                                                         rel="noopener noreferrer"
-                                                        className="h-10 w-10 rounded-xl bg-zinc-950/50 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/30 transition-all shadow-md group/img"
+                                                        whileHover={{ scale: 1.12, backgroundColor: 'rgba(99, 102, 241, 0.2)' }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        className="h-9 w-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 hover:text-indigo-300 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)] transition-all duration-300"
+                                                        title="Ver imagen"
                                                     >
-                                                        <Eye className="h-5 w-5 transform group-hover/img:scale-110 transition-transform" />
-                                                    </a>
-                                                ) : (
-                                                    <span className="text-zinc-700 text-xs">-</span>
+                                                        <Eye className="h-4.5 w-4.5" />
+                                                    </motion.a>
                                                 )}
+                                                <motion.button
+                                                    onClick={() => setTicketToDelete(ticket.id)}
+                                                    whileHover={{ scale: 1.12, backgroundColor: 'rgba(244, 63, 94, 0.2)' }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    className="h-9 w-9 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 hover:text-rose-400 hover:shadow-[0_0_15px_rgba(244,63,94,0.2)] transition-all duration-300"
+                                                    title="Eliminar reporte"
+                                                >
+                                                    <Trash2 className="h-4.5 w-4.5" />
+                                                </motion.button>
                                             </div>
                                         </motion.div>
                                     )
@@ -256,6 +341,50 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                     )}
                 </motion.div>
             </div>
+
+            {/* SaaS Delete Modal */}
+            <AnimatePresence>
+                {ticketToDelete && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-6"
+                        >
+                            <div className="flex items-center gap-4 text-rose-500">
+                                <div className="h-12 w-12 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                                    <AlertCircle className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white">¿Eliminar reporte?</h3>
+                                    <p className="text-sm text-zinc-400">Esta acción no se puede deshacer.</p>
+                                </div>
+                            </div>
+                            <div className="bg-zinc-950/50 border border-zinc-800/50 rounded-xl p-4 text-xs text-zinc-400">
+                                Estás a punto de borrar el reporte de mantenimiento. El administrador ya no podrá verlo.
+                            </div>
+                            <div className="flex justify-end gap-3">
+                                <Button 
+                                    variant="ghost" 
+                                    className="text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                    onClick={() => setTicketToDelete(null)}
+                                    disabled={!!deletingId}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button 
+                                    className="bg-rose-500 hover:bg-rose-600 text-white font-bold"
+                                    onClick={() => handleDelete(ticketToDelete)}
+                                    disabled={!!deletingId}
+                                >
+                                    {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sí, eliminar'}
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             {/* Bottom Tracker Section */}
             <motion.div 

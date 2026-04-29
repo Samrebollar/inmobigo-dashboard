@@ -2,9 +2,6 @@
 
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
 export async function createMaintenanceTicketServer(payload: {
     organization_id: string
     condominium_id: string
@@ -17,6 +14,9 @@ export async function createMaintenanceTicketServer(payload: {
     status: string
     images: string[]
 }) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
     if (!supabaseServiceKey) {
         return { success: false, error: 'Falta la SERVICE_ROLE_KEY en el servidor.' }
     }
@@ -61,6 +61,9 @@ export async function createMaintenanceTicketServer(payload: {
 }
 
 export async function getTicketsByResidentServer(residentId: string) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
     if (!supabaseServiceKey) {
         return { success: false, error: 'Falta la SERVICE_ROLE_KEY en el servidor.' }
     }
@@ -96,6 +99,9 @@ export async function getTicketsByResidentServer(residentId: string) {
 }
 
 export async function deleteMaintenanceTicketServer(id: string) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
     if (!supabaseServiceKey) {
         return { success: false, error: 'Falta la SERVICE_ROLE_KEY en el servidor.' }
     }

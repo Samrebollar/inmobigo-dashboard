@@ -15,6 +15,8 @@ export default function AdminMaintenanceClient() {
     const [tickets, setTickets] = useState<Ticket[]>([])
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [orgId, setOrgId] = useState<string | null>(null)
+    const [condos, setCondos] = useState<{ id: string, name: string }[]>([])
+    const [selectedCondoId, setSelectedCondoId] = useState<string>('all')
 
     useEffect(() => {
         initialize()
@@ -33,6 +35,15 @@ export default function AdminMaintenanceClient() {
         if (orgUser) {
             setOrgId(orgUser.organization_id)
             fetchTickets(orgUser.organization_id)
+            
+            const { data: condosData } = await supabase
+                .from('condominiums')
+                .select('id, name')
+                .eq('organization_id', orgUser.organization_id)
+            
+            if (condosData) {
+                setCondos(condosData)
+            }
         } else {
             setLoading(false)
         }
@@ -50,6 +61,10 @@ export default function AdminMaintenanceClient() {
         }
     }
 
+    const filteredTickets = selectedCondoId === 'all'
+        ? tickets
+        : tickets.filter(t => t.condominium_id === selectedCondoId)
+
     return (
         <div className="min-h-screen space-y-6 p-6 pb-20">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -57,6 +72,25 @@ export default function AdminMaintenanceClient() {
                     <h1 className="text-2xl font-bold tracking-tight text-white">Gestión de Mantenimiento</h1>
                     <p className="text-zinc-400">Administra los reportes y solicitudes de los residentes.</p>
                 </div>
+                
+                {condos.length > 0 && (
+                    <div className="flex items-center gap-3 bg-zinc-900/40 px-4 py-2 rounded-2xl border border-zinc-800/50 shadow-sm">
+                        <Filter className="h-4 w-4 text-indigo-400" />
+                        <span className="text-xs font-black text-zinc-500 uppercase tracking-widest">Propiedad:</span>
+                        <select
+                            value={selectedCondoId}
+                            onChange={(e) => setSelectedCondoId(e.target.value)}
+                            className="bg-zinc-950/50 border border-zinc-800 text-zinc-200 rounded-xl px-4 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all cursor-pointer font-black uppercase tracking-wider"
+                        >
+                            <option value="all">TODAS LAS PROPIEDADES</option>
+                            {condos.map((condo) => (
+                                <option key={condo.id} value={condo.id}>
+                                    {condo.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             <div className="w-full">
@@ -66,7 +100,7 @@ export default function AdminMaintenanceClient() {
                     </div>
                 ) : (
                     <MaintenanceBoard
-                        tickets={tickets}
+                        tickets={filteredTickets}
                         onUpdateTicket={(t) => {
                             console.log('Update ticket', t)
                             // Implement update logic (e.g., drag and drop or click)

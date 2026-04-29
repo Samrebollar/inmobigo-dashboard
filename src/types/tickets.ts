@@ -41,5 +41,6 @@ export interface UpdateTicketDTO {
     status?: TicketStatus
     priority?: TicketPriority
     assigned_to?: string
-    description?: string // Add comments etc normally, but simple for now
+    description?: string 
+    images?: string[]
 }

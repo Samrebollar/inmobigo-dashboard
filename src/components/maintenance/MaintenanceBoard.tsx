@@ -21,6 +21,7 @@ import {
     Building2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ResolveTicketModal } from './ResolveTicketModal'
 
 interface MaintenanceBoardProps {
     tickets: Ticket[]
@@ -32,6 +33,8 @@ type FilterType = 'all' | 'open' | 'in_progress' | 'resolved'
 export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardProps) {
     const [activeFilter, setActiveFilter] = useState<FilterType>('all')
     const [localTickets, setLocalTickets] = useState<Ticket[]>(tickets)
+    const [isResolveOpen, setIsResolveOpen] = useState(false)
+    const [ticketToResolve, setTicketToResolve] = useState<Ticket | null>(null)
 
     useEffect(() => {
         setLocalTickets(tickets)
@@ -44,6 +47,16 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
             setActiveFilter('in_progress')
         } catch (error) {
             console.error('Error updating status to in_progress:', error)
+        }
+    }
+
+    const handleResolve = async (ticketId: string) => {
+        try {
+            await maintenanceService.update(ticketId, { status: 'resolved' })
+            setLocalTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: 'resolved' } : t))
+            setActiveFilter('resolved')
+        } catch (error) {
+            console.error('Error updating status to resolved:', error)
         }
     }
 
@@ -260,6 +273,19 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                                         En Proceso
                                                     </button>
                                                 )}
+
+                                                {ticket.status === 'in_progress' && (
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setTicketToResolve(ticket)
+                                                            setIsResolveOpen(true)
+                                                        }}
+                                                        className="h-10 px-6 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black tracking-widest uppercase shadow-lg shadow-emerald-600/20 transition-all hover:scale-105 active:scale-95"
+                                                    >
+                                                        Resultado
+                                                    </button>
+                                                )}
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -269,6 +295,21 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                     )}
                 </AnimatePresence>
             </div>
+
+            <ResolveTicketModal
+                isOpen={isResolveOpen}
+                onClose={() => {
+                    setIsResolveOpen(false)
+                    setTicketToResolve(null)
+                }}
+                onSuccess={() => {
+                    if (ticketToResolve) {
+                        setLocalTickets(prev => prev.map(t => t.id === ticketToResolve.id ? { ...t, status: 'resolved' } : t))
+                        setActiveFilter('resolved')
+                    }
+                }}
+                ticket={ticketToResolve}
+            />
         </div>
     )
 }

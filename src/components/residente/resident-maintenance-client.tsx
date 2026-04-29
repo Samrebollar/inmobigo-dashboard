@@ -14,7 +14,8 @@ import {
     AlertCircle,
     Loader2,
     Eye,
-    Trash2
+    Trash2,
+    FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -75,7 +76,7 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
             const pollInterval = setInterval(() => {
                 console.log('[ResidentMaintenanceClient] Polling for updates...')
                 fetchTicketsSilently()
-            }, 10000)
+            }, 3000)
 
             return () => {
                 supabase.removeChannel(channel)
@@ -254,12 +255,13 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                         </div>
                     ) : (
                         <div className="w-full">
-                            <div className="grid grid-cols-6 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
+                            <div className="grid grid-cols-7 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Categoría</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Reporte</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Prioridad</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Fecha</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Estatus</div>
+                                <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Evidencia</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Acciones</div>
                             </div>
                             
@@ -275,7 +277,7 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                             initial={{ opacity: 0, x: -10 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: 0.1 * i }}
-                                            className="grid grid-cols-6 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
+                                            className="grid grid-cols-7 px-8 py-8 group hover:bg-indigo-500/[0.03] transition-all items-center cursor-default"
                                         >
                                             <div className="flex items-center justify-center text-center">
                                                 <Badge className="bg-zinc-800/50 border-zinc-700/50 text-zinc-300 font-bold px-3 py-1 rounded-lg">
@@ -308,6 +310,23 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                                 )}>
                                                     {statusInfo.label}
                                                 </Badge>
+                                            </div>
+                                            <div className="flex items-center justify-center text-center">
+                                                {ticket.images && ticket.images.some(img => img.includes('.pdf')) ? (
+                                                    <motion.a 
+                                                        href={ticket.images.find(img => img.includes('.pdf'))} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        whileHover={{ scale: 1.12, backgroundColor: 'rgba(16, 185, 129, 0.2)' }}
+                                                        whileTap={{ scale: 0.95 }}
+                                                        className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all duration-300"
+                                                        title="Ver Reporte de Trabajo (PDF)"
+                                                    >
+                                                        <FileText className="h-4.5 w-4.5" />
+                                                    </motion.a>
+                                                ) : (
+                                                    <span className="text-zinc-600 text-xs">-</span>
+                                                )}
                                             </div>
                                             <div className="flex items-center justify-center gap-3">
                                                 {ticket.images && ticket.images.length > 0 && (

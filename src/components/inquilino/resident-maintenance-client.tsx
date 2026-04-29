@@ -72,15 +72,8 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                 )
                 .subscribe()
 
-            // Setup Polling Fallback (every 10 seconds)
-            const pollInterval = setInterval(() => {
-                console.log('[ResidentMaintenanceClient] Polling for updates...')
-                fetchTicketsSilently()
-            }, 3000)
-
             return () => {
                 supabase.removeChannel(channel)
-                clearInterval(pollInterval)
             }
         }
     }, [resident?.id])

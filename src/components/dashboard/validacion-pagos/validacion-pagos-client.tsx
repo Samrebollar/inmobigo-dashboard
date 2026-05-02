@@ -11,7 +11,6 @@ import autoTable from 'jspdf-autotable'
 import { createClient } from '@/utils/supabase/client'
 
 import { Plus, Pencil } from 'lucide-react'
-import { getValidations, updateValidationStatus, deleteValidation } from '@/app/actions/payment-validation-actions'
 import { getBankAccounts, saveBankAccount, deleteBankAccount } from '@/app/actions/bank-account-actions'
 import { propertiesService } from '@/services/properties-service'
 

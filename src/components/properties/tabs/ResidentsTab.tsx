@@ -188,6 +188,7 @@ export function ResidentsTab() {
                                 <th className="px-6 py-4 font-medium">Vehículos</th>
                                 <th className="px-6 py-4 font-medium">Estado</th>
                                 <th className="px-6 py-4 font-medium">Saldo Pendiente</th>
+                                <th className="px-6 py-4 font-medium">Saldo a Favor</th>
                                 <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -244,6 +245,11 @@ export function ResidentsTab() {
                                         <td className="px-6 py-4">
                                             <span className={resident.debt_amount > 0 ? 'text-rose-400 font-medium' : 'text-zinc-400'}>
                                                 {resident.debt_amount > 0 ? `$${resident.debt_amount.toLocaleString()}` : '$0.00'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={(resident.credit_amount || 0) > 0 ? 'text-emerald-400 font-medium' : 'text-zinc-400'}>
+                                                {(resident.credit_amount || 0) > 0 ? `$${(resident.credit_amount || 0).toLocaleString()}` : '$0.00'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">

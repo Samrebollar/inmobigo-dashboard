@@ -13,7 +13,7 @@ export default async function ValidacionPagosPage() {
     // Check if Admin/Staff
     const { data: orgUser } = await supabase
         .from('organization_users')
-        .select('role_new')
+        .select('role_new, organization_id')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -33,9 +33,21 @@ export default async function ValidacionPagosPage() {
         redirect('/dashboard')
     }
 
+    let organizationId = orgUser?.organization_id
+
+    // Fallback if not in organization_users (e.g. legacy owners)
+    if (!organizationId) {
+        const { data: ownedOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('owner_id', user.id)
+            .maybeSingle()
+        organizationId = ownedOrg?.id
+    }
+
     return (
         <div className="container mx-auto px-6 py-8">
-            <PaymentValidationClient organizationId={orgUser?.organization_id} />
+            <PaymentValidationClient organizationId={organizationId || ''} />
         </div>
     )
 }

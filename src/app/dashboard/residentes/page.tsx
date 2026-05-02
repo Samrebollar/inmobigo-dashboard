@@ -513,7 +513,7 @@ export default function ResidentsPage() {
                                             bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 hover:border-indigo-500/30 shadow-lg shadow-indigo-900/5 h-11 md:h-12"
                                         >
                                             <FilePlus className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" />
-                                            <span className="lg:hidden xl:inline">Factura</span><span className="hidden lg:inline xl:hidden">Cobrar</span>
+                                            <span className="lg:hidden xl:inline">Recibo</span><span className="hidden lg:inline xl:hidden">Cobrar</span>
                                         </motion.button>
                                     </div>
                                 </div>

@@ -136,7 +136,10 @@ export const propertiesService = {
         const supabase = createClient()
         
         try {
-            // 1. Get resident IDs to delete residents-related data
+            // NOTA: Estamos eliminando únicamente los REGISTROS (filas) asociados a este condominio,
+            // NO estamos eliminando ni modificando la estructura de las tablas.
+            
+            // 1. Obtener IDs de residentes para limpiar datos vinculados
             const { data: residents } = await supabase
                 .from('residents')
                 .select('id')
@@ -145,22 +148,34 @@ export const propertiesService = {
             const residentIds = residents?.map(r => r.id) || []
             
             if (residentIds.length > 0) {
-                // Delete vehicles linked to these residents
+                // Eliminar vehículos y bitácoras de estos residentes
                 await supabase.from('vehicles').delete().in('resident_id', residentIds)
-                // Delete communication logs linked to these residents
                 await supabase.from('communication_logs').delete().in('resident_id', residentIds)
             }
 
-            // 2. Delete related records by condominium_id
+            // 2. Limpiar Fondo de Reserva
+            const { data: funds } = await supabase
+                .from('reserve_fund')
+                .select('id')
+                .eq('condominium_id', id)
+            
+            const fundIds = funds?.map(f => f.id) || []
+            if (fundIds.length > 0) {
+                await supabase.from('reserve_fund_transactions').delete().in('fund_id', fundIds)
+                await supabase.from('reserve_fund').delete().in('id', fundIds)
+            }
+
+            // 3. Eliminar registros vinculados directamente al condominium_id
             await supabase.from('invoices').delete().eq('condominium_id', id)
             await supabase.from('tickets').delete().eq('condominium_id', id)
+            await supabase.from('condo_expenses').delete().eq('condominium_id', id)
             await supabase.from('settings_condominio').delete().eq('condominio_id', id)
             
-            // 3. Delete residents and units
+            // 4. Eliminar residentes y unidades
             await supabase.from('residents').delete().eq('condominium_id', id)
             await supabase.from('units').delete().eq('condominium_id', id)
             
-            // 4. Finally delete the condominium
+            // 5. Finalmente eliminar el registro del condominio
             const { error } = await supabase
                 .from('condominiums')
                 .delete()

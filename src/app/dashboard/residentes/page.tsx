@@ -45,6 +45,7 @@ interface Condominium {
 
 interface ResidentWithFinance extends Resident {
     calculatedDebt: number
+    calculatedCredit: number
     overdueCount: number
     lastPaymentDate?: string
     maxDaysOverdue: number
@@ -201,6 +202,7 @@ export default function ResidentsPage() {
                 return {
                     ...resident,
                     calculatedDebt: debt,
+                    calculatedCredit: resident.credit_amount || 0,
                     overdueCount: overdueInvoices.length,
                     lastPaymentDate: lastPayment,
                     maxDaysOverdue: maxDays,
@@ -435,14 +437,27 @@ export default function ResidentsPage() {
                                     </div>
 
                                     {/* Middle: Finance Info */}
-                                    <div className="p-5 md:p-8 lg:w-[350px] border-b lg:border-b-0 lg:border-r border-zinc-800 flex flex-col justify-center space-y-4 bg-zinc-900/10">
-                                        <div>
-                                            <p className="text-zinc-400 text-xs md:text-sm font-medium mb-1 uppercase tracking-wider">Saldo pendiente</p>
-                                            <p className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                                                {formatMoney(resident.calculatedDebt)}
-                                            </p>
+                                    <div className="p-5 md:p-8 lg:w-[380px] border-b lg:border-b-0 lg:border-r border-zinc-800 flex flex-col justify-center bg-zinc-900/10">
+                                        <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:gap-6">
+                                            <div>
+                                                <p className="text-zinc-500 text-[10px] md:text-xs font-bold mb-1 uppercase tracking-widest">Saldo pendiente</p>
+                                                <p className={`text-2xl md:text-3xl font-bold tracking-tight ${resident.calculatedDebt > 0 ? 'text-rose-500' : 'text-white/40'}`}>
+                                                    {formatMoney(resident.calculatedDebt)}
+                                                </p>
+                                            </div>
+                                            <motion.div
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className="lg:border-t lg:border-zinc-800 lg:pt-4"
+                                            >
+                                                <p className="text-zinc-500 text-[10px] md:text-xs font-bold mb-1 uppercase tracking-widest">Saldo a favor</p>
+                                                <p className={`text-2xl md:text-3xl font-bold tracking-tight ${(resident.calculatedCredit || 0) > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                                                    {formatMoney(resident.calculatedCredit || 0)}
+                                                </p>
+                                            </motion.div>
                                         </div>
-                                        <div className="space-y-3 pt-2">
+                                        
+                                        <div className="space-y-3 pt-6">
                                             <div className="flex justify-between items-center text-xs md:text-sm border-b border-zinc-800 pb-2">
                                                 <span className="text-zinc-500 font-medium">Último pago</span>
                                                 <span className="text-zinc-300 font-semibold">
@@ -526,6 +541,7 @@ export default function ResidentsPage() {
                                 ...newResident,
                                 unit_number: unit?.unit_number || 'N/A',
                                 calculatedDebt: newResident.debt_amount || 0,
+                                calculatedCredit: newResident.credit_amount || 0,
                                 overdueCount: 0,
                                 maxDaysOverdue: 0
                             }

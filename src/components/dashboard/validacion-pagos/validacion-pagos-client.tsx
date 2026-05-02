@@ -280,6 +280,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Concepto</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Fecha</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider text-center">Monto</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider text-center">Estado</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider text-center">Acciones</th>
                                 </tr>
                             </thead>
@@ -296,6 +297,15 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                         <td className="px-6 py-4 text-zinc-400 max-w-[150px] truncate">{item.nota || 'Mantenimiento'}</td>
                                         <td className="px-6 py-4 text-zinc-300">{item.date}</td>
                                         <td className="px-6 py-4 text-center font-black text-emerald-400">${Number(item.amount).toLocaleString('es-MX')}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
+                                                item.status === 'aprobado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                item.status === 'rechazado' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                            }`}>
+                                                {item.status}
+                                            </span>
+                                        </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button onClick={() => setSelectedProof(item.comprobante_url)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-indigo-400 transition-all"><Eye size={18} /></button>

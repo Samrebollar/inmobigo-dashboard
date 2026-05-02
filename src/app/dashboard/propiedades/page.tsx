@@ -240,7 +240,9 @@ export default function PropiedadesPage() {
     }
   }
 
-  if (loading || ((isLoadingUnits || isLoadingResidents || isLoadingDelinquent || isLoadingOccupied) && !isDemo)) {
+  const isInitialLoading = loading && properties.length === 0 && !deleteModal.isOpen && !isCreateOpen && !editingCondo;
+
+  if (isInitialLoading || ((isLoadingUnits || isLoadingResidents || isLoadingDelinquent || isLoadingOccupied) && !isDemo)) {
     return (
       <div className="mx-auto max-w-7xl space-y-8 p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

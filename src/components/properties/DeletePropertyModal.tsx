@@ -47,7 +47,11 @@ export function DeletePropertyModal({ isOpen, onClose, onConfirm, propertyName }
             await onConfirm()
             onClose()
         } catch (err: any) {
-            setError(err.message || 'Error al eliminar la propiedad')
+            let errorMessage = err.message || 'Error al eliminar la propiedad';
+            if (errorMessage.includes('23503') || errorMessage.includes('foreign key')) {
+                errorMessage = 'No se puede eliminar porque tiene unidades, residentes o datos activos asociados. Elimínelos primero.';
+            }
+            setError(errorMessage)
         } finally {
             setLoading(false)
         }

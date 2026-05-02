@@ -21,6 +21,33 @@ export default function AdminMaintenanceClient() {
     useEffect(() => {
         initialize()
     }, [])
+    
+    // Real-time subscription
+    useEffect(() => {
+        if (!orgId) return
+
+        const channel = supabase
+            .channel('realtime_tickets')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'tickets',
+                    filter: `organization_id=eq.${orgId}`
+                },
+                (payload) => {
+                    console.log('Real-time update received:', payload)
+                    // Simply refetch for consistency, or we could surgically update state
+                    fetchTickets(orgId)
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [orgId])
 
     const initialize = async () => {
         const { data: { user } } = await supabase.auth.getUser()

@@ -314,10 +314,8 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                                         <button onClick={() => handleAction(item.id, 'aprobado')} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
                                                         <button onClick={() => handleAction(item.id, 'rechazado')} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
                                                     </>
-                                                ) : (
-                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${item.status === 'aprobado' ? 'text-emerald-400 bg-emerald-400/10' : 'text-rose-400 bg-rose-400/10'}`}>{item.status}</span>
-                                                )}
-                                                <button onClick={() => setDeleteConfirmation(item.id)} className="p-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all"><Trash size={18} /></button>
+                                                ) : null}
+                                                <button onClick={() => setDeleteConfirmation(item.id)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-rose-400 transition-all"><Trash size={18} /></button>
                                             </div>
                                         </td>
                                     </tr>

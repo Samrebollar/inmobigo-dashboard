@@ -16,6 +16,7 @@ export interface UnifiedBulkRow {
     resident_phone?: string
     resident_status?: 'active' | 'delinquent' | 'inactive'
     debt_amount?: number
+    credit_amount?: number
     vehicle_plate?: string
     vehicle_brand?: string
 }
@@ -79,6 +80,7 @@ export const bulkService = {
                         phone: normalizeMexicanPhone(row.resident_phone || ''),
                         status: row.resident_status || 'active',
                         debt_amount: row.debt_amount || 0,
+                        credit_amount: row.credit_amount || 0,
                         vehicles
                     }
 

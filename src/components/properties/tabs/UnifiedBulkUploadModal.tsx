@@ -131,6 +131,14 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                         if (!isNaN(parsed)) debt = parsed
                     }
 
+                    // Map Credit
+                    let credit: number = 0
+                    const creditRaw = row['Saldo a Favor'] || row['saldo a favor'] || row['favor']
+                    if (creditRaw) {
+                        const parsed = parseFloat(creditRaw.toString().replace(/[^0-9.-]+/g, ""))
+                        if (!isNaN(parsed)) credit = parsed
+                    }
+
                     unifiedRows.push({
                         unit_number: unitNumber,
                         floor: row['Piso'] || row['piso'],
@@ -142,6 +150,7 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                         resident_phone: row['Telefono'] || row['telefono'],
                         resident_status: status,
                         debt_amount: debt,
+                        credit_amount: credit,
                         vehicle_plate: row['Placas'] || row['placas'],
                         vehicle_brand: row['Marca'] || row['marca']
                     })
@@ -178,9 +187,9 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
     }
 
     const downloadTemplate = () => {
-        const headers = "Unidad,Piso,Tipo,Monto / Cuota,Día Cobro,Nombre,Email,Telefono,Placas,Marca,Saldo Pendiente"
-        const row1 = "A-101,1,Departamento,5000,5,Juan Morales,juan@ejemplo.com,5219981234567,ABC-123,Toyota,0"
-        const row2 = "B-202,2,Casa,8500,1,Clara Licona,clara@ejemplo.com,5219987654321,XYZ-789,Honda,1500"
+        const headers = "Unidad,Piso,Tipo,Monto / Cuota,Día Cobro,Nombre,Email,Telefono,Placas,Marca,Saldo Pendiente,Saldo a Favor"
+        const row1 = "A-101,1,Departamento,5000,5,Juan Morales,juan@ejemplo.com,5219981234567,ABC-123,Toyota,0,0"
+        const row2 = "B-202,2,Casa,8500,1,Clara Licona,clara@ejemplo.com,5219987654321,XYZ-789,Honda,1500,500"
         const csvContent = `\uFEFF${headers}\n${row1}\n${row2}`
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -227,7 +236,7 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                                     <p className="text-xs text-zinc-400 leading-relaxed">
                                         El sistema identificará si la unidad ya existe. Si no, la creará automáticamente. 
                                         Luego, creará al residente y lo vinculará a la unidad correspondiente, 
-                                        incluyendo sus vehículos y saldos iniciales.
+                                        incluyendo sus vehículos, saldos pendientes y **saldos a favor**.
                                     </p>
                                 </div>
                             </div>

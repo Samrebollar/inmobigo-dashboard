@@ -11,6 +11,7 @@ export interface Resident {
     phone: string
     status: ResidentStatus
     debt_amount: number
+    credit_amount?: number
     created_at?: string
     // Linked data (optional for joins)
     unit_number?: string
@@ -48,6 +49,7 @@ export interface CreateResidentDTO {
     phone: string
     status: ResidentStatus
     debt_amount?: number
+    credit_amount?: number
     vehicles?: {
         plate: string
         brand: string

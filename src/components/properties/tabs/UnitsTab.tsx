@@ -12,7 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Unit } from '@/types/units'
 import { unitsService } from '@/services/units-service'
 import { CreateUnitModal } from './CreateUnitModal'
-import { UnifiedBulkUploadModal } from './UnifiedBulkUploadModal'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
 
@@ -146,9 +145,6 @@ export function UnitsTab() {
                     <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300">
                         <Trash2 className="mr-2 h-4 w-4" /> Borrar Todo
                     </Button>
-                    <Button onClick={() => setIsBulkOpen(true)} variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300">
-                        <Upload className="mr-2 h-4 w-4" /> Carga Masiva
-                    </Button>
                     <Button onClick={() => { setUnitToEdit(null); setIsCreateOpen(true) }} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
                         <Plus className="mr-2 h-4 w-4" /> Nueva Unidad
                     </Button>
@@ -255,12 +251,6 @@ export function UnitsTab() {
                 unitToEdit={unitToEdit}
             />
 
-            <UnifiedBulkUploadModal
-                isOpen={isBulkOpen}
-                onClose={() => setIsBulkOpen(false)}
-                onSuccess={fetchUnits}
-                condominiumId={condominiumId}
-            />
 
             {/* Custom Delete Confirmation Modal */}
             <Modal isOpen={deleteModalOpen} onClose={() => !isDeleting && setDeleteModalOpen(false)}>

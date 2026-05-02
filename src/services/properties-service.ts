@@ -134,14 +134,46 @@ export const propertiesService = {
     async delete(id: string): Promise<void> {
         if (id.startsWith('demo-')) return
         const supabase = createClient()
-        const { error } = await supabase
-            .from('condominiums')
-            .delete()
-            .eq('id', id)
+        
+        try {
+            // 1. Get resident IDs to delete residents-related data
+            const { data: residents } = await supabase
+                .from('residents')
+                .select('id')
+                .eq('condominium_id', id)
+            
+            const residentIds = residents?.map(r => r.id) || []
+            
+            if (residentIds.length > 0) {
+                // Delete vehicles linked to these residents
+                await supabase.from('vehicles').delete().in('resident_id', residentIds)
+                // Delete communication logs linked to these residents
+                await supabase.from('communication_logs').delete().in('resident_id', residentIds)
+            }
 
-        if (error) {
-            console.error('Error deleting condominium:', error)
-            throw new Error(`Error al eliminar condominio: ${error.message} (${error.code})`)
+            // 2. Delete related records by condominium_id
+            await supabase.from('invoices').delete().eq('condominium_id', id)
+            await supabase.from('tickets').delete().eq('condominium_id', id)
+            await supabase.from('settings_condominio').delete().eq('condominio_id', id)
+            
+            // 3. Delete residents and units
+            await supabase.from('residents').delete().eq('condominium_id', id)
+            await supabase.from('units').delete().eq('condominium_id', id)
+            
+            // 4. Finally delete the condominium
+            const { error } = await supabase
+                .from('condominiums')
+                .delete()
+                .eq('id', id)
+
+            if (error) {
+                console.error('Error final deletion of condominium:', error)
+                throw error
+            }
+            
+        } catch (error: any) {
+            console.error('Error in cascade delete condominium:', error)
+            throw new Error(`Error al eliminar condominio y sus datos asociados: ${error.message}`)
         }
     }
 }

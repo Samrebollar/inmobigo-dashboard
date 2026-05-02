@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Unit } from '@/types/units'
 import { unitsService } from '@/services/units-service'
 import { CreateUnitModal } from './CreateUnitModal'
-import { BulkUploadUnitsModal } from './BulkUploadUnitsModal'
+import { UnifiedBulkUploadModal } from './UnifiedBulkUploadModal'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
 
@@ -255,7 +255,7 @@ export function UnitsTab() {
                 unitToEdit={unitToEdit}
             />
 
-            <BulkUploadUnitsModal
+            <UnifiedBulkUploadModal
                 isOpen={isBulkOpen}
                 onClose={() => setIsBulkOpen(false)}
                 onSuccess={fetchUnits}

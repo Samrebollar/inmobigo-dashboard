@@ -15,7 +15,7 @@ import { Resident } from '@/types/residents'
 import { residentsService } from '@/services/residents-service'
 import { useUserRole } from '@/hooks/use-user-role'
 import { CreateResidentModal } from '@/components/residents/CreateResidentModal'
-import { BulkUploadResidentsModal } from '@/components/residents/BulkUploadResidentsModal'
+import { UnifiedBulkUploadModal } from '../properties/tabs/UnifiedBulkUploadModal'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
 
@@ -303,7 +303,7 @@ export function ResidentsTab() {
                 residentToEdit={residentToEdit}
             />
 
-            <BulkUploadResidentsModal
+            <UnifiedBulkUploadModal
                 isOpen={isBulkOpen}
                 onClose={() => setIsBulkOpen(false)}
                 onSuccess={fetchResidents}

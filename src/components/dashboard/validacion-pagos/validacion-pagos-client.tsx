@@ -8,6 +8,8 @@ import { getValidations, updateValidationStatus, deleteValidation, syncApprovedV
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+import { createClient } from '@/utils/supabase/client'
+
 export function PaymentValidationClient() {
     const [validations, setValidations] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
@@ -23,6 +25,7 @@ export function PaymentValidationClient() {
         accountNumber: '',
         reference: ''
     })
+    const supabase = createClient()
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -39,24 +42,28 @@ export function PaymentValidationClient() {
     }
 
     useEffect(() => {
-        const sync = async () => {
-            await syncApprovedValidations()
-            await fetchData()
-        }
-        sync()
+        fetchData()
 
-        // Sincronización en tiempo real (Polling cada 5 segundos)
-        const intervalId = setInterval(() => {
-            const pollData = async () => {
-                const res = await getValidations()
-                if (res.success) {
-                    setValidations(res.data)
+        // Suscripción Realtime para cambios globales (Admin ve todo)
+        const channel = supabase
+            .channel('public:payment_validations_admin')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'payment_validations'
+                },
+                (payload) => {
+                    console.log('Realtime change received (Admin):', payload)
+                    fetchData()
                 }
-            }
-            pollData()
-        }, 5000)
+            )
+            .subscribe()
 
-        return () => clearInterval(intervalId)
+        return () => {
+            supabase.removeChannel(channel)
+        }
     }, [])
 
     const fetchData = async () => {

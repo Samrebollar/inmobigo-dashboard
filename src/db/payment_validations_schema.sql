@@ -45,3 +45,5 @@ CREATE TRIGGER update_payment_validations_updated_at
     BEFORE UPDATE ON public.payment_validations
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+-- Enable Realtime for this table
+ALTER PUBLICATION supabase_realtime ADD TABLE public.payment_validations;

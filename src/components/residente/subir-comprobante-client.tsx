@@ -8,6 +8,8 @@ import { getValidations, submitValidation, deleteValidation, syncApprovedValidat
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+import { createClient } from '@/utils/supabase/client'
+
 interface SubirComprobanteClientProps {
     resident: any
 }
@@ -19,6 +21,7 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
     const [selectedProof, setSelectedProof] = useState<string | null>(null)
     const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null)
     const [actionLoading, setActionLoading] = useState<string | null>(null)
+    const supabase = createClient()
 
     // Form State
     const [amount, setAmount] = useState('')
@@ -60,12 +63,30 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
     }
 
     useEffect(() => {
-        const sync = async () => {
-            await syncApprovedValidations()
-            await fetchData()
+        fetchData()
+        
+        // Configurar Suscripción Realtime
+        const channel = supabase
+            .channel('public:payment_validations')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'payment_validations',
+                    filter: resident.id ? `resident_id=eq.${resident.id}` : undefined
+                },
+                (payload) => {
+                    console.log('Realtime change received:', payload)
+                    fetchData() // Refrescar datos cuando hay cambios
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
         }
-        sync()
-    }, [])
+    }, [resident.id])
 
     const generateReceipt = (item: any) => {
         try {

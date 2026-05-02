@@ -35,7 +35,7 @@ export default async function ValidacionPagosPage() {
 
     return (
         <div className="container mx-auto px-6 py-8">
-            <PaymentValidationClient />
+            <PaymentValidationClient organizationId={orgUser?.organization_id} />
         </div>
     )
 }

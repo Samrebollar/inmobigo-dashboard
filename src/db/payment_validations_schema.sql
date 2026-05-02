@@ -47,3 +47,27 @@ CREATE TRIGGER update_payment_validations_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 -- Enable Realtime for this table
 ALTER PUBLICATION supabase_realtime ADD TABLE public.payment_validations;
+
+-- Table for Bank Accounts linked to condominiums
+CREATE TABLE IF NOT EXISTS public.bank_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    condominium_id UUID REFERENCES public.condominiums(id) ON DELETE CASCADE,
+    bank_name TEXT NOT NULL,
+    account_number TEXT NOT NULL,
+    reference TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.bank_accounts ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "Allow public read for authenticated" ON public.bank_accounts
+    FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Allow admins to manage bank accounts" ON public.bank_accounts
+    FOR ALL USING (auth.role() = 'authenticated');
+
+-- Enable Realtime for bank_accounts
+ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts;

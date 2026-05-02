@@ -9,6 +9,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 import { createClient } from '@/utils/supabase/client'
+import { getBankAccounts } from '@/app/actions/bank-account-actions'
 
 interface SubirComprobanteClientProps {
     resident: any
@@ -23,6 +24,9 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
     const [actionLoading, setActionLoading] = useState<string | null>(null)
     const supabase = createClient()
 
+    // Bank Accounts State
+    const [bankAccounts, setBankAccounts] = useState<any[]>([])
+
     // Form State
     const [amount, setAmount] = useState('')
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -31,20 +35,17 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
     const [fileName, setFileName] = useState('')
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const [bankDetails, setBankDetails] = useState({
-        bankName: '',
-        accountNumber: '',
-        reference: ''
-    })
-
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const savedBankDetails = localStorage.getItem('condo_bank_details')
-            if (savedBankDetails) {
-                setBankDetails(JSON.parse(savedBankDetails))
+        const loadBankAccounts = async () => {
+            if (resident.condominium_id) {
+                const res = await getBankAccounts(resident.condominium_id)
+                if (res.success) {
+                    setBankAccounts(res.data)
+                }
             }
         }
-    }, [])
+        loadBankAccounts()
+    }, [resident.condominium_id])
 
     const handleContainerClick = () => {
         fileInputRef.current?.click()
@@ -416,44 +417,52 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
                 </div>
 
                 {/* Tarjeta de Datos Bancarios del Administrador (Para Residentes) */}
-                <div className="bg-zinc-900/20 border border-white/5 rounded-[2rem] p-6 backdrop-blur-md shadow-2xl mt-8 relative overflow-hidden">
+                <div className="bg-zinc-900/20 border border-white/5 rounded-[2rem] p-8 backdrop-blur-md shadow-2xl mt-8 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-8 opacity-5">
-                        <FileText size={120} className="text-indigo-500" />
+                        <svg className="w-48 h-48 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
                     </div>
                     
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-1">
-                        <div className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-400">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <h3 className="text-2xl font-black text-white flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </div>
-                        Datos Bancarios del Administrador
+                        Cuentas para Depósito
                     </h3>
-                    <p className="text-zinc-400 text-sm mb-6">
-                        Utiliza estos datos oficiales para realizar tu depósito o transferencia bancaria.
+                    <p className="text-zinc-400 text-sm mb-8">
+                        Realiza tu pago a cualquiera de las siguientes cuentas oficiales de <b>{resident.condominiums?.name || 'la propiedad'}</b>.
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 rounded-xl p-4 flex flex-col gap-1">
-                            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Nombre del Banco</span>
-                            <span className="text-sm font-bold text-white mt-1">
-                                {bankDetails.bankName || 'BBVA Bancomer'}
-                            </span>
-                        </div>
-                        
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 rounded-xl p-4 flex flex-col gap-1">
-                            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Número de Cuenta / CLABE</span>
-                            <span className="text-sm font-bold text-indigo-400 mt-1 tracking-wider">
-                                {bankDetails.accountNumber || '1234 5678 9123 4567'}
-                            </span>
-                        </div>
-                        
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 rounded-xl p-4 flex flex-col gap-1">
-                            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Concepto de Referencia</span>
-                            <span className="text-sm font-bold text-emerald-400 mt-1">
-                                {bankDetails.reference || 'Casa y Número de Unidad'}
-                            </span>
-                        </div>
+                    <div className="grid grid-cols-1 gap-6">
+                        {bankAccounts.length === 0 ? (
+                            <div className="bg-zinc-950/50 border border-zinc-800/50 rounded-2xl p-6 text-center">
+                                <p className="text-zinc-500 text-sm font-bold">No hay cuentas bancarias configuradas para esta propiedad.</p>
+                                <p className="text-zinc-600 text-xs mt-1">Contacta al administrador para obtener los datos de pago.</p>
+                            </div>
+                        ) : bankAccounts.map(acc => (
+                            <div key={acc.id} className="bg-zinc-950/80 border border-zinc-800/80 rounded-[2rem] p-6 relative overflow-hidden group hover:border-indigo-500/30 transition-all">
+                                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-all">
+                                    <h4 className="text-6xl font-black text-white uppercase">{acc.bank_name?.[0]}</h4>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Banco</span>
+                                        <p className="text-lg font-black text-white">{acc.bank_name}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Número de Cuenta / CLABE</span>
+                                        <p className="text-lg font-black text-indigo-400 font-mono tracking-wider">{acc.account_number}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Concepto de Referencia</span>
+                                        <p className="text-sm font-bold text-emerald-400">{acc.reference || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>

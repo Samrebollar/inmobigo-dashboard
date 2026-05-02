@@ -10,7 +10,16 @@ import autoTable from 'jspdf-autotable'
 
 import { createClient } from '@/utils/supabase/client'
 
-export function PaymentValidationClient() {
+import { Plus, Pencil } from 'lucide-react'
+import { getValidations, updateValidationStatus, deleteValidation } from '@/app/actions/payment-validation-actions'
+import { getBankAccounts, saveBankAccount, deleteBankAccount } from '@/app/actions/bank-account-actions'
+import { propertiesService } from '@/services/properties-service'
+
+interface PaymentValidationClientProps {
+    organizationId: string
+}
+
+export function PaymentValidationClient({ organizationId }: PaymentValidationClientProps) {
     const [validations, setValidations] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -20,61 +29,112 @@ export function PaymentValidationClient() {
     const [observations, setObservations] = useState<{ [key: string]: string }>({})
 
     const [propertyFilter, setPropertyFilter] = useState<string>('todos')
-    const [bankDetails, setBankDetails] = useState({
-        bankName: '',
-        accountNumber: '',
+    const [properties, setProperties] = useState<any[]>([])
+    
+    // Bank Accounts State
+    const [bankAccounts, setBankAccounts] = useState<any[]>([])
+    const [showBankModal, setShowBankModal] = useState(false)
+    const [editingAccount, setEditingAccount] = useState<any | null>(null)
+    const [bankForm, setBankForm] = useState({
+        condominium_id: '',
+        bank_name: '',
+        account_number: '',
         reference: ''
     })
+
     const supabase = createClient()
 
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const savedBankDetails = localStorage.getItem('condo_bank_details')
-            if (savedBankDetails) {
-                setBankDetails(JSON.parse(savedBankDetails))
+        const loadInitialData = async () => {
+            setLoading(true)
+            // Load Properties
+            try {
+                const props = await propertiesService.getByOrganization(organizationId)
+                setProperties(props)
+            } catch (e) {
+                console.error('Error loading properties:', e)
             }
+            
+            // Load Bank Accounts
+            const accountsRes = await getBankAccounts()
+            if (accountsRes.success) {
+                setBankAccounts(accountsRes.data)
+            }
+            
+            await fetchData()
+            setLoading(false)
         }
-    }, [])
+        loadInitialData()
 
-    const saveBankDetails = () => {
-        localStorage.setItem('condo_bank_details', JSON.stringify(bankDetails))
-        toast.success('Datos bancarios guardados correctamente')
-    }
-
-    useEffect(() => {
-        fetchData()
-
-        // Suscripción Realtime para cambios globales (Admin ve todo)
+        // Suscripción Realtime
         const channel = supabase
             .channel('public:payment_validations_admin')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'payment_validations'
-                },
-                (payload) => {
-                    console.log('Realtime change received (Admin):', payload)
-                    fetchData()
-                }
-            )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_validations' }, () => fetchData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'bank_accounts' }, async () => {
+                const res = await getBankAccounts()
+                if (res.success) setBankAccounts(res.data)
+            })
             .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [])
+    }, [organizationId])
 
     const fetchData = async () => {
-        setLoading(true)
         const res = await getValidations()
         if (res.success) {
             setValidations(res.data)
         } else {
             toast.error(res.error)
         }
-        setLoading(false)
+    }
+
+    const handleSaveBankAccount = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!bankForm.condominium_id || !bankForm.bank_name || !bankForm.account_number) {
+            toast.error('Completa los campos obligatorios')
+            return
+        }
+
+        const res = await saveBankAccount({
+            ...bankForm,
+            id: editingAccount?.id
+        })
+
+        if (res.success) {
+            toast.success(editingAccount ? 'Cuenta actualizada' : 'Cuenta agregada')
+            setShowBankModal(false)
+            setEditingAccount(null)
+            setBankForm({ condominium_id: '', bank_name: '', account_number: '', reference: '' })
+            const accountsRes = await getBankAccounts()
+            if (accountsRes.success) setBankAccounts(accountsRes.data)
+        } else {
+            toast.error(res.error)
+        }
+    }
+
+    const handleDeleteAccount = async (id: string) => {
+        if (!confirm('¿Eliminar esta cuenta bancaria?')) return
+        const res = await deleteBankAccount(id)
+        if (res.success) {
+            toast.success('Cuenta eliminada')
+            const accountsRes = await getBankAccounts()
+            if (accountsRes.success) setBankAccounts(accountsRes.data)
+        } else {
+            toast.error(res.error)
+        }
+    }
+
+    const openEditAccount = (account: any) => {
+        setEditingAccount(account)
+        setBankForm({
+            condominium_id: account.condominium_id,
+            bank_name: account.bank_name,
+            account_number: account.account_number,
+            reference: account.reference || ''
+        })
+        setShowBankModal(true)
     }
 
     const handleAction = async (id: string, status: 'aprobado' | 'rechazado') => {
@@ -83,12 +143,10 @@ export function PaymentValidationClient() {
         const res = await updateValidationStatus(id, status, obs)
         if (res.success) {
             toast.success(`Pago ${status === 'aprobado' ? 'aprobado' : 'rechazado'} con éxito`)
-            
             if (status === 'aprobado') {
                 const item = validations.find(v => v.id === id)
                 if (item) generateReceipt(item)
             }
-            
             await fetchData()
         } else {
             toast.error(res.error)
@@ -96,15 +154,10 @@ export function PaymentValidationClient() {
         setActionLoading(null)
     }
 
-    const handleDelete = async (id: string) => {
-        setDeleteConfirmation(id)
-    }
-
     const confirmDelete = async () => {
         if (!deleteConfirmation) return
         const id = deleteConfirmation
         setDeleteConfirmation(null)
-        
         setActionLoading(id)
         const res = await deleteValidation(id)
         if (res.success) {
@@ -129,51 +182,31 @@ export function PaymentValidationClient() {
     const generateReceipt = (item: any) => {
         try {
             const doc = new jsPDF()
-            
-            // Header Banner
             doc.setFillColor(79, 70, 229)
             doc.rect(0, 0, 210, 35, 'F')
-            
             doc.setFontSize(22)
             doc.setTextColor(255, 255, 255)
             doc.setFont('helvetica', 'bold')
             doc.text('RECIBO DE PAGO', 14, 22)
-            
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
             doc.text(`Folio: REC-${Date.now().toString().slice(-6)}`, 150, 16)
             doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
-            
-            // Resident Info
             doc.setFontSize(12)
             doc.setTextColor(40, 40, 40)
             doc.setFont('helvetica', 'bold')
             doc.text('INFORMACIÓN DEL RESIDENTE', 14, 50)
-            
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
             doc.text(`Nombre: ${item.resident_name}`, 14, 60)
             doc.text(`Unidad: ${item.unit}`, 14, 66)
-            
-            // Divider
             doc.setDrawColor(220, 220, 220)
             doc.line(14, 80, 196, 80)
-            
-            // Payment Details
             doc.setFontSize(12)
             doc.setFont('helvetica', 'bold')
             doc.text('DETALLES DEL PAGO', 14, 92)
-            
             const tableColumn = ["Concepto", "Monto Pagado", "Forma de Pago", "Fecha"]
-            const tableRows = [
-                [
-                    item.nota || "Cuota de Mantenimiento",
-                    `$${Number(item.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-                    "Transferencia",
-                    item.date
-                ]
-            ]
-            
+            const tableRows = [[item.nota || "Cuota de Mantenimiento", `$${Number(item.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, "Transferencia", item.date]]
             autoTable(doc, {
                 head: [tableColumn],
                 body: tableRows,
@@ -182,33 +215,27 @@ export function PaymentValidationClient() {
                 headStyles: { fillColor: [79, 70, 229] },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
             })
-            
             const finalY = (doc as any).lastAutoTable.finalY + 15
-
             doc.setFontSize(11)
             doc.setFont('helvetica', 'bold')
             doc.setTextColor(60, 60, 60)
             doc.text(`Total Procesado: $${Number(item.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
-            
-            // Footer
             doc.setFontSize(8)
             doc.setTextColor(150, 150, 150)
             doc.setFont('helvetica', 'normal')
             doc.text('Este documento es un comprobante de operación digital generado por InmobiGo SaaS.', 14, 275)
             doc.text('Conserve este recibo para cualquier aclaración futura.', 14, 281)
-            
             doc.save(`Recibo_${item.resident_name.replace(/\s+/g, '_')}.pdf`)
-            toast.success('Comprobante PDF generado y descargado.')
-        } catch (pdfError) {
-            console.error('Error generating receipt PDF:', pdfError)
-            toast.error('Error al generar el archivo PDF del recibo.')
+            toast.success('Comprobante PDF generado')
+        } catch (e) {
+            console.error(e)
+            toast.error('Error al generar PDF')
         }
     }
 
     const filteredValidations = validations.filter(v => {
         const matchesStatus = v.status === filter
-        const matchesProperty = propertyFilter === 'todos' || 
-            (v.condominio || 'Residencial Zacil').toLowerCase().includes(propertyFilter.toLowerCase())
+        const matchesProperty = propertyFilter === 'todos' || v.condominium_id === propertyFilter
         return matchesStatus && matchesProperty
     })
 
@@ -221,179 +248,61 @@ export function PaymentValidationClient() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
-                    {/* Filtro de Propiedades */}
-                    <div className="relative">
-                        <select
-                            value={propertyFilter}
-                            onChange={(e) => setPropertyFilter(e.target.value)}
-                            className="bg-zinc-900 border border-zinc-800 text-white rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-indigo-500 transition-all cursor-pointer h-[38px]"
-                        >
-                            <option value="todos">Todas las Propiedades</option>
-                            <option value="zacil">Residencial Zacil</option>
-                            <option value="las palmas">Las Palmas</option>
-                            <option value="lakin">Lakin</option>
-                        </select>
-                    </div>
+                    <select
+                        value={propertyFilter}
+                        onChange={(e) => setPropertyFilter(e.target.value)}
+                        className="bg-zinc-900 border border-zinc-800 text-white rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:border-indigo-500 transition-all cursor-pointer h-[38px]"
+                    >
+                        <option value="todos">Todas las Propiedades</option>
+                        {properties.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
 
                     <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl gap-1">
-                    <button 
-                        onClick={() => setFilter('pendiente')}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${filter === 'pendiente' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-zinc-400 hover:text-white'}`}
-                    >
-                        <Filter size={14} />
-                        <span>Pendientes</span>
-                    </button>
-                    <button 
-                        onClick={() => setFilter('aprobado')}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${filter === 'aprobado' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-zinc-400 hover:text-white'}`}
-                    >
-                        <CheckCircle size={14} />
-                        <span>Aprobados</span>
-                    </button>
-                    <button 
-                        onClick={() => setFilter('rechazado')}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${filter === 'rechazado' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' : 'text-zinc-400 hover:text-white'}`}
-                    >
-                        <X size={14} />
-                        <span>Rechazados</span>
-                    </button>
+                        <button onClick={() => setFilter('pendiente')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'pendiente' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-zinc-400 hover:text-white'}`}>Pendientes</button>
+                        <button onClick={() => setFilter('aprobado')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'aprobado' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-zinc-400 hover:text-white'}`}>Aprobados</button>
+                        <button onClick={() => setFilter('rechazado')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === 'rechazado' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' : 'text-zinc-400 hover:text-white'}`}>Rechazados</button>
                     </div>
                 </div>
             </div>
 
             {loading ? (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="animate-spin text-indigo-500" size={32} />
-                </div>
-            ) : filteredValidations.length === 0 ? (
-                <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-3xl p-12 text-center max-w-md mx-auto">
-                    <div className="p-4 bg-zinc-800/50 rounded-2xl w-fit mx-auto mb-4 text-zinc-500">
-                        <Check size={32} />
-                    </div>
-                    <h3 className="text-white font-bold text-lg mb-1">Sin registros</h3>
-                    <p className="text-zinc-400 text-sm">No hay pagos con estado "{filter}" para revisar.</p>
-                </div>
+                <div className="flex items-center justify-center py-20"><Loader2 className="animate-spin text-indigo-500" size={32} /></div>
             ) : (
                 <div className="bg-zinc-900/20 border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl backdrop-blur-md">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full text-left border-collapse text-sm">
                             <thead>
                                 <tr className="border-b border-white/5 bg-white/[0.02]">
-                                    <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Condominio</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Unidad</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Residente</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Concepto</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Fecha</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider text-center">Monto</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider text-center">Pago</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Forma de Pago</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Observación</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {filteredValidations.map((item) => (
                                     <tr key={item.id} className="hover:bg-white/[0.01] transition-colors group">
-                                        <td className="px-6 py-4 text-zinc-300 text-sm font-medium">
-                                            {item.condominio || 'Residencial Zacil'}
-                                        </td>
-                                        <td className="px-6 py-4 text-zinc-300 text-sm font-semibold">
-                                            {item.unit}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-white font-black text-xs">
-                                                    {item.resident_name?.[0] || 'R'}
-                                                </div>
-                                                <p className="text-sm font-bold text-white">{item.resident_name}</p>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-zinc-400 text-sm max-w-[150px] truncate" title={item.nota || 'Cuota de Mantenimiento'}>
-                                            {item.nota || 'Cuota de Mantenimiento'}
-                                        </td>
-                                        <td className="px-6 py-4 text-zinc-300 text-sm font-medium">
-                                            {item.date}
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="text-sm font-black text-emerald-400">
-                                                ${Number(item.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <button 
-                                                    onClick={() => setSelectedProof(item.comprobante_url)}
-                                                    className="p-2 rounded-xl bg-white/[0.03] border border-white/5 text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/20 hover:bg-indigo-500/10 transition-all"
-                                                    title="Ver Comprobante"
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDownload(item.comprobante_url, item.resident_name)}
-                                                    className="p-2 rounded-xl bg-white/[0.03] border border-white/5 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/20 hover:bg-emerald-500/10 transition-all"
-                                                    title="Descargar Comprobante"
-                                                >
-                                                    <Download size={18} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-zinc-400 text-sm font-medium">
-                                            <span className="px-2 py-1 rounded-md bg-zinc-800 text-zinc-300 text-xs">
-                                                Transferencia
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 min-w-[180px]">
-                                            {item.status === 'pendiente' ? (
-                                                <input 
-                                                    type="text"
-                                                    value={observations[item.id] || ''}
-                                                    onChange={(e) => setObservations({
-                                                        ...observations,
-                                                        [item.id]: e.target.value
-                                                    })}
-                                                    placeholder="Motivo del rechazo..."
-                                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500/50"
-                                                />
-                                            ) : (
-                                                <span className="text-zinc-400 text-xs">
-                                                    {item.observacion || '-'}
-                                                </span>
-                                            )}
-                                        </td>
+                                        <td className="px-6 py-4 text-zinc-300 font-semibold">{item.unit}</td>
+                                        <td className="px-6 py-4 font-bold text-white">{item.resident_name}</td>
+                                        <td className="px-6 py-4 text-zinc-400 max-w-[150px] truncate">{item.nota || 'Mantenimiento'}</td>
+                                        <td className="px-6 py-4 text-zinc-300">{item.date}</td>
+                                        <td className="px-6 py-4 text-center font-black text-emerald-400">${Number(item.amount).toLocaleString('es-MX')}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-center gap-2">
+                                                <button onClick={() => setSelectedProof(item.comprobante_url)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-indigo-400 transition-all"><Eye size={18} /></button>
                                                 {item.status === 'pendiente' ? (
                                                     <>
-                                                        <button
-                                                            onClick={() => handleAction(item.id, 'aprobado')}
-                                                            disabled={actionLoading !== null}
-                                                            className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-all font-bold text-xs flex items-center gap-1.5 disabled:opacity-50"
-                                                        >
-                                                            {actionLoading === item.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                                                            <span>Aprobar</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleAction(item.id, 'rechazado')}
-                                                            disabled={actionLoading !== null}
-                                                            className="px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:bg-rose-500/30 transition-all font-bold text-xs flex items-center gap-1.5 disabled:opacity-50"
-                                                        >
-                                                            {actionLoading === item.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                                                            <span>Rechazar</span>
-                                                        </button>
+                                                        <button onClick={() => handleAction(item.id, 'aprobado')} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
+                                                        <button onClick={() => handleAction(item.id, 'rechazado')} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
                                                     </>
                                                 ) : (
-                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${item.status === 'aprobado' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-                                                        {item.status}
-                                                    </span>
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${item.status === 'aprobado' ? 'text-emerald-400 bg-emerald-400/10' : 'text-rose-400 bg-rose-400/10'}`}>{item.status}</span>
                                                 )}
-                                                <button
-                                                    onClick={() => handleDelete(item.id)}
-                                                    disabled={actionLoading !== null}
-                                                    className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 transition-all disabled:opacity-50 flex items-center justify-center"
-                                                    title="Eliminar Registro"
-                                                >
-                                                    {actionLoading === item.id ? <Loader2 size={14} className="animate-spin" /> : <Trash size={14} />}
-                                                </button>
+                                                <button onClick={() => setDeleteConfirmation(item.id)} className="p-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all"><Trash size={18} /></button>
                                             </div>
                                         </td>
                                     </tr>
@@ -404,136 +313,126 @@ export function PaymentValidationClient() {
                 </div>
             )}
 
-            {/* Custom Confirmation Modal */}
+            {/* Bank Accounts Section */}
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-[2.5rem] p-8 mt-12 relative overflow-hidden backdrop-blur-xl">
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h3 className="text-2xl font-black text-white flex items-center gap-3">
+                            <Receipt className="text-indigo-500" size={28} />
+                            Cuentas Bancarias de Propiedades
+                        </h3>
+                        <p className="text-zinc-400 text-sm mt-1">Configura las cuentas que verán los residentes de cada propiedad.</p>
+                    </div>
+                    <button 
+                        onClick={() => { setEditingAccount(null); setBankForm({ condominium_id: '', bank_name: '', account_number: '', reference: '' }); setShowBankModal(true); }}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-xl shadow-indigo-600/20 flex items-center gap-2 transition-all transform hover:scale-105"
+                    >
+                        <Plus size={20} />
+                        Agregar Cuenta
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {bankAccounts.length === 0 ? (
+                        <div className="col-span-full py-12 text-center bg-zinc-950/30 border border-zinc-800/50 border-dashed rounded-3xl">
+                            <Receipt size={48} className="mx-auto mb-4 text-zinc-700 opacity-20" />
+                            <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">No hay cuentas configuradas</p>
+                        </div>
+                    ) : bankAccounts.map(acc => (
+                        <div key={acc.id} className="bg-zinc-950/50 border border-zinc-800/80 rounded-3xl p-6 hover:border-indigo-500/30 transition-all group relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-all flex gap-2">
+                                <button onClick={() => openEditAccount(acc)} className="p-2 bg-zinc-900 rounded-lg text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all shadow-xl"><Pencil size={14} /></button>
+                                <button onClick={() => handleDeleteAccount(acc.id)} className="p-2 bg-zinc-900 rounded-lg text-rose-400 hover:bg-rose-500 hover:text-white transition-all shadow-xl"><Trash size={14} /></button>
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20 mb-4 inline-block">
+                                {acc.condominiums?.name || 'S/N'}
+                            </span>
+                            <h4 className="text-lg font-black text-white mb-1">{acc.bank_name}</h4>
+                            <p className="text-indigo-300 font-mono text-sm tracking-widest mb-4">{acc.account_number}</p>
+                            <div className="pt-4 border-t border-zinc-800/50">
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Referencia</span>
+                                <p className="text-xs text-zinc-300 italic">"{acc.reference || 'N/A'}"</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Bank Modal */}
             <AnimatePresence>
-                {deleteConfirmation && (
-                    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setDeleteConfirmation(null)}
-                            className="absolute inset-0 bg-black/90 backdrop-blur-md"
-                        />
-                        <motion.div 
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-[2rem] p-6 overflow-hidden shadow-2xl text-center"
-                        >
-                            <div className="p-4 bg-rose-500/10 rounded-full w-fit mx-auto mb-4 text-rose-500 border border-rose-500/20">
-                                <AlertTriangle size={32} className="animate-pulse" />
-                            </div>
-                            <h3 className="text-xl font-bold text-white mb-2">¿Confirmar Eliminación?</h3>
-                            <p className="text-zinc-400 text-sm mb-6">
-                                Esta acción eliminará permanentemente el registro de validación de pago. No se puede revertir.
-                            </p>
-                            <div className="flex gap-3 justify-center">
-                                <button
-                                    onClick={() => setDeleteConfirmation(null)}
-                                    className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold text-xs transition-all"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={confirmDelete}
-                                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2"
-                                >
-                                    <Trash size={14} />
-                                    <span>Eliminar</span>
-                                </button>
-                            </div>
+                {showBankModal && (
+                    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBankModal(false)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-[3rem] p-8 shadow-2xl overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600" />
+                            <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
+                                <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-500"><Plus size={24} /></div>
+                                {editingAccount ? 'Editar Cuenta' : 'Nueva Cuenta Bancaria'}
+                            </h3>
+                            <form onSubmit={handleSaveBankAccount} className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Propiedad / Condominio</label>
+                                    <select 
+                                        value={bankForm.condominium_id}
+                                        onChange={(e) => setBankForm({ ...bankForm, condominium_id: e.target.value })}
+                                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl py-4 px-6 text-white text-sm focus:outline-none focus:border-indigo-500 transition-all font-bold appearance-none cursor-pointer"
+                                        required
+                                    >
+                                        <option value="">Seleccionar Propiedad...</option>
+                                        {properties.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Banco</label>
+                                        <input type="text" value={bankForm.bank_name} onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl py-4 px-6 text-white text-sm font-bold" placeholder="Ej. BBVA" required />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Cuenta / CLABE</label>
+                                        <input type="text" value={bankForm.account_number} onChange={(e) => setBankForm({ ...bankForm, account_number: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl py-4 px-6 text-indigo-400 text-sm font-mono font-bold" placeholder="0123..." required />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">Concepto / Referencia</label>
+                                    <input type="text" value={bankForm.reference} onChange={(e) => setBankForm({ ...bankForm, reference: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl py-4 px-6 text-white text-sm font-bold" placeholder="Ej. Unidad + Nombre" />
+                                </div>
+                                <div className="flex gap-4 pt-4">
+                                    <button type="button" onClick={() => setShowBankModal(false)} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-black text-sm hover:bg-zinc-700 transition-all">Cancelar</button>
+                                    <button type="submit" className="flex-2 px-10 py-4 rounded-2xl bg-indigo-600 text-white font-black text-sm shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 transition-all">Guardar Cuenta</button>
+                                </div>
+                            </form>
                         </motion.div>
                     </div>
                 )}
             </AnimatePresence>
 
-            {/* Tarjeta de Datos Bancarios */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 mt-12 backdrop-blur-sm relative overflow-hidden max-w-4xl">
-                <div className="absolute top-0 right-0 p-8 opacity-5">
-                    <Receipt size={120} className="text-indigo-500" />
-                </div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-1">
-                    <Receipt size={20} className="text-indigo-500" />
-                    Datos Bancarios del Administrador
-                </h3>
-                <p className="text-zinc-400 text-sm mb-6">
-                    Configura la información de transferencia bancaria que visualizan los residentes.
-                </p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-zinc-400">Nombre del Banco</label>
-                        <input
-                            type="text"
-                            placeholder="Ej. BBVA, Santander..."
-                            value={bankDetails.bankName}
-                            onChange={(e) => setBankDetails({ ...bankDetails, bankName: e.target.value })}
-                            className="bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all font-medium"
-                        />
-                    </div>
-                    
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-zinc-400">Número de Cuenta / CLABE</label>
-                        <input
-                            type="text"
-                            placeholder="Ej. 0123 4567 8901 2345 67"
-                            value={bankDetails.accountNumber}
-                            onChange={(e) => setBankDetails({ ...bankDetails, accountNumber: e.target.value })}
-                            className="bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all font-medium"
-                        />
-                    </div>
-                    
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-zinc-400">Concepto de Referencia</label>
-                        <input
-                            type="text"
-                            placeholder="Ej. [Número de Unidad] + Cuota"
-                            value={bankDetails.reference}
-                            onChange={(e) => setBankDetails({ ...bankDetails, reference: e.target.value })}
-                            className="bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all font-medium"
-                        />
-                    </div>
-                </div>
-                
-                <div className="mt-4 flex justify-end">
-                    <button
-                        onClick={saveBankDetails}
-                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-lg shadow-indigo-600/20 cursor-pointer"
-                    >
-                        Guardar Datos Bancarios
-                    </button>
-                </div>
-            </div>
-
-            {/* Proof Preview Modal */}
+            {/* Existing Proof Preview & Delete Modals remain unchanged but z-index should be checked */}
             <AnimatePresence>
                 {selectedProof && (
-                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setSelectedProof(null)}
-                            className="absolute inset-0 bg-black/90 backdrop-blur-md"
-                        />
-                        <motion.div 
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative max-w-3xl w-full bg-zinc-900 border border-white/10 rounded-[2rem] p-4 overflow-hidden shadow-2xl"
-                        >
-                            <button 
-                                onClick={() => setSelectedProof(null)}
-                                className="absolute top-4 right-4 p-2 bg-black/50 text-white hover:bg-zinc-800 rounded-xl transition-all"
-                            >
-                                <X size={20} />
-                            </button>
-                            <img 
-                                src={selectedProof} 
-                                alt="Comprobante de Pago" 
-                                className="w-full h-auto max-h-[70vh] object-contain rounded-2xl"
-                            />
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProof(null)} className="absolute inset-0 bg-black/95 backdrop-blur-xl" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative max-w-4xl w-full bg-zinc-900 border border-white/10 rounded-[3rem] p-6 shadow-2xl">
+                            <button onClick={() => setSelectedProof(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-indigo-400 transition-all flex items-center gap-2 font-bold"><X size={24} /> Cerrar</button>
+                            <img src={selectedProof} alt="Comprobante" className="w-full h-auto max-h-[80vh] object-contain rounded-3xl" />
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {deleteConfirmation && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDeleteConfirmation(null)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8 text-center shadow-2xl">
+                            <div className="p-4 bg-rose-500/10 rounded-full w-fit mx-auto mb-6 text-rose-500"><AlertTriangle size={40} className="animate-pulse" /></div>
+                            <h3 className="text-2xl font-black text-white mb-2">¿Eliminar Registro?</h3>
+                            <p className="text-zinc-400 text-sm mb-8 leading-relaxed">Esta acción eliminará permanentemente el comprobante de pago. ¿Estás seguro de continuar?</p>
+                            <div className="flex gap-4">
+                                <button onClick={() => setDeleteConfirmation(null)} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-bold text-sm">Cancelar</button>
+                                <button onClick={confirmDelete} className="flex-1 py-4 rounded-2xl bg-rose-600 text-white font-bold text-sm shadow-xl shadow-rose-600/20">Sí, Eliminar</button>
+                            </div>
                         </motion.div>
                     </div>
                 )}

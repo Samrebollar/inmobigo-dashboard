@@ -9,7 +9,7 @@ export async function getValidations() {
         const supabase = await createClient()
         const { data, error } = await supabase
             .from('payment_validations')
-            .select('*')
+            .select('*, condominiums(name)')
             .order('created_at', { ascending: false })
 
         if (error) throw error
@@ -241,13 +241,9 @@ export async function updateValidationStatus(id: string, status: 'aprobado' | 'r
 }
 
 export async function submitValidation(data: {
-    resident_name: string
-    unit: string
-    amount: number
-    date: string
-    comprobante_url: string
     nota?: string
     resident_id?: string
+    condominium_id?: string
 }) {
     try {
         const supabase = await createClient()
@@ -262,7 +258,8 @@ export async function submitValidation(data: {
                 comprobante_url: data.comprobante_url || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=800&q=80",
                 status: "pendiente",
                 nota: data.nota || "",
-                resident_id: data.resident_id
+                resident_id: data.resident_id,
+                condominium_id: data.condominium_id
             })
             .select()
             .single()

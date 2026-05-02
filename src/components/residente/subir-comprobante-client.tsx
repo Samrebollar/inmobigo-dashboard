@@ -221,7 +221,8 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
             date: date,
             comprobante_url: mockComprobanteUrl,
             nota: nota,
-            resident_id: resident.id
+            resident_id: resident.id,
+            condominium_id: resident.condominium_id
         })
 
         if (res.success) {

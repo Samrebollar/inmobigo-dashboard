@@ -275,6 +275,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                             <thead>
                                 <tr className="border-b border-white/5 bg-white/[0.02]">
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Unidad</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Propiedad</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Residente</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Concepto</th>
                                     <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Fecha</th>
@@ -286,6 +287,11 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                 {filteredValidations.map((item) => (
                                     <tr key={item.id} className="hover:bg-white/[0.01] transition-colors group">
                                         <td className="px-6 py-4 text-zinc-300 font-semibold">{item.unit}</td>
+                                        <td className="px-6 py-4">
+                                            <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold uppercase tracking-widest border border-indigo-500/20">
+                                                {item.condominiums?.name || 'N/A'}
+                                            </span>
+                                        </td>
                                         <td className="px-6 py-4 font-bold text-white">{item.resident_name}</td>
                                         <td className="px-6 py-4 text-zinc-400 max-w-[150px] truncate">{item.nota || 'Mantenimiento'}</td>
                                         <td className="px-6 py-4 text-zinc-300">{item.date}</td>

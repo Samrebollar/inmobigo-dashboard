@@ -72,7 +72,7 @@ export async function inviteTeamMemberAction(fullName: string, email: string, ro
                         .upsert({
                             organization_id: organizationId,
                             user_id: existingUser.id,
-                            role: role,
+                            role_new: role,
                             status: 'active', // Si ya existe, lo activamos directo? O pendiente?
                             invited_at: new Date().toISOString()
                         }, { onConflict: 'organization_id, user_id' })
@@ -95,7 +95,7 @@ export async function inviteTeamMemberAction(fullName: string, email: string, ro
             .insert({
                 organization_id: organizationId,
                 user_id: newUser.id,
-                role: role,
+                role_new: role,
                 status: 'pending',
                 invited_at: new Date().toISOString()
             })

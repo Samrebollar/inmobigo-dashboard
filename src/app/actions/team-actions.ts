@@ -15,13 +15,43 @@ export async function inviteTeamMemberAction(fullName: string, email: string, ro
         console.log(`✉️ [inviteTeamMemberAction] Invitando a ${email} con rol ${role} a la organización ${organizationId}`);
 
         // 1. Invitar al usuario vía Supabase Auth
-        // Incluimos metadata para que el trigger handle_new_user cree el perfil correctamente
+        // Incluimos metadata para que el template de email de Supabase pueda usar variables dinámicas
+        const roleLabels: Record<Role, string> = {
+            admin_condominio: 'Admin. de Condominio',
+            security: 'Vigilante/Seguridad',
+            owner: 'Propietario',
+            admin: 'Administrador',
+            manager: 'Gerente',
+            accountant: 'Contador',
+            staff: 'Personal',
+            viewer: 'Observador',
+            resident: 'Residente',
+            tenant: 'Inquilino',
+            admin_propiedad: 'Administrador de Propiedad'
+        }
+
+        const roleDescriptions: Record<Role, string> = {
+            admin_condominio: 'Podrás gestionar unidades, residentes y reportes del condominio.',
+            security: 'Tendrás acceso al control de visitas, paquetería y alertas de seguridad.',
+            owner: 'Acceso total a la organización.',
+            admin: 'Gestión total del sistema.',
+            manager: 'Gestión operativa del sitio.',
+            accountant: 'Acceso a finanzas y reportes.',
+            staff: 'Apoyo operativo.',
+            viewer: 'Acceso de solo lectura.',
+            resident: 'Acceso al panel de residente.',
+            tenant: 'Acceso al panel de inquilino.',
+            admin_propiedad: 'Gestión total de propiedades.'
+        }
+
         const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
             data: {
                 full_name: fullName,
                 organization_id: organizationId,
                 role: role,
-                user_type: role // Backup for some components
+                role_name: roleLabels[role] || role,
+                role_description: roleDescriptions[role] || '',
+                user_type: role 
             },
             redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`
         })

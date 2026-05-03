@@ -103,6 +103,8 @@ export async function registerResidentAction(formData: any) {
                 full_name: `${firstName} ${lastName}`,
                 phone: phone,
                 role: 'resident',
+                role_name: 'Residente',
+                role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
                 user_type: 'resident',
                 organization_id: orgId
             }
@@ -246,8 +248,12 @@ export async function adminCreateResidentAction(payload: any) {
                     data: {
                         first_name,
                         last_name,
+                        full_name: `${first_name} ${last_name}`,
                         phone,
-                        role: 'resident'
+                        role: 'resident',
+                        role_name: 'Residente',
+                        role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
+                        user_type: 'resident'
                     }
                 });
 
@@ -270,8 +276,12 @@ export async function adminCreateResidentAction(payload: any) {
                     user_metadata: {
                         first_name,
                         last_name,
+                        full_name: `${first_name} ${last_name}`,
                         phone,
-                        role: 'resident'
+                        role: 'resident',
+                        role_name: 'Residente',
+                        role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
+                        user_type: 'resident'
                     }
                 });
 

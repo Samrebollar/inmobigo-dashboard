@@ -148,22 +148,35 @@ export async function POST(req: Request) {
             )
         }
 
-        // 4️⃣ Verificar que no exista suscripción activa en esa organización
+        // 4️⃣ Verificar suscripción activa (y desactivar si ya expiró por tiempo)
         const { data: existingActive } = await adminSupabase
             .from('subscriptions')
-            .select('id')
+            .select('id, created_at')
             .eq('organization_id', organizationId)
             .eq('subscription_status', 'active')
             .maybeSingle()
 
         if (existingActive) {
-            return NextResponse.json(
-                {
-                    error:
-                        'Ya existe una suscripción activa para esta organización.',
-                },
-                { status: 409 }
-            )
+            const createdAt = new Date(existingActive.created_at)
+            const nextPayment = new Date(createdAt)
+            nextPayment.setMonth(nextPayment.getMonth() + 1)
+            
+            if (new Date() > nextPayment) {
+                // Ya expiró por tiempo, lo marcamos como tal y dejamos continuar
+                await adminSupabase
+                    .from('subscriptions')
+                    .update({ subscription_status: 'expired' })
+                    .eq('id', existingActive.id)
+                console.log('Previous subscription expired by time, allowing renewal...')
+            } else {
+                return NextResponse.json(
+                    {
+                        error: 'Suscripción Activa',
+                        message: 'Ya tienes una suscripción vigente. No es necesario renovar aún.',
+                    },
+                    { status: 409 }
+                )
+            }
         }
 
         // 5️⃣ Crear registro pending en DB

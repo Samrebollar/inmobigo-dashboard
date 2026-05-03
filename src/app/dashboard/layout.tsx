@@ -102,12 +102,32 @@ export default async function DashboardLayout({
 
     const { data: activeSub } = await adminSupabase
         .from('subscriptions')
-        .select('subscription_status')
+        .select('subscription_status, plan_name, created_at')
         .eq('organization_id', organizationId)
         .eq('subscription_status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
     const isDemoMode = !activeSub && role !== 'resident'
+    
+    // Calculate Subscription Info
+    let subscriptionInfo = null
+    if (activeSub) {
+        const createdAt = new Date(activeSub.created_at)
+        const nextPayment = new Date(createdAt)
+        nextPayment.setMonth(nextPayment.getMonth() + 1)
+        
+        const now = new Date()
+        const diffTime = nextPayment.getTime() - now.getTime()
+        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+        subscriptionInfo = {
+            planName: activeSub.plan_name,
+            daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+            nextPaymentDate: nextPayment.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+        }
+    }
     // Metadata is IGNORED for authorization to prevent "Self-declared Admins"
 
     const isResident = role === 'resident'
@@ -325,6 +345,7 @@ export default async function DashboardLayout({
             displayName={displayName}
             avatarUrl={avatarUrl}
             isDemoMode={isDemoMode}
+            subscriptionInfo={subscriptionInfo}
             headerActions={
                 <input
                     type="text"

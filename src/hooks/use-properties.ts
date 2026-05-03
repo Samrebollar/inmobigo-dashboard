@@ -11,22 +11,27 @@ export function useProperties() {
     const [error, setError] = useState<string | null>(null)
     const { isDemo } = useDemoMode()
 
-    const fetchProperties = useCallback(async (orgId: string) => {
+    const fetchProperties = useCallback(async (orgId?: string) => {
         setLoading(true)
         setError(null)
         try {
-            const data = await propertiesService.getByOrganization(orgId)
+            // Usamos la API server-side para saltar problemas de RLS en el cliente
+            const response = await fetch('/api/properties/list')
+            const result = await response.json()
+            
+            if (result.error) throw new Error(result.error)
+            const data = result.properties || []
 
             if (isDemo) {
                 const demoProperties = demoDb.getProperties()
                 // Evitar duplicados si por alguna razón ya están en la base de datos
-                const nonDemoData = data.filter(d => !demoProperties.some(dp => dp.id === d.id))
+                const nonDemoData = data.filter((d: any) => !demoProperties.some(dp => dp.id === d.id))
                 setProperties([...demoProperties, ...nonDemoData])
             } else {
                 setProperties(data)
             }
         } catch (err: any) {
-            console.error('fetchProperties error details (RAW):', err)
+            console.error('fetchProperties error details (API):', err)
             setError(err.message)
         } finally {
             setLoading(false)

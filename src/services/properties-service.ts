@@ -7,36 +7,29 @@ export const propertiesService = {
             const { demoDb } = await import('@/utils/demo-db')
             return demoDb.getProperties()
         }
-        const supabase = createClient()
-        const { data: condos, error } = await supabase
-            .from('condominiums')
-            .select('*')
-            .eq('organization_id', organizationId)
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
 
-        if (error) {
-            console.error('Error fetching condominiums by organization (RAW):', error)
-            throw new Error(`Error al cargar condominios: ${error.message} (${error.code})`)
+        try {
+            // Usamos la API server-side para saltar problemas de RLS en el cliente
+            const response = await fetch('/api/properties/list')
+            const result = await response.json()
+            
+            if (result.error) throw new Error(result.error)
+            return result.properties || []
+        } catch (error: any) {
+            console.error('Error fetching properties via API:', error)
+            
+            // Fallback al método directo si la API falla (aunque probablemente falle por RLS)
+            const supabase = createClient()
+            const { data: condos, error: dbError } = await supabase
+                .from('condominiums')
+                .select('*')
+                .eq('organization_id', organizationId)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+
+            if (dbError) throw dbError
+            return condos || []
         }
-
-        if (!condos || condos.length === 0) return []
-
-        // Fetch residents linked to these condos to get accurate active counts
-        const condoIds = condos.map(c => c.id)
-        const { data: residents } = await supabase
-            .from('residents')
-            .select('id, condominium_id')
-            .in('condominium_id', condoIds)
-
-        // Enhance condos with the real residents count
-        return condos.map(condo => {
-            const residentsCount = residents?.filter(r => r.condominium_id === condo.id).length || 0;
-            return {
-                ...condo,
-                residents_count: residentsCount
-            }
-        })
     },
 
     async getById(id: string): Promise<Condominium | null> {

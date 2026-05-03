@@ -56,147 +56,74 @@ export default function PropiedadesPage() {
     checkUserAndFetch()
   }, [loadingDemo])
 
+  const [hasFetched, setHasFetched] = useState(false)
+
   const checkUserAndFetch = async () => {
-    if (loadingDemo) return
+    if (loadingDemo || hasFetched) return
 
     try {
+      setHasFetched(true)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setIsLoadingUnits(false)
         return
       }
 
-      // 0. Fetch Total Units and Residents via RPC
+      // 0. Fetch KPIs via RPC (Fixed patterns)
       if (!isDemo) {
         setIsLoadingUnits(true)
         setIsLoadingResidents(true)
         setIsLoadingDelinquent(true)
         setIsLoadingOccupied(true)
 
-        // Fetch Units
-        // La función SQL no requiere parámetros porque usa auth.uid() directamente por seguridad
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_total_units')
-        
-        if (rpcError) {
-          console.error('Error fetching RPC get_total_units:', rpcError)
-          setRpcTotalUnits(0)
-        } else {
-          // rpcData retorna un array de objetos, ej: [{ total_unidades: 5 }]
-          const unitsValue = rpcData && rpcData.length > 0 ? rpcData[0].total_unidades : 0
-          setRpcTotalUnits(Number(unitsValue) || 0)
-        }
-        setIsLoadingUnits(false)
+        const fetchKpis = async () => {
+            const [unitsRes, residentsRes, delinquentRes, occupiedRes] = await Promise.all([
+                supabase.rpc('get_total_units'),
+                supabase.rpc('get_total_residents'),
+                supabase.rpc('get_total_delinquent_residents'),
+                supabase.rpc('get_total_occupied_units')
+            ])
 
-        // Fetch Residents
-        const { data: rpcResData, error: rpcResError } = await supabase.rpc('get_total_residents')
-        
-        if (rpcResError) {
-          console.error('Error fetching RPC get_total_residents:', rpcResError)
-          setRpcTotalResidents(0)
-        } else {
-          // rpcResData retorna un array de objetos, ej: [{ total_residentes: 10 }]
-          const resValue = rpcResData && rpcResData.length > 0 ? rpcResData[0].total_residentes : 0
-          setRpcTotalResidents(Number(resValue) || 0)
-        }
-        setIsLoadingResidents(false)
+            if (!unitsRes.error) setRpcTotalUnits(Number(unitsRes.data?.[0]?.total_unidades || 0))
+            setIsLoadingUnits(false)
 
-        // Fetch Delinquent Residents
-        const { data: rpcDelqData, error: rpcDelqError } = await supabase.rpc('get_total_delinquent_residents')
-        
-        if (rpcDelqError) {
-          console.error('Error fetching RPC get_total_delinquent_residents:', rpcDelqError)
-          setRpcTotalDelinquent(0)
-        } else {
-          const delqValue = rpcDelqData && rpcDelqData.length > 0 ? rpcDelqData[0].total_morosos : 0
-          setRpcTotalDelinquent(Number(delqValue) || 0)
-        }
-        setIsLoadingDelinquent(false)
+            if (!residentsRes.error) setRpcTotalResidents(Number(residentsRes.data?.[0]?.total_residentes || 0))
+            setIsLoadingResidents(false)
 
-        // Fetch Occupied Units
-        const { data: rpcOccData, error: rpcOccError } = await supabase.rpc('get_total_occupied_units')
-        if (rpcOccError) {
-          console.error('Error fetching RPC get_total_occupied_units:', rpcOccError)
-          setRpcOccupiedUnits(0)
-        } else {
-          const occValue = rpcOccData && rpcOccData.length > 0 ? rpcOccData[0].total_ocupadas : 0
-          setRpcOccupiedUnits(Number(occValue) || 0)
-        }
-        setIsLoadingOccupied(false)
+            if (!delinquentRes.error) setRpcTotalDelinquent(Number(delinquentRes.data?.[0]?.total_morosos || 0))
+            setIsLoadingDelinquent(false)
 
-      } else {
-        setIsLoadingUnits(false)
-        setIsLoadingResidents(false)
-        setIsLoadingDelinquent(false)
-        setIsLoadingOccupied(false)
+            if (!occupiedRes.error) setRpcOccupiedUnits(Number(occupiedRes.data?.[0]?.total_ocupadas || 0))
+            setIsLoadingOccupied(false)
+        }
+        fetchKpis()
       }
 
-      // Determinar orgId para cargar propiedades y limites
-      let currentOrgId = null;
+      // 1. Fetch properties and orgId via the updated hook
+      // We also fetch org details for the limits
+      const response = await fetch('/api/properties/list')
+      const result = await response.json()
 
-      // 1. Try to get org from organization_users (RBAC table)
-      const { data: orgUser } = await supabase
-        .from('organization_users')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .single()
+      if (result.organizationId) {
+        setOrgId(result.organizationId)
+        fetchProperties() // Hook uses the API internally now
 
-      if (orgUser) {
-        currentOrgId = orgUser.organization_id;
-      } else {
-        // 2. Fallback: Try to get org owned by user (Legacy/Initial table)
-        const { data: ownedOrg } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('owner_id', user.id)
-          .limit(1)
-          .single()
-
-        if (ownedOrg) {
-          currentOrgId = ownedOrg.id;
-        }
-      }
-
-      if (currentOrgId) {
-        setOrgId(currentOrgId)
-        fetchProperties(currentOrgId)
-        
-        // Fetch units limit del plan de la organización
         const { data: orgData } = await supabase
           .from('organizations')
           .select('units_limit, plan')
-          .eq('id', currentOrgId)
+          .eq('id', result.organizationId)
           .single()
           
         const PLAN_LIMITS: Record<string, number> = {
-            'CORE': 20,
-            'PLUS': 60,
-            'ELITE': 120,
-            'CORPORATE': 250,
-            'CORE PRUEBA': 5,
-            'CORPORATE PLUS': 1000,
-            'FREE': 5
+            'CORE': 20, 'PLUS': 60, 'ELITE': 120, 'CORPORATE': 250,
+            'CORE PRUEBA': 5, 'CORPORATE PLUS': 1000, 'FREE': 5
         }
-
-        const dbLimit = orgData?.units_limit || 0;
-        const rawPlanName = orgData?.plan ? orgData.plan.trim().toUpperCase() : 'FREE';
-        const mappedLimit = PLAN_LIMITS[rawPlanName] || 5; 
-        
-        console.log("Org Límite SQL:", dbLimit, " | Org Plan SQL:", rawPlanName, " | Mapped:", mappedLimit);
-
-        const resolvedLimit = dbLimit > 0 ? dbLimit : mappedLimit;
-
-        setUnitsLimit(resolvedLimit)
+        setUnitsLimit(orgData?.units_limit || PLAN_LIMITS[orgData?.plan?.trim().toUpperCase() || 'FREE'] || 5)
       } else if (isDemo) {
-        setOrgId('demo-org-id')
-        setUnitsLimit(5) // Demo fallback limit
-      } else {
-        console.error('No organization found for this user.')
-      }
-    } catch (err) {
-      if (isDemo) {
         setOrgId('demo-org-id')
         setUnitsLimit(5)
       }
+    } catch (err) {
       console.error('Error in checkUserAndFetch:', err)
       setIsLoadingUnits(false)
     }

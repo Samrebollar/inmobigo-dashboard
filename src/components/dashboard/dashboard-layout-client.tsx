@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Menu, X, LogOut, Search, AlertTriangle } from 'lucide-react'
+import { Menu, X, LogOut, Search, AlertTriangle, CreditCard, Clock } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -13,6 +13,11 @@ interface DashboardLayoutClientProps {
     displayName: string
     avatarUrl?: string | null
     isDemoMode: boolean
+    subscriptionInfo?: {
+        planName: string
+        daysRemaining: number
+        nextPaymentDate: string
+    } | null
     headerActions?: React.ReactNode
 }
 
@@ -22,6 +27,7 @@ export function DashboardLayoutClient({
     displayName,
     avatarUrl,
     isDemoMode,
+    subscriptionInfo,
     headerActions
 }: DashboardLayoutClientProps) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -41,9 +47,8 @@ export function DashboardLayoutClient({
         return () => window.removeEventListener('keydown', handleEscape)
     }, [])
 
-    // Prevent scrolling when mobile sidebar is open, but be very careful not to freeze the app
+    // Prevent scrolling when mobile sidebar is open
     useEffect(() => {
-        // Force cleanup any leftover Radix UI scroll locks
         document.body.removeAttribute('data-scroll-locked')
         document.body.style.pointerEvents = 'auto'
         
@@ -53,7 +58,6 @@ export function DashboardLayoutClient({
             document.body.style.overflow = ''
         }
         
-        // Safety cleanup to ensure body never stays frozen when component unmounts
         return () => {
             document.body.style.overflow = ''
             document.body.style.pointerEvents = 'auto'
@@ -150,23 +154,81 @@ export function DashboardLayoutClient({
                 </header>
 
                 <div className="flex-1 overflow-auto bg-zinc-950 relative">
-                    {isDemoMode && (
-                        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 md:px-8 py-3 flex items-center justify-between backdrop-blur-md sticky top-0 z-20">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                                <p className="text-[10px] md:text-xs font-medium text-amber-200/80 truncate">
-                                    <span className="font-bold text-amber-500 uppercase tracking-wider mr-2 hidden xs:inline">Modo Demo:</span>
-                                    Estás previsualizando las funciones. Suscríbete para activar.
-                                </p>
+                    {/* BANNERS SECTION */}
+                    <div className="sticky top-0 z-20 w-full flex flex-col">
+                        {isDemoMode && (
+                            <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 md:px-8 py-3 flex items-center justify-between backdrop-blur-md">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                                    <p className="text-[10px] md:text-xs font-medium text-amber-200/80 truncate">
+                                        <span className="font-bold text-amber-500 uppercase tracking-wider mr-2 hidden xs:inline">Modo Demo:</span>
+                                        Estás previsualizando las funciones. Suscríbete para activar.
+                                    </p>
+                                </div>
+                                <Link
+                                    href="/dashboard/configuracion/planes"
+                                    className="text-[9px] md:text-[10px] font-black uppercase tracking-widest bg-amber-500 text-black px-3 md:px-4 py-1.5 rounded hover:bg-amber-400 transition-colors flex-shrink-0"
+                                >
+                                    Ver Planes
+                                </Link>
                             </div>
-                            <Link
-                                href="/dashboard/configuracion/planes"
-                                className="text-[9px] md:text-[10px] font-black uppercase tracking-widest bg-amber-500 text-black px-3 md:px-4 py-1.5 rounded hover:bg-amber-400 transition-colors flex-shrink-0"
-                            >
-                                Ver Planes
-                            </Link>
-                        </div>
-                    )}
+                        )}
+
+                        {!isDemoMode && subscriptionInfo && (
+                            <div className="bg-indigo-600/10 border-b border-indigo-500/20 px-4 md:px-8 py-2.5 flex items-center justify-between backdrop-blur-md">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/20 shadow-[0_0_15px_rgba(79,70,229,0.1)]">
+                                        <CreditCard size={14} className="text-indigo-400" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-[10px] md:text-xs font-bold text-indigo-100 uppercase tracking-tight">
+                                                Plan {subscriptionInfo.planName}
+                                            </p>
+                                            {subscriptionInfo.daysRemaining > 0 ? (
+                                                <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[8px] font-bold text-emerald-400 border border-emerald-500/20">
+                                                    <div className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
+                                                    ACTIVO
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2 py-0.5 text-[8px] font-bold text-rose-400 border border-rose-500/20">
+                                                    <div className="h-1 w-1 rounded-full bg-rose-400" />
+                                                    EXPIRADO
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[9px] md:text-[10px] text-zinc-400">
+                                            <Clock size={10} className="text-zinc-500" />
+                                            <span>
+                                                {subscriptionInfo.daysRemaining > 0 
+                                                    ? `Próximo pago: ${subscriptionInfo.nextPaymentDate}`
+                                                    : `Venció el: ${subscriptionInfo.nextPaymentDate}`
+                                                }
+                                            </span>
+                                            <span className="h-1 w-1 rounded-full bg-zinc-700" />
+                                            <span className={cn(
+                                                "font-bold",
+                                                subscriptionInfo.daysRemaining <= 0 ? "text-rose-400" : (subscriptionInfo.daysRemaining <= 5 ? "text-amber-400" : "text-indigo-400/80")
+                                            )}>
+                                                {subscriptionInfo.daysRemaining > 0 
+                                                    ? `${subscriptionInfo.daysRemaining} días restantes`
+                                                    : "Tu cuenta está bloqueada"
+                                                }
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <Link
+                                    href="/dashboard/configuracion/planes"
+                                    className="group flex items-center gap-2 text-[9px] md:text-[10px] font-bold text-zinc-400 hover:text-white transition-all bg-zinc-900/50 hover:bg-zinc-800 px-3 py-1.5 rounded-md border border-zinc-800"
+                                >
+                                    <span>Gestionar</span>
+                                    <X size={10} className="text-zinc-600 group-hover:text-zinc-400 rotate-45" />
+                                </Link>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="min-h-full">
                         {children}
                     </div>
@@ -175,4 +237,3 @@ export function DashboardLayoutClient({
         </div>
     )
 }
-

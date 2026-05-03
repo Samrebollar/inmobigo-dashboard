@@ -16,6 +16,7 @@ import { InviteUserModal } from '@/components/settings/InviteUserModal'
 import { AmenityModal } from '@/components/settings/AmenityModal'
 import { Role } from '@/types/auth'
 import { saveAmenityAction, getAmenitiesAction, deleteAmenityAction } from '@/app/actions/service-actions'
+import { inviteTeamMemberAction } from '@/app/actions/team-actions'
 
 interface TeamMember {
     id: string
@@ -335,24 +336,23 @@ export default function SettingsPage() {
         }
     }
 
-    const handleInvite = async (email: string, role: Role) => {
-        // Here we would call an API or Supabase function to invite the user
-        console.log('Inviting', email, role)
-
-        // Mock UI update
-        const newMember: TeamMember = {
-            id: Math.random().toString(),
-            user_id: 'new',
-            role: role,
-            status: 'pending',
-            created_at: new Date().toISOString(),
-            email: email,
-            first_name: 'Invitado',
-            last_name: ''
+    const handleInvite = async (fullName: string, email: string, role: Role) => {
+        if (!orgId) {
+            toast.error('No se pudo identificar la organización')
+            return
         }
 
-        setTeam([...team, newMember])
-        toast.success(`Invitación enviada a ${email} con rol ${role.toUpperCase()}`)
+        const promise = inviteTeamMemberAction(fullName, email, role, orgId)
+
+        toast.promise(promise, {
+            loading: 'Enviando invitación...',
+            success: (result) => {
+                if (!result.success) throw new Error(result.error)
+                fetchTeam(orgId) // Refresh the list
+                return `Invitación enviada a ${email}`
+            },
+            error: (err) => `Error: ${err.message}`
+        })
     }
 
     return (
@@ -390,7 +390,10 @@ export default function SettingsPage() {
                         <CardTitle className="text-white">Equipo</CardTitle>
                         <CardDescription className="text-zinc-400">Gestiona el acceso al panel.</CardDescription>
                     </div>
-                    <Button onClick={() => setShowInviteModal(true)} variant="outline" className="border-zinc-700 text-zinc-300">
+                    <Button 
+                        onClick={() => setShowInviteModal(true)} 
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black uppercase tracking-widest text-[10px] px-6 h-11 shadow-lg shadow-indigo-500/10 border-none transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    >
                         <Plus className="mr-2 h-4 w-4" /> Invitar Miembro
                     </Button>
                 </CardHeader>
@@ -404,39 +407,55 @@ export default function SettingsPage() {
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
                                     transition={{ duration: 0.2, delay: index * 0.05 }}
-                                    whileHover={{ 
-                                        scale: 1.02, 
-                                        backgroundColor: 'rgba(79, 70, 229, 0.08)', // bg-indigo-500/8
-                                        borderColor: 'rgba(99, 102, 241, 0.4)',     // border-indigo-500/40
-                                        boxShadow: '0 8px 30px rgba(79, 70, 229, 0.12)'
-                                    }}
-                                    className="flex items-center justify-between p-4 rounded-xl border border-zinc-800/60 bg-zinc-900/40 transition-all duration-300 cursor-pointer group"
+                                    className="relative flex items-center justify-between p-5 rounded-2xl border border-zinc-800/60 bg-zinc-950/30 transition-all duration-300 cursor-default group overflow-hidden"
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className="h-10 w-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold border border-indigo-500/20">
-                                            {member.first_name?.[0] || 'U'}{member.last_name?.[0] || 'N'}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/0 to-indigo-500/0 group-hover:from-indigo-500/5 group-hover:via-transparent group-hover:to-transparent transition-all" />
+                                    
+                                    <div className="flex items-center gap-5 relative z-10">
+                                        <div className="relative">
+                                            <div className="h-12 w-12 rounded-2xl bg-zinc-900 flex items-center justify-center text-indigo-400 font-black text-sm border border-zinc-800 shadow-inner group-hover:border-indigo-500/30 transition-colors">
+                                                {member.first_name?.[0] || 'U'}{member.last_name?.[0] || 'N'}
+                                            </div>
+                                            {member.status === 'active' && (
+                                                <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-zinc-950 border-2 border-zinc-900 flex items-center justify-center">
+                                                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
-                                            <p className="font-medium text-white">{member.first_name} {member.last_name || ''}</p>
-                                            <p className="text-sm text-zinc-500">{member.email}</p>
+                                            <p className="font-black text-white italic group-hover:text-indigo-400 transition-colors">
+                                                {member.first_name} {member.last_name || ''}
+                                            </p>
+                                            <p className="text-xs text-zinc-500 font-medium tracking-tight mt-0.5">{member.email}</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex flex-col items-end gap-1">
-                                            <Badge variant="default" className="border-zinc-700 bg-zinc-800 text-zinc-300">
-                                                {['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) ? <Shield className="mr-1 h-3 w-3 text-indigo-400" /> : <User className="mr-1 h-3 w-3" />}
+
+                                    <div className="flex items-center gap-6 relative z-10">
+                                        <div className="flex flex-col items-end gap-2">
+                                            <Badge variant="outline" className={`
+                                                px-3 py-1 rounded-lg border font-black text-[9px] uppercase tracking-widest
+                                                ${['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) 
+                                                    ? 'border-indigo-500/30 bg-indigo-500/5 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                                    : 'border-zinc-800 bg-zinc-900 text-zinc-500'}
+                                            `}>
+                                                {['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) ? <Shield className="mr-1.5 h-3 w-3" /> : <User className="mr-1.5 h-3 w-3" />}
                                                 {(member.role || 'viewer').toUpperCase().replace('_', ' ')}
                                             </Badge>
-                                            <span className={`text-xs ${member.status === 'active' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                                {member.status === 'active' ? '● Activo' : '● Pendiente'}
-                                            </span>
+                                            
+                                            <div className="flex items-center gap-1.5">
+                                                <div className={`h-1.5 w-1.5 rounded-full ${member.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                                <span className={`text-[10px] font-black uppercase tracking-tighter ${member.status === 'active' ? 'text-emerald-500/80' : 'text-amber-500/80'}`}>
+                                                    {member.status === 'active' ? 'Activo' : 'Pendiente'}
+                                                </span>
+                                            </div>
                                         </div>
+                                        
                                         {member.role !== 'owner' && (
                                             <Button 
                                                 variant="ghost" 
                                                 size="icon" 
                                                 onClick={() => handleRemoveMember(member.id)}
-                                                className="text-zinc-500 hover:text-rose-400 transition-colors hover:bg-rose-500/10"
+                                                className="h-10 w-10 rounded-xl text-zinc-600 hover:text-rose-400 transition-all hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20"
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>

@@ -60,7 +60,7 @@ const DEFAULT_AMENITIES = [
     {
         name: 'Salón de Fiestas',
         description: 'Espacio elegante para eventos sociales con cocina equipada y mobiliario premium.',
-        icon_name: 'PartyPopper',
+        icon: 'PartyPopper',
         base_price: 2500,
         deposit_required: true,
         deposit_amount: 5000,
@@ -71,7 +71,7 @@ const DEFAULT_AMENITIES = [
     {
         name: 'Alberca Infinity',
         description: 'Relájate en nuestra alberca climatizada con vistas panorámicas a la ciudad.',
-        icon_name: 'Waves',
+        icon: 'Waves',
         base_price: 0,
         deposit_required: false,
         deposit_amount: 0,
@@ -82,7 +82,7 @@ const DEFAULT_AMENITIES = [
     {
         name: 'Gimnasio Pro',
         description: 'Equipamiento de última generación para cardio y pesas. Abierto 24/7.',
-        icon_name: 'Dumbbell',
+        icon: 'Dumbbell',
         base_price: 0,
         deposit_required: false,
         deposit_amount: 0,
@@ -93,7 +93,7 @@ const DEFAULT_AMENITIES = [
     {
         name: 'Área de Asadores',
         description: 'Zona al aire libre con asadores de gas, mesas y pérgola para convivencias.',
-        icon_name: 'Flame',
+        icon: 'Flame',
         base_price: 500,
         deposit_required: true,
         deposit_amount: 1000,
@@ -287,9 +287,11 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                     Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} className="h-[400px] rounded-[2.5rem] bg-zinc-900/40 border border-zinc-800 animate-pulse" />
                     ))
-                ) : (
+                ) : amenities.length > 0 ? (
                     amenities.map((amenity, index) => {
                         const isMaintenance = amenity.status === 'maintenance';
+                        const price = Number(amenity.base_price) || 0;
+                        const deposit = Number(amenity.deposit_amount) || 0;
                         return (
                         <motion.div
                             key={amenity.id}
@@ -298,12 +300,13 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                             transition={{ delay: index * 0.1 }}
                             whileHover={isMaintenance ? {} : { y: -8, scale: 1.02 }}
                             onClick={() => {
-                                if (isMaintenance) {
+                                if (!isMaintenance) {
+                                    setSelectedAmenity(amenity)
+                                    setAcceptedRules(false)
+                                    setViewDate(new Date()) 
+                                } else {
                                     toast.error('Este espacio se encuentra temporalmente fuera de servicio por mantenimiento.');
-                                    return;
                                 }
-                                setSelectedAmenity(amenity)
-                                setAcceptedRules(false)
                                 setViewDate(new Date()) 
                             }}
                             className={`group relative ${isMaintenance ? 'cursor-not-allowed opacity-[0.85]' : 'cursor-pointer'}`}
@@ -364,7 +367,17 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                             </div>
                         </motion.div>
                     )})
+                ) : (
+                    <div className="lg:col-span-4 flex flex-col items-center justify-center py-20 bg-zinc-900/30 rounded-[2.5rem] border border-zinc-800 border-dashed">
+                        <div className="p-6 bg-zinc-800/50 rounded-full mb-6">
+                            <Zap size={40} className="text-zinc-600" />
+                        </div>
+                        <h3 className="text-2xl font-black text-white italic">Sin amenidades disponibles</h3>
+                        <p className="text-zinc-500 mt-2 max-w-xs text-center text-sm font-medium">Tu administración aún no ha configurado espacios para este condominio.</p>
+                        <p className="text-[10px] text-zinc-700 mt-8 uppercase font-bold tracking-[0.2em]">ID Org: {resident?.organization_id || 'No definido'}</p>
+                    </div>
                 )}
+
             </div>
 
             {/* Summary / Stats (Mock) */}

@@ -23,36 +23,24 @@ export default async function AmenidadesPage() {
         .eq('user_id', user.id)
         .maybeSingle()
 
-    // 2. Get organization_id from multiple sources with priority
-    let organizationId = user.user_metadata?.organization_id || user.user_metadata?.orgId
+    // Priority: 1. Condominium linked to resident, 2. Resident record, 3. User metadata, 4. organization_users
+    // @ts-ignore
+    let organizationId = resident?.condominiums?.organization_id || 
+                         // @ts-ignore
+                         resident?.organization_id || 
+                         user.user_metadata?.organization_id || 
+                         user.user_metadata?.orgId
 
     // Try from organization_users (primary for admins/owners)
-    const { data: orgUser } = await supabase
-        .from('organization_users')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-    
-    if (orgUser?.organization_id) {
-        organizationId = orgUser.organization_id
-    }
-
-    // Try from resident (primary for residents)
-    if (!organizationId && resident) {
-        // @ts-ignore
-        organizationId = resident.organization_id || resident.condominiums?.organization_id
-    }
-
-    // Fallback: Try through condominiums if resident is linked to one
-    if (!organizationId && resident?.condominium_id) {
-        const { data: condo } = await supabase
-            .from('condominiums')
+    if (!organizationId) {
+        const { data: orgUser } = await supabase
+            .from('organization_users')
             .select('organization_id')
-            .eq('id', resident.condominium_id)
+            .eq('user_id', user.id)
             .maybeSingle()
         
-        if (condo?.organization_id) {
-            organizationId = condo.organization_id
+        if (orgUser?.organization_id) {
+            organizationId = orgUser.organization_id
         }
     }
 

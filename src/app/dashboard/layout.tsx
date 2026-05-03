@@ -24,6 +24,7 @@ export default async function DashboardLayout({
     const { data: orgUser } = await supabase
         .from('organization_users')
         .select(`
+            organization_id,
             role_new,
             organizations (
                 business_type
@@ -38,7 +39,7 @@ export default async function DashboardLayout({
     // 2. Check if Resident (STRICT: Must be in residents)
     const { data: resident } = await supabase
         .from('residents')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, condominiums(organization_id)')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -93,11 +94,16 @@ export default async function DashboardLayout({
         role = 'resident'
     }
 
-    // Check Subscription for Demo Mode
-    const { data: activeSub } = await supabase
+    // Check Subscription for Demo Mode - Using Organization ID and admin client for accuracy
+    const { createAdminClient } = await import('@/utils/supabase/admin')
+    const adminSupabase = createAdminClient()
+
+    const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
+
+    const { data: activeSub } = await adminSupabase
         .from('subscriptions')
         .select('subscription_status')
-        .eq('user_id', user.id)
+        .eq('organization_id', organizationId)
         .eq('subscription_status', 'active')
         .maybeSingle()
 

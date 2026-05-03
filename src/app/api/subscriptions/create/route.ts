@@ -149,7 +149,7 @@ export async function POST(req: Request) {
         }
 
         // 4️⃣ Verificar que no exista suscripción activa en esa organización
-        const { data: existingActive } = await supabase
+        const { data: existingActive } = await adminSupabase
             .from('subscriptions')
             .select('id')
             .eq('organization_id', organizationId)
@@ -167,7 +167,7 @@ export async function POST(req: Request) {
         }
 
         // 5️⃣ Crear registro pending en DB
-        const { data: subscription, error: insertError } = await supabase
+        const { data: subscription, error: insertError } = await adminSupabase
             .from('subscriptions')
             .insert({
                 user_id: user.id,
@@ -251,7 +251,7 @@ export async function POST(req: Request) {
         }
 
         // 8️⃣ Actualizar DB con IDs de MercadoPago
-        const { error: updateError } = await supabase
+        const { error: updateError } = await adminSupabase
             .from('subscriptions')
             .update({
                 mercado_subscription_id: mpData.id,

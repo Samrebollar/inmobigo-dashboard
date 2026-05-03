@@ -204,8 +204,9 @@ export async function updateSession(request: NextRequest) {
         // --- SaaS Professional Blocking Logic ---
         const isPlansPage = path.startsWith('/dashboard/configuracion/planes')
         const isProfilePage = path.startsWith('/dashboard/perfil')
+        const isApiRoute = path.startsWith('/api')
 
-        if (!isPlansPage && !isProfilePage) {
+        if (!isPlansPage && !isProfilePage && !isApiRoute) {
             const { data: subscription } = await adminSupabase
                 .from('subscriptions')
                 .select('subscription_status, created_at')

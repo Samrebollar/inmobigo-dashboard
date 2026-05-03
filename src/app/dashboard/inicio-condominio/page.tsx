@@ -42,13 +42,15 @@ export default async function DashboardPage({
   const fullName = profile?.full_name || metaFullName || (metaFirstName ? `${metaFirstName} ${metaLastName || ''}` : '') || ''
   const firstName = fullName ? fullName.trim().split(' ')[0] : (user.email?.split('@')[0] || 'Usuario')
 
+  const adminSupabase = createAdminClient()
+
   // 2. Determine Identity (Admin vs Resident)
   // Check if Admin (Owner/Staff)
-  const { data: orgUser } = await supabase
+  const { data: orgUser } = await adminSupabase
     .from('organization_users')
     .select('role, organization:organizations(*)')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   // Check if Resident
   const { data: resident, error: residentError } = await supabase
@@ -107,8 +109,8 @@ export default async function DashboardPage({
   let organization: any = orgUser?.organization
 
   if (!organization) {
-    // Fallback: Check if owner directly (removed inner join for subscriptions to allow demo mode)
-    const { data: ownerOrg } = await supabase
+    // Fallback: Check if owner directly
+    const { data: ownerOrg } = await adminSupabase
       .from('organizations')
       .select(`*`)
       .eq('owner_id', user.id)
@@ -188,7 +190,7 @@ export default async function DashboardPage({
 
   // Rest of Admin Dashboard Logic (Stats, Charts)
   // Reuse existing variables but scoped correctly
-  const { data: activeCondominiums } = await supabase
+  const { data: activeCondominiums } = await adminSupabase
     .from('condominiums')
     .select('id, units_total')
     .eq('organization_id', organization.id)
@@ -204,7 +206,7 @@ export default async function DashboardPage({
   let incidenciasPendientes = 0
 
   if (activeIds.length > 0) {
-    const { data: invoices } = await supabase
+    const { data: invoices } = await adminSupabase
       .from('invoices')
       .select('id, amount, status, updated_at, condominiums(name), units(unit_number), residents(first_name, last_name)')
       .in('condominium_id', activeIds)
@@ -216,7 +218,7 @@ export default async function DashboardPage({
     })
 
     // Fetch Tickets
-    const { data: tickets } = await supabase
+    const { data: tickets } = await adminSupabase
       .from('tickets')
       .select('id, title, status, created_at, condominiums(name), units(unit_number)')
       .in('condominium_id', activeIds)
@@ -224,7 +226,7 @@ export default async function DashboardPage({
       .limit(10)
 
     // Fetch Residents
-    const { data: residents } = await supabase
+    const { data: residents } = await adminSupabase
       .from('residents')
       .select('id, first_name, last_name, created_at, condominiums(name), units(unit_number)')
       .in('condominium_id', activeIds)
@@ -269,7 +271,7 @@ export default async function DashboardPage({
       .slice(0, 5)
 
     // Calculate Pending Incidents count
-    const { count: pendingTicketsCount } = await supabase
+    const { count: pendingTicketsCount } = await adminSupabase
       .from('tickets')
       .select('*', { count: 'exact', head: true })
       .in('condominium_id', activeIds)

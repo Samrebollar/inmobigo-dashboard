@@ -20,8 +20,12 @@ export default async function DashboardLayout({
         redirect('/login')
     }
 
+    const { createAdminClient } = await import('@/utils/supabase/admin')
+    const adminSupabase = createAdminClient()
+
     // 1. Check if Admin/Staff (STRICT: Must be in organization_users)
-    const { data: orgUser } = await supabase
+    // We use adminSupabase here to bypass the RLS recursion error in organization_users
+    const { data: orgUser } = await adminSupabase
         .from('organization_users')
         .select(`
             organization_id,
@@ -31,7 +35,7 @@ export default async function DashboardLayout({
             )
         `)
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
     const businessType = (orgUser?.organizations as any)?.business_type || 'condominio'
     const isPropiedades = businessType === 'propiedades'
@@ -93,10 +97,6 @@ export default async function DashboardLayout({
     } else if (resident || profile?.role_new === 'resident' || isMetadataResident) {
         role = 'resident'
     }
-
-    // Check Subscription for Demo Mode - Using Organization ID and admin client for accuracy
-    const { createAdminClient } = await import('@/utils/supabase/admin')
-    const adminSupabase = createAdminClient()
 
     const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
 

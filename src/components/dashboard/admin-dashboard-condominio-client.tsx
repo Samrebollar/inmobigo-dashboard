@@ -13,9 +13,12 @@ import { cn } from '@/lib/utils'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { useUserRole } from '@/hooks/use-user-role'
 
+import { PlanExpirationBanner } from '@/components/dashboard/PlanExpirationBanner'
+
 interface AdminDashboardClientProps {
     userEmail?: string
     userName?: string
+    daysRemaining?: number
     stats: {
         totalFacturado: number
         totalCobrado: number
@@ -30,7 +33,13 @@ interface AdminDashboardClientProps {
     recentActivity?: any[]
 }
 
-export default function AdminDashboardCondominioClient({ userEmail, userName, stats, recentActivity = [] }: AdminDashboardClientProps) {
+export default function AdminDashboardCondominioClient({ 
+    userEmail, 
+    userName, 
+    daysRemaining = 999, 
+    stats, 
+    recentActivity = [] 
+}: AdminDashboardClientProps) {
     const isPropiedades = false
     const [totalIngresos, setTotalIngresos] = useState<number | null>(null)
     const [isLoadingIngresos, setIsLoadingIngresos] = useState(true)
@@ -173,6 +182,8 @@ export default function AdminDashboardCondominioClient({ userEmail, userName, st
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
+
+            <PlanExpirationBanner daysRemaining={daysRemaining} />
 
             <motion.div
                 variants={container}

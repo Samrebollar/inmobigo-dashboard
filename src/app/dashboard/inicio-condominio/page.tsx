@@ -171,6 +171,21 @@ export default async function DashboardPage({
     )
   }
 
+  // --- SUBSCRIPTION STATUS ---
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('next_payment_date, subscription_status')
+    .eq('organization_id', organization.id)
+    .maybeSingle()
+
+  let daysRemaining = 999
+  if (subscription?.next_payment_date) {
+    const nextPayment = new Date(subscription.next_payment_date)
+    const now = new Date()
+    const diffTime = nextPayment.getTime() - now.getTime()
+    daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  }
+
   // Rest of Admin Dashboard Logic (Stats, Charts)
   // Reuse existing variables but scoped correctly
   const { data: activeCondominiums } = await supabase
@@ -269,6 +284,7 @@ export default async function DashboardPage({
     <AdminDashboardCondominioClient
       userEmail={user.email}
       userName={firstName}
+      daysRemaining={daysRemaining}
       stats={{
         totalFacturado,
         totalCobrado,

@@ -46,7 +46,8 @@ interface Amenity {
     id: string
     name: string
     description: string
-    icon_name: string
+    icon_name?: string
+    icon?: string
     base_price: number
     deposit_required: boolean
     deposit_amount: number
@@ -312,13 +313,13 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                                 
                                 <div className="absolute top-0 right-0 -mr-8 -mt-8 opacity-5 group-hover:opacity-10 transition-opacity">
                                     <div className="scale-[4]">
-                                        {getIcon(amenity.icon_name)}
+                                        {getIcon(amenity.icon || amenity.icon_name || '')}
                                     </div>
                                 </div>
 
                                 <div className="space-y-6 relative z-10">
                                     <div className={`h-14 w-14 rounded-2xl bg-gradient-to-br ${isMaintenance ? 'from-orange-800 to-orange-950 grayscale' : amenity.color} flex items-center justify-center text-white shadow-lg`}>
-                                        {getIcon(amenity.icon_name)}
+                                        {getIcon(amenity.icon || amenity.icon_name || '')}
                                     </div>
                                     
                                     <div className="space-y-2">

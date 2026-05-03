@@ -19,7 +19,7 @@ export default async function AmenidadesPage() {
     // 1. Get Resident Data
     const { data: resident } = await supabase
         .from('residents')
-        .select('*, condominiums(name), units(unit_number)')
+        .select('*, condominiums(name, organization_id), units(unit_number)')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -40,7 +40,7 @@ export default async function AmenidadesPage() {
     // Try from resident (primary for residents)
     if (!organizationId && resident) {
         // @ts-ignore
-        organizationId = resident.organization_id
+        organizationId = resident.organization_id || resident.condominiums?.organization_id
     }
 
     // Fallback: Try through condominiums if resident is linked to one

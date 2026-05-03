@@ -174,15 +174,7 @@ export async function getAmenitiesAction(organizationId: string) {
     try {
         const adminClient = createAdminClient()
         
-        // 1. Limpieza de "Salon de Eventos" (el registro huérfano/duplicado que el usuario quiere borrar)
-        // Lo borramos proactivamente para que no aparezca más.
-        await adminClient
-            .from('amenities')
-            .delete()
-            .eq('organization_id', organizationId)
-            .ilike('name', 'Salon de Eventos')
-
-        // 2. Intentar obtener las existentes
+        // 1. Intentar obtener las existentes
         let { data, error } = await adminClient
             .from('amenities')
             .select('*')
@@ -191,13 +183,13 @@ export async function getAmenitiesAction(organizationId: string) {
 
         if (error) throw error
 
-        // 3. Si está vacío, sembrar por defecto desde el servidor (más fiable)
+        // 2. Si está vacío, sembrar por defecto desde el servidor (más fiable)
         if (!data || data.length === 0) {
             const defaultAmenities = [
-                { name: 'Alberca', icon_name: 'Waves', description: 'Alberca templada con vista al jardín.', capacity: 20, price: 0, deposit: 0, status: 'available', schedule_start: '09:00', schedule_end: '22:00', organization_id: organizationId },
-                { name: 'Área de Asadores', icon_name: 'Flame', description: 'Espacio parrillero totalmente equipado.', capacity: 12, price: 0, deposit: 500, status: 'available', schedule_start: '09:00', schedule_end: '22:00', organization_id: organizationId },
-                { name: 'Gimnasio Pro', icon_name: 'Dumbbell', description: 'Equipamiento de alto rendimiento.', capacity: 15, price: 0, deposit: 500, status: 'available', schedule_start: '08:00', schedule_end: '22:00', organization_id: organizationId },
-                { name: 'Salón de Fiestas', icon_name: 'Music', description: 'Salón premium para eventos sociales.', capacity: 50, price: 0, deposit: 500, status: 'available', schedule_start: '08:00', schedule_end: '22:00', organization_id: organizationId }
+                { name: 'Alberca', icon: 'Waves', description: 'Alberca templada con vista al jardín.', capacity: 20, base_price: 0, deposit_amount: 0, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, color: 'from-blue-600 to-sky-500' },
+                { name: 'Área de Asadores', icon: 'Flame', description: 'Espacio parrillero totalmente equipado.', capacity: 12, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, color: 'from-orange-600 to-amber-500' },
+                { name: 'Gimnasio Pro', icon: 'Dumbbell', description: 'Equipamiento de alto rendimiento.', capacity: 15, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, color: 'from-emerald-600 to-teal-500' },
+                { name: 'Salón de Fiestas', icon: 'PartyPopper', description: 'Salón premium para eventos sociales.', capacity: 50, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, color: 'from-indigo-600 to-purple-500' }
             ]
 
             const { data: seeded, error: seedError } = await adminClient
@@ -205,11 +197,15 @@ export async function getAmenitiesAction(organizationId: string) {
                 .insert(defaultAmenities)
                 .select()
 
-            if (seedError) throw seedError
-            data = seeded
+            if (seedError) {
+                console.error('Error seeding amenities:', seedError)
+                // If seeding fails, we just return empty data but log it
+            } else {
+                data = seeded
+            }
         }
 
-        return { success: true, data }
+        return { success: true, data: data || [] }
     } catch (error: any) {
         console.error('Error in getAmenitiesAction:', error)
         return { success: false, error: error.message || 'Error al obtener amenidades' }

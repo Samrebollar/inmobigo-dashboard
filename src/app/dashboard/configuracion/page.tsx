@@ -16,7 +16,8 @@ import { InviteUserModal } from '@/components/settings/InviteUserModal'
 import { AmenityModal } from '@/components/settings/AmenityModal'
 import { Role } from '@/types/auth'
 import { saveAmenityAction, getAmenitiesAction, deleteAmenityAction } from '@/app/actions/service-actions'
-import { inviteTeamMemberAction } from '@/app/actions/team-actions'
+import { inviteTeamMemberAction, removeTeamMemberAction } from '@/app/actions/team-actions'
+import { DeleteConfirmModal } from '@/components/dashboard/delete-confirm-modal'
 
 interface TeamMember {
     id: string
@@ -58,6 +59,11 @@ export default function SettingsPage() {
     const [showAmenityModal, setShowAmenityModal] = useState(false)
     const [editingAmenity, setEditingAmenity] = useState<any>(null)
     const [businessType, setBusinessType] = useState('condominio')
+
+    // Delete Team Member State
+    const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     useEffect(() => {
         initialize()
@@ -262,22 +268,31 @@ export default function SettingsPage() {
         }
     }
 
-    const handleRemoveMember = async (memberId: string) => {
-        if (!confirm('¿Estás seguro de eliminar a este miembro del equipo?')) return;
-        
+    const handleRemoveMember = (member: TeamMember) => {
+        setMemberToDelete(member)
+        setShowDeleteModal(true)
+    }
+
+    const confirmDelete = async () => {
+        if (!memberToDelete) return
+
+        setIsDeleting(true)
         try {
-            const { error } = await supabase
-                .from('organization_users')
-                .delete()
-                .eq('id', memberId)
-                
-            if (error) throw error;
+            const result = await removeTeamMemberAction(memberToDelete.id, memberToDelete.user_id)
             
-            setTeam(team.filter(m => m.id !== memberId))
-            toast.success('Miembro eliminado correctamente')
+            if (!result.success) {
+                throw new Error(result.error)
+            }
+            
+            setTeam(team.filter(m => m.id !== memberToDelete.id))
+            toast.success(`Miembro ${memberToDelete.first_name} eliminado correctamente`)
+            setShowDeleteModal(false)
         } catch (error: any) {
             console.error('Error removing member:', error)
             toast.error('Error al eliminar: ' + error.message)
+        } finally {
+            setIsDeleting(false)
+            setMemberToDelete(null)
         }
     }
 
@@ -384,7 +399,7 @@ export default function SettingsPage() {
                                                     : 'border-zinc-800 bg-zinc-900 text-zinc-500'}
                                             `}>
                                                 {['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) ? <Shield className="mr-1.5 h-3 w-3" /> : <User className="mr-1.5 h-3 w-3" />}
-                                                {(member.role || 'viewer').toUpperCase().replace('_', ' ')}
+                                                {member.role === 'admin_condominio' ? 'AUXILIAR DE CONDOMINIO' : (member.role || 'viewer').toUpperCase().replace('_', ' ')}
                                             </Badge>
                                             
                                             <div className="flex items-center gap-1.5">
@@ -399,7 +414,7 @@ export default function SettingsPage() {
                                             <Button 
                                                 variant="ghost" 
                                                 size="icon" 
-                                                onClick={() => handleRemoveMember(member.id)}
+                                                onClick={() => handleRemoveMember(member)}
                                                 className="h-10 w-10 rounded-xl text-zinc-600 hover:text-rose-400 transition-all hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20"
                                             >
                                                 <Trash2 className="h-4 w-4" />
@@ -417,6 +432,16 @@ export default function SettingsPage() {
                 isOpen={showInviteModal}
                 onClose={() => setShowInviteModal(false)}
                 onInvite={handleInvite}
+            />
+
+            <DeleteConfirmModal
+                isOpen={showDeleteModal}
+                onClose={() => setShowDeleteModal(false)}
+                onConfirm={confirmDelete}
+                isLoading={isDeleting}
+                title="¿Confirmar Eliminación?"
+                description="¿Estás seguro de que deseas eliminar a este miembro del equipo? Esta acción revocará su acceso inmediatamente."
+                itemName={memberToDelete ? `${memberToDelete.first_name} ${memberToDelete.last_name || ''} (${memberToDelete.role})` : undefined}
             />
 
             {/* Políticas de Cobro y Facturación */}

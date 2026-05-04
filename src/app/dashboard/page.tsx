@@ -82,6 +82,10 @@ export default async function DashboardPage() {
     if (role === 'tenant') {
         redirect('/inquilino')
     }
+
+    if (role === 'security') {
+        redirect('/seguridad')
+    }
     
     // Redirección inteligente para Admins / Staff basada en el business_type
 

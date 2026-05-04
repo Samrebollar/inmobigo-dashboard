@@ -14,7 +14,7 @@ interface InviteUserModalProps {
 }
 
 const ROLES: { value: Role; label: string; description: string }[] = [
-    { value: 'admin_condominio', label: 'Admin. de Condominio', description: 'Gestión total de un condominio específico, residentes y reportes.' },
+    { value: 'admin_condominio', label: 'Auxiliar de Condominio', description: 'Gestión total de un condominio específico, residentes y reportes.' },
     { value: 'security', label: 'Seguridad/Vigilante', description: 'Control de accesos y avisos. Sin acceso a datos sensibles o finanzas.' },
 ]
 

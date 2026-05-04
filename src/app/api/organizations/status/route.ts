@@ -29,7 +29,7 @@ export async function GET() {
         // 2. Get Current Plan and Limits
         const { data: org } = await adminSupabase
             .from('organizations')
-            .select('plan, units_limit')
+            .select('name, business_type, plan, units_limit')
             .eq('id', orgId)
             .single()
 
@@ -59,8 +59,10 @@ export async function GET() {
 
         return NextResponse.json({
             organizationId: orgId,
+            organizationName: org?.name,
+            businessType: org?.business_type,
             currentPlan: org?.plan || 'FREE',
-            unitUsage: unitsCountRes || 0,
+            unitUsage: unitsCountRes?.count || 0,
             unitLimit: org?.units_limit || 0,
             subscriptionStatus: sub?.subscription_status || 'none',
             daysRemaining: daysRemaining,

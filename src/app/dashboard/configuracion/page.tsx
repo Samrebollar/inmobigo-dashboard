@@ -64,28 +64,42 @@ export default function SettingsPage() {
     }, [])
 
     const initialize = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+        try {
+            const response = await fetch('/api/organizations/status')
+            const data = await response.json()
 
-        let orgData: any = null
-        let userOrgId: string | null = null
+            if (data.error) throw new Error(data.error)
 
-        // 1. Try organization_users
-        const { data: orgUser } = await supabase
-            .from('organization_users')
-            .select(`
-                organization_id,
-                role,
-                organizations (name, business_type)
-            `)
-            .eq('user_id', user.id)
-            .maybeSingle()
+            if (data.organizationId) {
+                setOrgId(data.organizationId)
+                setOrgName(data.organizationName || 'Mi Organización')
+                setBusinessType(data.businessType || 'condominio')
+                
+                fetchTeam(data.organizationId)
+                fetchBillingSettings(data.organizationId)
+                
+                if (data.businessType !== 'propiedades') {
+                    fetchAmenities(data.organizationId)
+                }
+            }
 
-        if (orgUser && orgUser.organizations) {
-            orgData = Array.isArray(orgUser.organizations) ? orgUser.organizations[0] : orgUser.organizations
-            userOrgId = orgUser.organization_id
-        } else {
-            // 2. Fallback to owner directly
+            // Get Subscription (Can still use client since it's simple)
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const { data: sub } = await supabase
+                    .from('subscriptions')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('subscription_status', 'active')
+                    .maybeSingle()
+                setSubscription(sub)
+            }
+        } catch (error) {
+            console.error('Error initializing settings:', error)
+            // Fallback al método original si la API falla por alguna razón
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
             const { data: ownerOrg } = await supabase
                 .from('organizations')
                 .select('id, name, business_type')
@@ -93,39 +107,13 @@ export default function SettingsPage() {
                 .maybeSingle()
             
             if (ownerOrg) {
-                orgData = ownerOrg
-                userOrgId = ownerOrg.id
+                setOrgId(ownerOrg.id)
+                setOrgName(ownerOrg.name || 'Mi Organización')
+                setBusinessType(ownerOrg.business_type || 'condominio')
+                fetchTeam(ownerOrg.id)
+                fetchBillingSettings(ownerOrg.id)
             }
         }
-
-        if (orgData && userOrgId) {
-            const orgName = orgData.name
-            
-            // Check metadata as an ultimate fallback for businessType
-            const metadataRole = user.user_metadata?.role || user.user_metadata?.user_type
-            const isMetadataPropiedades = metadataRole === 'admin_propiedad' || metadataRole === 'admin_propiedades'
-            const bType = orgData.business_type || (isMetadataPropiedades ? 'propiedades' : 'condominio')
-            
-            setOrgName(orgName || 'Mi Organización')
-            setBusinessType(bType)
-            setOrgId(userOrgId)
-            fetchTeam(userOrgId)
-            fetchBillingSettings(userOrgId)
-            
-            if (bType !== 'propiedades') {
-                fetchAmenities(userOrgId)
-            }
-        }
-
-        // Get Subscription
-        const { data: sub } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('subscription_status', 'active')
-            .maybeSingle()
-
-        setSubscription(sub)
     }
 
     const handleSaveOrg = async () => {
@@ -260,58 +248,15 @@ export default function SettingsPage() {
 
     const fetchTeam = async (orgId: string) => {
         try {
-            const { data: teamMembers, error: teamError } = await supabase
-                .from('organization_users')
-                .select('*')
-                .eq('organization_id', orgId)
+            const response = await fetch('/api/organizations/team')
+            const data = await response.json()
 
-            if (teamError) throw teamError
+            if (data.error) throw new Error(data.error)
 
-            if (!teamMembers || teamMembers.length === 0) {
-                setTeam([])
-                return
-            }
-
-            const userIds = teamMembers.map(tm => tm.user_id)
-            
-            // Try fetching profiles. Depending on actual schema table might be "profiles" or "users" in public schema. Needs to not fail if missing column.
-            const { data: profiles, error: profilesError } = await supabase
-                .from('profiles')
-                .select('id, full_name, email')
-                .in('id', userIds)
-
-            const merged = teamMembers.map(tm => {
-                const profile = profiles?.find(p => p.id === tm.user_id)
-                // Split full_name into first_name, last_name or fallback to default
-                let first_name = 'Usuario'
-                let last_name = ''
-                if (profile && profile.full_name) {
-                    const parts = profile.full_name.split(' ')
-                    first_name = parts[0]
-                    last_name = parts.slice(1).join(' ')
-                }
-
-                return {
-                    id: tm.id,
-                    user_id: tm.user_id,
-                    role: tm.role_new || tm.role || 'viewer',
-                    status: tm.status || 'active',
-                    created_at: tm.created_at,
-                    email: profile?.email || 'N/A',
-                    first_name,
-                    last_name
-                }
-            })
-
-            // Sort so owner/admin are at top
-            merged.sort((a, b) => {
-                const roleWeight = { 'owner': 0, 'admin': 1, 'admin_condominio': 1, 'admin_propiedad': 1, 'manager': 2, 'staff': 3, 'user': 4, 'viewer': 5 }
-                return (roleWeight[a.role as keyof typeof roleWeight] || 99) - (roleWeight[b.role as keyof typeof roleWeight] || 99)
-            })
-
-            setTeam(merged as TeamMember[])
-        } catch (error) {
+            setTeam(data as TeamMember[])
+        } catch (error: any) {
             console.error('Error fetching team:', error)
+            toast.error('Error al cargar el equipo: ' + error.message)
         } finally {
             setLoading(false)
         }

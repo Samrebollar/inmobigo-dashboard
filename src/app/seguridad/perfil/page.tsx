@@ -10,18 +10,21 @@ export default async function ProfilePage() {
         redirect('/login')
     }
 
+    // 1. Fetch Profile Data (for Avatar and Full Name)
     const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle()
 
+    // 2. Fetch Resident Data (if applicable)
     const { data: resident } = await supabase
         .from('residents')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle()
 
+    // 3. Determine Role (Same logic as layout.tsx)
     const { data: orgUser } = await supabase
         .from('organization_users')
         .select('role')
@@ -39,6 +42,7 @@ export default async function ProfilePage() {
         role = 'resident'
     }
 
+    // 4. Fetch Active Subscription
     const { data: subscription } = await supabase
         .from('subscriptions')
         .select('*')
@@ -46,6 +50,7 @@ export default async function ProfilePage() {
         .eq('subscription_status', 'active')
         .maybeSingle()
 
+    // Pass data to Client Component
     return (
         <ResidentProfileClient 
             user={user} 

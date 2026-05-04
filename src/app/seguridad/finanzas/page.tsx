@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import { getTransparencyData } from '@/app/actions/accounting-server-actions'
+import { getAccountingData } from '@/app/actions/accounting-server-actions'
 import { TransparencyClient } from '@/components/seguridad/transparency/transparency-client'
 import { redirect } from 'next/navigation'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
@@ -31,13 +31,12 @@ export default async function TransparencyPage() {
 
     const isAdmin = !!orgUser;
 
-    // Para la vista de transparencia, necesitamos un condominio id.
-    // Si es admin testeando, obtendremos el primero disponible o 'all'
+    // Fallback for Admins testing the view: Use organization's first condo or 'all' if no resident found
     let targetCondoId = resident?.condominium_id
 
     if (!targetCondoId) {
         if (orgUser) {
-            targetCondoId = 'all' // Admin view fallback
+            targetCondoId = 'all' // Admin view
         }
     }
 
@@ -65,7 +64,7 @@ export default async function TransparencyPage() {
         )
     }
 
-    const data = await getTransparencyData(targetCondoId)
+    const data = await getAccountingData(targetCondoId)
 
     if (!data.success) {
         return (
@@ -93,7 +92,7 @@ export default async function TransparencyPage() {
 
     return (
         <div className="max-w-[1400px] mx-auto p-4 md:p-8">
-            <TransparencyClient data={data} condominiumId={targetCondoId} isAdmin={isAdmin} />
+            <TransparencyClient data={data} isAdmin={isAdmin} />
         </div>
     )
 }

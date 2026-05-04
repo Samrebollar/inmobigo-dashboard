@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import ResidentAmenidadesClient from '@/components/residente/resident-amenidades-client'
+import ResidentAmenidadesClient from '@/components/seguridad/resident-amenidades-client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -16,20 +16,36 @@ export default async function AmenidadesPage() {
         redirect('/login')
     }
 
+    // 1. Get Resident Data
     const { data: resident } = await supabase
         .from('residents')
         .select('*, condominiums(name, organization_id), units(unit_number)')
         .eq('user_id', user.id)
         .maybeSingle()
 
-    // 2. Get organization_id from multiple sources with priority
-    // Priority: 1. Condominium linked to resident, 2. Resident record, 3. User metadata
+    // Priority: 1. Condominium linked to resident, 2. Resident record, 3. User metadata, 4. organization_users
     // @ts-ignore
     let organizationId = resident?.condominiums?.organization_id || 
                          // @ts-ignore
                          resident?.organization_id || 
                          user.user_metadata?.organization_id || 
                          user.user_metadata?.orgId
+
+    // Try from organization_users (primary for admins/owners)
+    if (!organizationId) {
+        const { data: orgUser } = await supabase
+            .from('organization_users')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .maybeSingle()
+        
+        if (orgUser?.organization_id) {
+            organizationId = orgUser.organization_id
+        }
+    }
+
+    const isMetadataResident = user.user_metadata?.role === 'resident'
+    const isResident = !!resident || isMetadataResident
 
     const mockResident = resident ? { 
         ...resident, 

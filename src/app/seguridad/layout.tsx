@@ -2,10 +2,10 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 
-export default async function SeguridadLayout({
+export default async function DashboardLayout({
     children,
 }: {
     children: React.ReactNode
@@ -20,30 +20,129 @@ export default async function SeguridadLayout({
         redirect('/login')
     }
 
-    // STRICT: Must be in organization_users or residents (Security members are in organization_users)
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('id, first_name, last_name, condominium_id')
+    const { createAdminClient } = await import('@/utils/supabase/admin')
+    const adminSupabase = createAdminClient()
+
+    // 1. Check if Admin/Staff (STRICT: Must be in organization_users)
+    // We use adminSupabase here to bypass the RLS recursion error in organization_users
+    const { data: orgUser } = await adminSupabase
+        .from('organization_users')
+        .select(`
+            organization_id,
+            role_new,
+            organizations (
+                business_type
+            )
+        `)
         .eq('user_id', user.id)
         .maybeSingle()
 
+    const businessType = (orgUser?.organizations as any)?.business_type || 'condominio'
+    const isPropiedades = businessType === 'propiedades'
+
+    // 2. Check if Resident (STRICT: Must be in residents)
+    const { data: resident } = await supabase
+        .from('residents')
+        .select('id, first_name, last_name, condominiums(organization_id)')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+    const isMetadataResident = user.user_metadata?.role === 'resident'
+
+    // 3. Get Profile for Name fallback and Avatar
     const { data: profile } = await supabase
         .from('profiles')
         .select('full_name, avatar_url, role_new')
         .eq('id', user.id)
         .maybeSingle()
 
-    let displayName = 'Seguridad'
+    // Construction of Name + First Surname
+    let displayName = 'Usuario'
     let avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture
 
     if (resident?.first_name) {
         const firstSurname = resident.last_name ? resident.last_name.split(' ')[0] : ''
         displayName = `${resident.first_name} ${firstSurname}`.trim()
-    } else if (profile?.full_name) {
-        displayName = profile.full_name
+    } else {
+        // Admin / Other
+        // Priority: Profile Name -> Metadata Full Name -> Metadata First/Last -> Email parts
+        const metaFirstName = user.user_metadata?.first_name
+        const metaLastName = user.user_metadata?.last_name
+        const metaFullName = user.user_metadata?.full_name
+
+        const rawName = profile?.full_name || metaFullName || (metaFirstName ? `${metaFirstName} ${metaLastName || ''}` : '') || user.email?.split('@')[0] || ''
+        
+        if (rawName.trim()) {
+            const parts = rawName.trim().split(' ')
+            if (parts.length >= 2) {
+                // Take first two words (Name and First Surname roughly)
+                displayName = `${parts[0]} ${parts[1]}`
+            } else {
+                displayName = rawName.trim()
+            }
+        }
     }
 
-    const isPropiedades = false // Or retrieve organization info if needed for labels.
+    // Determine Role
+    let role = 'viewer'
+
+    if (orgUser?.role_new) {
+        role = orgUser.role_new
+    } else if (profile?.role_new && profile.role_new !== 'resident') {
+        // Priority to Admin/Staff from DB
+        role = profile.role_new
+    } else if (user.user_metadata?.role === 'admin') {
+        // Trust metadata for NEW admins if DB is not updated yet
+        role = 'admin'
+    } else if (resident || profile?.role_new === 'resident' || isMetadataResident) {
+        role = 'resident'
+    }
+
+    const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
+
+    const { data: activeSub } = await adminSupabase
+        .from('subscriptions')
+        .select('subscription_status, plan_name, created_at')
+        .eq('organization_id', organizationId)
+        .eq('subscription_status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+    const isDemoMode = !activeSub && role !== 'resident'
+    
+    // Calculate Subscription Info
+    let subscriptionInfo = null
+    if (activeSub) {
+        const createdAt = new Date(activeSub.created_at)
+        const nextPayment = new Date(createdAt)
+        nextPayment.setMonth(nextPayment.getMonth() + 1)
+        
+        const now = new Date()
+        const diffTime = nextPayment.getTime() - now.getTime()
+        const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+        subscriptionInfo = {
+            planName: activeSub.plan_name,
+            daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+            nextPaymentDate: nextPayment.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+        }
+    }
+    // Metadata is IGNORED for authorization to prevent "Self-declared Admins"
+
+    const isResident = role === 'resident'
+
+    // RBAC Logic for Sidebar
+    const isStaff = ['owner', 'admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
+    const isAdmin = ['owner', 'admin', 'admin_condominio', 'admin_propiedad'].includes(role)
+
+    const showProperties = isStaff
+    const showResidents = isStaff
+    const showFinance = isStaff || isResident
+    const showSettings = isAdmin
+    const showMaintenance = true
+    const showReports = isStaff
+    const showNotices = isStaff
 
     const sidebarContent = (
         <>
@@ -54,6 +153,16 @@ export default async function SeguridadLayout({
                 </Link>
             </div>
             <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                {user.email === 'acostasamuel947@gmail.com' && (
+                    <Link
+                        href="/owner/seguridad"
+                        className="flex items-center gap-3 rounded-md bg-indigo-500/10 px-3 py-2.5 text-sm font-bold text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all mb-4"
+                    >
+                        <LayoutDashboard size={18} />
+                        <span>Panel de Dueño</span>
+                    </Link>
+                )}
+
                 <Link
                     href="/seguridad"
                     className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
@@ -62,69 +171,155 @@ export default async function SeguridadLayout({
                     <span>Dashboard</span>
                 </Link>
 
-                <Link
-                    href="/seguridad/payments"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                >
-                    <CreditCard size={18} />
-                    <span>Pagos</span>
-                </Link>
+                {showProperties && (
+                    <Link
+                        href="/seguridad/propiedades"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    >
+                        <Building2 size={18} />
+                        <span>{isPropiedades ? 'Portafolio de Propiedades' : 'Propiedades'}</span>
+                    </Link>
+                )}
 
-                <Link
-                    href="/seguridad/subir-comprobante"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                >
-                    <Upload size={18} />
-                    <span>Subir Comprobante</span>
-                </Link>
+                {showResidents && (
+                    <Link
+                        href="/seguridad/residentes"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    >
+                        <Users size={18} />
+                        <span>{isPropiedades ? 'Inquilinos' : 'Residentes'}</span>
+                    </Link>
+                )}
 
-                <Link
-                    href="/seguridad/maintenance"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                >
-                    <Wrench size={18} />
-                    <span>Mantenimiento</span>
-                </Link>
+                {showFinance && (
+                    <>
+                        <Link
+                            href={isResident ? "/seguridad/payments" : "/seguridad/finance"}
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <CreditCard size={18} />
+                            <span>{isResident ? 'Pagos' : (isPropiedades ? 'Rentas' : 'Finanzas')}</span>
+                        </Link>
+                        {!isResident && (
+                            <Link
+                                href="/seguridad/contabilidad-inteligente"
+                                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                            >
+                                <Brain size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                                <span>Contabilidad Inteligente</span>
+                            </Link>
+                        )}
+                        {!isResident && (
+                            <Link
+                                href="/seguridad/validacion-pagos"
+                                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                            >
+                                <CheckCircle size={18} className="text-zinc-400" />
+                                <span>Validación de Pagos</span>
+                            </Link>
+                        )}
+                    </>
+                )}
 
-                <Link
-                    href="/seguridad/transparencia"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                >
-                    <BarChart3 size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                    <span>Finanzas del Condominio</span>
-                </Link>
+                {showMaintenance && (
+                    <Link
+                        href="/seguridad/maintenance"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    >
+                        <Wrench size={18} />
+                        <span>Mantenimiento</span>
+                    </Link>
+                )}
 
-                <Link
-                    href="/seguridad/amenidades"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                >
-                    <LayoutDashboard size={18} />
-                    <span>Amenidades</span>
-                </Link>
+                {isResident && (
+                    <>
+                        <Link
+                            href="/seguridad/transparencia"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <BarChart3 size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                            <span>{isPropiedades ? 'Finanzas del Portafolio' : 'Finanzas del Condominio'}</span>
+                        </Link>
+                        <Link
+                            href="/seguridad/amenidades"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <LayoutDashboard size={18} />
+                            <span>Amenidades</span>
+                        </Link>
+                        <Link
+                            href="/seguridad/servicios"
+                            className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <Smartphone size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                            <span>Servicios</span>
+                        </Link>
+                    </>
+                )}
 
-                <Link
-                    href="/seguridad/servicios"
-                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                >
-                    <Smartphone size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                    <span>Servicios</span>
-                </Link>
+                {showReports && (
+                    <Link
+                        href="/seguridad/reportes"
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    >
+                        <BarChart3 size={18} />
+                        <span>Reportes</span>
+                    </Link>
+                )}
 
-                <Link
-                    href="/seguridad/avisos"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
-                >
-                    <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
-                    <span>Avisos</span>
-                </Link>
+                {showNotices && (
+                    <>
+                        <Link
+                            href="/seguridad/morosos"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-rose-500/20"
+                        >
+                            <AlertTriangle size={18} className="text-rose-500/80 group-hover:text-rose-400" />
+                            <span>Morosos</span>
+                        </Link>
+                        <Link
+                            href="/seguridad/avisos"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
+                        >
+                            <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
+                            <span>Avisos</span>
+                        </Link>
+                        <Link
+                            href="/seguridad/premium-services"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <Sparkles size={18} className="text-indigo-400" />
+                            <span>Servicios Premium</span>
+                        </Link>
+                    </>
+                )}
 
-                <Link
-                    href="/seguridad/premium-services"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                >
-                    <Sparkles size={18} className="text-indigo-400" />
-                    <span>Servicios Premium</span>
-                </Link>
+                <div className="my-4 border-t border-zinc-800/50"></div>
+
+                {showSettings && (
+                    <>
+                        <Link
+                            href="/seguridad/configuracion/planes"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <CreditCard size={18} />
+                            <span>Planes</span>
+                        </Link>
+                        <Link
+                            href="/seguridad/integrations"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <Zap size={18} />
+                            <span>Integraciones</span>
+                        </Link>
+                        <Link
+                            href="/seguridad/configuracion"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <Settings size={18} />
+                            <span>Configuración</span>
+                        </Link>
+                    </>
+                )}
             </nav>
             <div className="p-4 border-t border-zinc-800 bg-zinc-900/30 space-y-1">
                 <Link
@@ -149,11 +344,12 @@ export default async function SeguridadLayout({
             sidebarContent={sidebarContent}
             displayName={displayName}
             avatarUrl={avatarUrl}
-            isDemoMode={false}
+            isDemoMode={isDemoMode}
+            subscriptionInfo={subscriptionInfo}
             headerActions={
                 <input
                     type="text"
-                    placeholder="Buscar..."
+                    placeholder="Buscar en todo el sistema..."
                     className="bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-500"
                 />
             }

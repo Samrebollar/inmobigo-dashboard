@@ -29,10 +29,10 @@ export default async function SecurityDashboardPage() {
 
   const adminSupabase = createAdminClient()
 
-  // 2. Get Organization
+  // 2. Get Organization & Role Info
   const { data: orgUser } = await adminSupabase
     .from('organization_users')
-    .select('organization_id')
+    .select('organization_id, status, role_new')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -48,6 +48,15 @@ export default async function SecurityDashboardPage() {
          </div>
        </div>
      )
+  }
+
+  // 3. AUTO-ACTIVATION: If pending, make active
+  if (orgUser.status === 'pending') {
+    console.log(`✨ [Security Dashboard] Activando usuario ${user.email}...`);
+    await adminSupabase
+      .from('organization_users')
+      .update({ status: 'active', invited_at: new Date().toISOString() }) // Re-using invited_at as activation mark or just leave it
+      .eq('user_id', user.id)
   }
 
   const organizationId = orgUser.organization_id

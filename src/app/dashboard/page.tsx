@@ -44,10 +44,10 @@ export default async function DashboardPage() {
         role = orgUser.role_new
     } else if (profile?.role_new && profile.role_new !== 'resident' && profile.role_new !== 'tenant') {
         role = profile.role_new
+    } else if (user.user_metadata?.role && !['resident', 'tenant'].includes(user.user_metadata.role)) {
+        role = user.user_metadata.role
     } else if (resident || profile?.role_new === 'resident' || profile?.role_new === 'tenant' || user.user_metadata?.role === 'resident' || user.user_metadata?.role === 'tenant') {
         role = 'resident' 
-    } else if (user.user_metadata?.role) {
-        role = user.user_metadata.role
     }
 
     // Determine associated business_type

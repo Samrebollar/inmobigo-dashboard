@@ -156,6 +156,12 @@ export async function updateSession(request: NextRequest) {
             return NextResponse.redirect(url)
         }
 
+        if (role === 'security' && !path.startsWith('/seguridad') && !isPublicStaticOrAuth) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/seguridad'
+            return NextResponse.redirect(url)
+        }
+
         // Bloquear acceso a /residente/* si no es residente
         if (path.startsWith('/residente') && role !== 'resident') {
             const url = request.nextUrl.clone()
@@ -165,6 +171,13 @@ export async function updateSession(request: NextRequest) {
 
         // Bloquear acceso a /inquilino/* si no es inquilino
         if (path.startsWith('/inquilino') && role !== 'tenant') {
+            const url = request.nextUrl.clone()
+            url.pathname = '/dashboard'
+            return NextResponse.redirect(url)
+        }
+
+        // Bloquear acceso a /seguridad/* si no es seguridad
+        if (path.startsWith('/seguridad') && role !== 'security') {
             const url = request.nextUrl.clone()
             url.pathname = '/dashboard'
             return NextResponse.redirect(url)

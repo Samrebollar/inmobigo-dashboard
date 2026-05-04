@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
 import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle } from 'lucide-react'
-import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
+import { DashboardLayoutClient } from '@/components/seguridad/dashboard-layout-client'
 
 export default async function DashboardLayout({
     children,
@@ -155,7 +155,7 @@ export default async function DashboardLayout({
             <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                 {user.email === 'acostasamuel947@gmail.com' && (
                     <Link
-                        href="/owner/seguridad"
+                        href="/owner/dashboard"
                         className="flex items-center gap-3 rounded-md bg-indigo-500/10 px-3 py-2.5 text-sm font-bold text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all mb-4"
                     >
                         <LayoutDashboard size={18} />
@@ -358,3 +358,4 @@ export default async function DashboardLayout({
         </DashboardLayoutClient>
     )
 }
+

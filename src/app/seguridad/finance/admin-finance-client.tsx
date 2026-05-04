@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { KPICards } from '@/components/finance/kpi-cards'
-import { RevenueChart } from '@/components/finance/revenue-chart'
-import { ReportsGeneratorModal } from '@/components/finance/reports-generator'
-import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
+import { KPICards } from '@/components/seguridad/kpi-cards'
+import { RevenueChart } from '@/components/seguridad/revenue-chart'
+import { ReportsGeneratorModal } from '@/components/seguridad/reports-generator'
+import { CreateInvoiceModal } from '@/components/seguridad/create-invoice-modal'
 import { FileText, Download, ArrowRight, Plus } from 'lucide-react'
 import Link from 'next/link'
 
@@ -102,3 +102,4 @@ export default function AdminFinanceClient({
         </div>
     )
 }
+

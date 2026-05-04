@@ -129,7 +129,7 @@ export default function InvoiceDetailPage() {
                     <AlertTriangle className="h-16 w-16 text-zinc-600 mb-4" />
                     <h2 className="text-2xl font-bold text-white mb-2">Factura no encontrada</h2>
                     <p className="text-zinc-400 mb-8">El documento que buscas no existe o no tienes permisos para verlo.</p>
-                    <Link href="/dashboard/finance/billing">
+                    <Link href="/seguridad/finance/billing">
                         <Button className="bg-indigo-600 hover:bg-indigo-700">Volver al historial</Button>
                     </Link>
                 </div>
@@ -282,7 +282,7 @@ export default function InvoiceDetailPage() {
 
             {/* Top Navigation & Actions */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
-                <Link href="/dashboard/finance/billing">
+                <Link href="/seguridad/finance/billing">
                     <Button variant="ghost" className="text-zinc-400 hover:text-white pl-0 gap-2 hover:bg-transparent">
                         <ArrowLeft size={16} /> Volver a Facturas
                     </Button>

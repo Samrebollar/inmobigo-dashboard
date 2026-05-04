@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FileText, Download, FileSpreadsheet, History, Calendar, CheckCircle2 } from 'lucide-react'
-import { ReportsGeneratorModal } from '@/components/finance/reports-generator'
+import { ReportsGeneratorModal } from '@/components/seguridad/reports-generator'
 import { motion } from 'framer-motion'
 
 const WhatsappIcon = ({ size = 24, className = "" }) => (
@@ -156,3 +156,4 @@ export default function ReportsPage() {
         </div>
     )
 }
+

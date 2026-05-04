@@ -36,3 +36,4 @@ export default async function ServiciosPage() {
 
     return <ServiciosClient resident={resident} />
 }
+

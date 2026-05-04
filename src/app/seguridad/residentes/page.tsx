@@ -27,9 +27,9 @@ import { Resident } from '@/types/residents'
 import { Invoice } from '@/types/finance'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
-import { CreateResidentModal } from '@/components/residents/CreateResidentModal'
-import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
-import { BulkUploadResidentsModal } from '@/components/residents/BulkUploadResidentsModal'
+import { CreateResidentModal } from '@/components/seguridad/CreateResidentModal'
+import { CreateInvoiceModal } from '@/components/seguridad/create-invoice-modal'
+import { BulkUploadResidentsModal } from '@/components/seguridad/BulkUploadResidentsModal'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -477,7 +477,7 @@ export default function ResidentsPage() {
 
                                     {/* Right: Actions */}
                                     <div className="p-5 md:p-8 lg:w-[260px] flex flex-col xs:flex-row lg:flex-col gap-3 justify-center bg-zinc-950/30">
-                                        <Link href={`/seguridad/residentes/${resident.id}`} className="flex-1 lg:flex-none">
+                                        <Link href={`/dashboard/residentes/${resident.id}`} className="flex-1 lg:flex-none">
                                             <motion.button
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}
@@ -588,3 +588,4 @@ export default function ResidentsPage() {
         </div>
     )
 }
+

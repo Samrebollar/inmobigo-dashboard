@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { SubirComprobanteClient } from '@/components/residente/subir-comprobante-client'
+import { SubirComprobanteClient } from '@/components/seguridad/subir-comprobante-client'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -42,3 +42,4 @@ export default async function SubirComprobantePage() {
         </div>
     )
 }
+

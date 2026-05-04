@@ -387,7 +387,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                 transition={{ delay: 0.5 }}
                 className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6"
             >
-                <Link href="/dashboard/amenidades/reservas" className="block group">
+                <Link href="/seguridad/amenidades/reservas" className="block group">
                     <div className="p-8 h-full rounded-[2.5rem] bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-between group-hover:bg-indigo-600/20 group-hover:border-indigo-500/40 transition-all overflow-hidden relative">
                         <div className="absolute inset-0 bg-grid-indigo-500/[0.05] bg-[length:20px_20px]" />
                         <div className="relative z-10">
@@ -601,7 +601,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                                         </p>
                                     </div>
                                     <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
-                                        <Link href="/dashboard/amenidades/reservas">
+                                        <Link href="/seguridad/amenidades/reservas">
                                             <Button variant="outline" className="h-12 border-indigo-500/30 bg-indigo-500/5 text-indigo-400 font-bold px-8 rounded-2xl text-xs uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all">
                                                 Ver Mis Reservas
                                             </Button>
@@ -619,3 +619,4 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
         </div>
     )
 }
+

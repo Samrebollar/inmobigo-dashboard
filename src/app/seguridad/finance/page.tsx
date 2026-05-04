@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
 import AdminFinanceClient from './admin-finance-client'
-import { ResidentFinanceView } from '@/components/finance/resident-finance-view'
+import { ResidentFinanceView } from '@/components/seguridad/resident-finance-view'
 import { Loader2 } from 'lucide-react'
 
 export default function FinancePage() {
@@ -121,3 +121,4 @@ export default function FinancePage() {
 
   return <AdminFinanceClient initialCondoId={condominiumId} organizationId={organization?.id || 'demo-org-id'} condominiumList={condominiumList} />
 }
+

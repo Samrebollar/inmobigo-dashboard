@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
-import { DelinquencyCenter } from '@/components/finance/delinquency-center'
+import { DelinquencyCenter } from '@/components/seguridad/delinquency-center'
 import { motion } from 'framer-motion'
 
 export default function MorososPage() {
@@ -238,3 +238,4 @@ export default function MorososPage() {
     </div>
   )
 }
+

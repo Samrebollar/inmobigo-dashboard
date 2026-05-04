@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Plus, Filter } from 'lucide-react'
 import { Ticket } from '@/types/tickets'
 import { maintenanceService } from '@/services/maintenance-service'
-import { MaintenanceBoard } from '@/components/maintenance/MaintenanceBoard'
-import { CreateTicketModal } from '@/components/maintenance/CreateTicketModal'
+import { MaintenanceBoard } from '@/components/seguridad/MaintenanceBoard'
+import { CreateTicketModal } from '@/components/seguridad/CreateTicketModal'
 
 export default function AdminMaintenanceClient() {
     const supabase = createClient()
@@ -144,3 +144,4 @@ export default function AdminMaintenanceClient() {
         </div>
     )
 }
+

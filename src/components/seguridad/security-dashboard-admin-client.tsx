@@ -10,7 +10,7 @@ import { dashboardService } from '@/services/dashboard-service'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
+import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { useUserRole } from '@/hooks/use-user-role'
 
 interface AdminDashboardClientProps {
@@ -565,3 +565,4 @@ export default function SecurityDashboardAdminClient({
         </div>
     )
 }
+

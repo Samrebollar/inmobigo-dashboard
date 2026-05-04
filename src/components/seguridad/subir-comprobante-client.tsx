@@ -547,3 +547,4 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
         </div>
     )
 }
+

@@ -17,7 +17,7 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
     return (
         <div className="min-h-screen bg-zinc-950 p-4 md:p-8 space-y-12 max-w-4xl mx-auto font-sans">
             <header className="flex flex-col space-y-6">
-                <Link href="/dashboard">
+                <Link href="/seguridad">
                     <Button variant="ghost" className="text-zinc-500 hover:text-white p-0 gap-2 w-fit">
                         <ArrowLeft size={16} /> Volver al Tablero
                     </Button>
@@ -180,3 +180,4 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
         </div>
     );
 }
+

@@ -18,12 +18,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 
-import { UnitsTab } from '@/components/properties/tabs/UnitsTab'
-import { ResidentsTab } from '@/components/properties/tabs/ResidentsTab'
-import { SummaryTab } from '@/components/properties/tabs/SummaryTab'
-import { FinanceTab } from '@/components/properties/tabs/FinanceTab'
-import { SettingsTab } from '@/components/properties/tabs/SettingsTab'
-import { EditCondominiumModal } from '@/components/properties/EditCondominiumModal'
+import { UnitsTab } from '@/components/seguridad/tabs/UnitsTab'
+import { ResidentsTab } from '@/components/seguridad/tabs/ResidentsTab'
+import { SummaryTab } from '@/components/seguridad/tabs/SummaryTab'
+import { FinanceTab } from '@/components/seguridad/tabs/FinanceTab'
+import { SettingsTab } from '@/components/seguridad/tabs/SettingsTab'
+import { EditCondominiumModal } from '@/components/seguridad/EditCondominiumModal'
 import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
 
@@ -262,11 +262,11 @@ export default function CondominiumPage() {
             if (data && (id.startsWith('demo-') || user)) {
                 setCondo(data)
             } else {
-                router.push('/dashboard/propiedades')
+                router.push('/seguridad/propiedades')
             }
         } catch (error) {
             console.error(error)
-            router.push('/dashboard/propiedades')
+            router.push('/seguridad/propiedades')
         } finally {
             setLoading(false)
         }
@@ -305,7 +305,7 @@ export default function CondominiumPage() {
 
                 {/* Breadcrumb / Back */}
                 <button
-                    onClick={() => router.push('/dashboard/propiedades')}
+                    onClick={() => router.push('/seguridad/propiedades')}
                     className="relative z-10 mb-6 flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
                 >
                     <ArrowLeft className="h-4 w-4" /> Volver a Propiedades

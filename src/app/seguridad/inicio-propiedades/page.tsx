@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { DashboardHeader } from '@/components/seguridad/seguridadHeader'
+import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { DollarSign, Building, Users, Activity, TrendingUp, Home } from 'lucide-react'
 import Link from 'next/link'
@@ -299,3 +299,4 @@ export default async function DashboardPage({
     />
   )
 }
+

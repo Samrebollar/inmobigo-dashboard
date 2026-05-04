@@ -14,7 +14,7 @@ import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { propertiesService } from '@/services/properties-service'
 import { notificationsService } from '@/services/notifications-service'
-import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
+import { CreateInvoiceModal } from '@/components/seguridad/create-invoice-modal'
 import { CommunicationLog } from '@/types/residents'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -340,7 +340,7 @@ export default function ResidentMovementsPage() {
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <div className="z-10 relative">
-                        <Link href="/dashboard/residentes">
+                        <Link href="/seguridad/residentes">
                             <Button variant="ghost" className="pl-0 gap-2 text-zinc-400 hover:text-white hover:bg-transparent">
                                 <ArrowLeft size={16} />
                                 Volver a Residentes

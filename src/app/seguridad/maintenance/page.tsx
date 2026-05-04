@@ -76,3 +76,4 @@ export default async function MaintenancePage() {
     // Default Fallback
     return <AdminMaintenanceClient />
 }
+

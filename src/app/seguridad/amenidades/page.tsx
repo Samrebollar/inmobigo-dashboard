@@ -62,3 +62,4 @@ export default async function AmenidadesPage() {
         <ResidentAmenidadesClient resident={mockResident} />
     )
 }
+

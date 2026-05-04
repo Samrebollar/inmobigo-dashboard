@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { Ticket } from '@/types/tickets'
 import { maintenanceService } from '@/services/maintenance-service'
-import { CreateTicketModal } from '@/components/maintenance/CreateTicketModal'
+import { CreateTicketModal } from '@/components/seguridad/CreateTicketModal'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/utils/supabase/client'
@@ -440,3 +440,4 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
         </div>
     )
 }
+

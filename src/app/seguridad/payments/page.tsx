@@ -35,7 +35,7 @@ export default async function PaymentsPage() {
 
     // If not a resident (e.g. admin), they shouldn't be here in this format
     // But for the sake of the demo and the request, we prioritize the resident view here
-    // Admins have their own 'Integraciones' link now at /seguridad/integrations
+    // Admins have their own 'Integraciones' link now at /dashboard/integrations
     
     const mockResident = resident || {
         first_name: profile?.full_name?.split(' ')[0] || user.user_metadata?.full_name?.split(' ')[0] || 'Residente',
@@ -48,3 +48,4 @@ export default async function PaymentsPage() {
         <ResidentPaymentsClient resident={mockResident} />
     )
 }
+

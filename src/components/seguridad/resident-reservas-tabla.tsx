@@ -254,7 +254,7 @@ export default function ResidentReservasTabla({ resident }: { resident: any }) {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-2">
-                    <Link href="/dashboard/amenidades">
+                    <Link href="/seguridad/amenidades">
                         <Button variant="ghost" className="text-zinc-500 hover:text-white gap-2 p-0 -ml-1 mb-2">
                             <ArrowLeft size={16} /> Volver a Amenidades
                         </Button>
@@ -293,7 +293,7 @@ export default function ResidentReservasTabla({ resident }: { resident: any }) {
                                         <div className="flex flex-col items-center gap-4 text-zinc-600">
                                             <AlertCircle size={48} className="opacity-20" />
                                             <p className="font-bold">No tienes reservas registradas aún.</p>
-                                            <Link href="/dashboard/amenidades">
+                                            <Link href="/seguridad/amenidades">
                                                 <Button variant="outline" className="border-indigo-500/20 text-indigo-400 font-black h-12 rounded-2xl px-6 text-xs uppercase tracking-widest">Reservar Ahora</Button>
                                             </Link>
                                         </div>
@@ -391,3 +391,4 @@ export default function ResidentReservasTabla({ resident }: { resident: any }) {
         </div>
     )
 }
+

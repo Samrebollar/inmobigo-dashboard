@@ -21,3 +21,4 @@ export default async function HelpPage() {
         <ResidentHelpClient user={user} />
     )
 }
+

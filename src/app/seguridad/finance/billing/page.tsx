@@ -568,7 +568,7 @@ export default function BillingPage() {
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex items-center justify-center gap-2">
-                                                        <Link href={`/seguridad/invoices/${inv.id}`} title="Ver Detalle">
+                                                        <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Detalle">
                                                             <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-blue-500 hover:text-blue-400 hover:bg-blue-500/15 transition-colors">
                                                                     <Eye size={16} />
@@ -698,3 +698,4 @@ export default function BillingPage() {
         </div>
     )
 }
+

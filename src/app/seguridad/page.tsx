@@ -55,13 +55,13 @@ export default async function SecurityDashboardPage() {
     console.log(`✨ [Security Dashboard] Activando usuario ${user.email}...`);
     await adminSupabase
       .from('organization_users')
-      .update({ status: 'active', invited_at: new Date().toISOString() }) // Re-using invited_at as activation mark or just leave it
+      .update({ status: 'active', invited_at: new Date().toISOString() })
       .eq('user_id', user.id)
   }
 
   const organizationId = orgUser.organization_id
 
-  // 3. Fetch Active Condominiums for Stats
+  // 4. Fetch Active Condominiums for Stats
   const { data: activeCondominiums } = await adminSupabase
     .from('condominiums')
     .select('id, units_total')
@@ -71,7 +71,7 @@ export default async function SecurityDashboardPage() {
   const activeIds = activeCondominiums?.map((c: any) => c.id) || []
   const totalUnits = activeCondominiums?.reduce((acc: number, c: any) => acc + c.units_total, 0) || 0
 
-  // 4. Fetch Activity
+  // 5. Fetch Activity
   let totalFacturado = 0
   let totalCobrado = 0
   let recentActivity: any[] = []

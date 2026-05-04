@@ -1,0 +1,208 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Check } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { CreateUnitDTO, Unit } from '@/types/units'
+import { unitsService } from '@/services/units-service'
+
+import { useDemoMode } from '@/hooks/use-demo-mode'
+import { useUserRole } from '@/hooks/use-user-role'
+
+interface CreateUnitModalProps {
+    isOpen: boolean
+    onClose: () => void
+    onSuccess: (newUnit?: Unit) => void
+    condominiumId: string
+    unitToEdit?: Unit | null
+}
+
+export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, unitToEdit }: CreateUnitModalProps) {
+    const [loading, setLoading] = useState(false)
+    const [errorMsg, setErrorMsg] = useState<string | null>(null)
+    const { isDemo } = useDemoMode()
+    const { isPropiedades } = useUserRole()
+
+    const [formData, setFormData] = useState<Partial<CreateUnitDTO>>({
+        unit_number: '',
+        floor: '',
+        type: 'apartment',
+        status: 'vacant',
+        monto_mensual: undefined,
+        billing_day: undefined
+    })
+
+    // Reset form when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            if (unitToEdit) {
+                setFormData({
+                    unit_number: unitToEdit.unit_number,
+                    floor: unitToEdit.floor,
+                    type: unitToEdit.type,
+                    status: unitToEdit.status === 'maintenance' ? 'vacant' : unitToEdit.status,
+                    monto_mensual: unitToEdit.monto_mensual,
+                    billing_day: unitToEdit.billing_day
+                })
+            } else {
+                setFormData({
+                    unit_number: '',
+                    floor: '',
+                    type: 'apartment',
+                    status: 'vacant',
+                    monto_mensual: undefined,
+                    billing_day: undefined
+                })
+            }
+        }
+    }, [isOpen, unitToEdit])
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoading(true)
+        setErrorMsg(null)
+
+        try {
+            let result: Unit
+            const payload = formData as CreateUnitDTO
+
+            if (unitToEdit) {
+                result = await unitsService.update(unitToEdit.id, payload)
+            } else {
+                result = await unitsService.create({
+                    ...payload,
+                    condominium_id: condominiumId
+                })
+            }
+            onSuccess(result)
+            onClose()
+        } catch (error: any) {
+            setErrorMsg(error.message || 'Ocurrió un error inesperado al guardar la unidad.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        className="w-full max-w-md overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl"
+                    >
+                        <div className="flex items-center justify-between border-b border-zinc-800 p-6 bg-zinc-900/50">
+                            <h2 className="text-xl font-bold text-white">
+                                {unitToEdit ? (isPropiedades ? 'Editar Unidad Rentable' : 'Editar Unidad') : (isPropiedades ? 'Nueva Unidad Rentable' : 'Nueva Unidad')}
+                            </h2>
+                            <button onClick={onClose} className="rounded-full p-2 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            <AnimatePresence>
+                                {errorMsg && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-400 flex items-start gap-3"
+                                    >
+                                        <X className="h-5 w-5 shrink-0 text-red-500" />
+                                        <p className="leading-relaxed">{errorMsg}</p>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <Input
+                                label={isPropiedades ? 'Número / Nombre de Unidad Rentable' : 'Número / Nombre de Unidad'}
+                                placeholder="Ej. A-101"
+                                value={formData.unit_number}
+                                onChange={(e) => setFormData({ ...formData, unit_number: e.target.value })}
+                                required
+                                autoFocus
+                            />
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label="Piso / Nivel"
+                                    placeholder="Ej. 1"
+                                    value={formData.floor}
+                                    onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                                    required
+                                />
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-zinc-400">Tipo de Unidad</label>
+                                    <select
+                                        value={formData.type}
+                                        onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                                        className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    >
+                                        <option value="apartment">Departamento</option>
+                                        <option value="house">Casa</option>
+                                        <option value="commercial">Local Comercial</option>
+                                        <option value="parking">Estacionamiento</option>
+                                        <option value="storage">Bodega</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label={isPropiedades ? 'Monto mensual ($ renta)' : 'Monto mensual ($ renta/cuota)'}
+                                    type="number"
+                                    placeholder="Ej. 5000"
+                                    value={formData.monto_mensual || ''}
+                                    onChange={(e) => setFormData({ ...formData, monto_mensual: parseFloat(e.target.value) || undefined })}
+                                />
+                                <Input
+                                    label="Día de cobro (1-31)"
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    placeholder="Ej. 5"
+                                    value={formData.billing_day || ''}
+                                    onChange={(e) => setFormData({ ...formData, billing_day: parseInt(e.target.value) || undefined })}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-zinc-400">Estado</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['vacant', 'occupied'].map((status) => (
+                                        <button
+                                            key={status}
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, status: status as any })}
+                                            className={`rounded-lg border p-2.5 text-sm transition-all font-medium ${formData.status === status
+                                                ? 'border-indigo-500 bg-indigo-500/20 text-indigo-400 font-bold shadow-sm'
+                                                : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:bg-zinc-800'
+                                                }`}
+                                        >
+                                            <span>
+                                                {status === 'vacant' ? 'Vacía' : 'Habitada'}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="pt-4">
+                                <Button type="submit" isLoading={loading} className="w-full gap-2 bg-indigo-600 hover:bg-indigo-500 text-white">
+                                    <Check className="h-4 w-4" />
+                                    {unitToEdit ? (isPropiedades ? 'Actualizar Unidad Rentable' : 'Actualizar Unidad') : (isPropiedades ? 'Guardar Unidad Rentable' : 'Guardar Unidad')}
+                                </Button>
+                            </div>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+    )
+}
+

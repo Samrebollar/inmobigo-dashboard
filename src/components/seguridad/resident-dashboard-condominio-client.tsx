@@ -253,17 +253,17 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
                         className="space-y-1.5"
                     >
                         <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-black px-2.5 py-1 rounded-lg uppercase tracking-widest text-[8px]">
-                                Panel de Seguridad
+                            <Badge variant="outline" className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 font-black px-2.5 py-1 rounded-lg uppercase tracking-widest text-[8px]">
+                                Mi Propiedad
                             </Badge>
                             <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse border-2 border-zinc-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                         </div>
                         <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight leading-tight">
-                            Hola, <span className="text-emerald-500/50">{userName.split(' ')[0]}</span>
+                            Hola, <span className="text-indigo-500/50">{userName.split(' ')[0]}</span>
                         </h1>
                         <p className="text-zinc-500 text-sm md:text-base font-bold flex items-center gap-2">
-                             <ShieldCheck className="h-4 w-4 text-emerald-500/30" />
-                            Control de Vigilancia <span className="text-zinc-800">•</span> {resident?.condominiums?.name || 'Inmobigo'}
+                             <Home className="h-4 w-4 text-indigo-500/30" />
+                            {resident?.units?.unit_number || 'A-101'} <span className="text-zinc-800">•</span> {resident?.condominiums?.name || 'Torre Reforma'}
                         </p>
                     </motion.div>
 
@@ -634,7 +634,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
                                 )}
                             </div>
 
-                                <Link href="/dashboard/avisos" className="w-full">
+                                <Link href="/seguridad/avisos" className="w-full">
                                     <Button 
                                         variant="ghost" 
                                         className="w-full text-zinc-500 hover:text-white hover:bg-white/5 transition-all py-6 group rounded-2xl border border-dashed border-white/5 mt-4"
@@ -652,3 +652,4 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
         </div>
     )
 }
+

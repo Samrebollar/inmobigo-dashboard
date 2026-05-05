@@ -78,24 +78,24 @@ export function DashboardHeader({ userEmail, userName, condoName = 'Condominio C
             <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="flex flex-col items-end gap-4"
+                className="flex flex-col items-start md:items-end gap-4 w-full md:w-auto"
             >
-                <div className="text-right">
-                    <div className="flex items-center gap-2 justify-end mb-1">
+                <div className="text-left md:text-right w-full">
+                    <div className="flex items-center gap-2 md:justify-end mb-1">
                         <Calendar className="h-4 w-4 text-indigo-400" />
-                        <span className="text-xl font-bold text-white capitalize tracking-tight">{dateStr}</span>
+                        <span className="text-lg md:text-xl font-bold text-white capitalize tracking-tight">{dateStr}</span>
                     </div>
-                    <div className="flex items-center gap-2 justify-end text-zinc-400 font-mono text-sm bg-zinc-900/30 py-1 px-3 rounded-full border border-zinc-900/50">
+                    <div className="flex items-center gap-2 md:justify-end text-zinc-400 font-mono text-[10px] md:text-sm bg-zinc-900/30 py-1 px-3 rounded-full border border-zinc-900/50 w-fit md:ml-auto">
                         <Clock size={14} className="text-zinc-600" />
                         <span>{timeStr}</span>
                     </div>
                 </div>
 
-                <div className="relative group">
+                <div className="relative group w-full md:w-auto">
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 group-hover:text-indigo-400 transition-colors">
                         <MapPin size={14} />
                     </div>
-                    <select className="appearance-none bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-[10px] font-black uppercase tracking-[0.15em] py-2.5 pl-10 pr-10 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer hover:border-zinc-700 hover:bg-zinc-900 transition-all w-60">
+                    <select className="appearance-none bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-[10px] font-black uppercase tracking-[0.15em] py-2.5 pl-10 pr-10 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer hover:border-zinc-700 hover:bg-zinc-900 transition-all w-full md:w-60">
                         <option className="bg-zinc-950">Todas las propiedades</option>
                         <option className="bg-zinc-950">Las palmas</option>
                         <option className="bg-zinc-950">Zacil</option>

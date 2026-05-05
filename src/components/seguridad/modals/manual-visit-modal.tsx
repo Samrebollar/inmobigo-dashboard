@@ -38,10 +38,10 @@ export function ManualVisitModal({ isOpen, onClose }: ManualVisitModalProps) {
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-900 rounded-[2.5rem] shadow-2xl overflow-hidden"
+                    className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-900 rounded-3xl md:rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
                 >
-                    {/* Header */}
-                    <div className="p-8 pb-4 flex items-center justify-between">
+                    {/* Header - Fixed */}
+                    <div className="p-6 md:p-8 pb-4 flex items-center justify-between border-b border-zinc-900/50">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-emerald-500/10 rounded-2xl">
                                 <UserPlus className="h-6 w-6 text-emerald-500" />
@@ -59,7 +59,7 @@ export function ManualVisitModal({ isOpen, onClose }: ManualVisitModalProps) {
                         </button>
                     </div>
 
-                    <div className="p-8">
+                    <div className="p-6 md:p-8 overflow-y-auto">
                         <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
                             <div className="grid md:grid-cols-2 gap-6">
                                 {/* Propiedad */}

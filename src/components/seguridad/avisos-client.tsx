@@ -612,8 +612,8 @@ export function AvisosClient({
         <div className="space-y-8 animate-in fade-in duration-700">
             {/* Header & Main Stats */}
             <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-2">
-                <div>
-                    <h1 className="text-4xl font-extrabold tracking-tight text-white mb-2 bg-gradient-to-r from-white via-zinc-400 to-zinc-500 bg-clip-text text-transparent">
+                <div className="space-y-1">
+                    <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white bg-gradient-to-r from-white via-zinc-400 to-zinc-500 bg-clip-text text-transparent">
                         {isPropiedades ? 'Administración de Propiedades' : 'Comunicación y Operaciones'}
                     </h1>
                     <p className="text-zinc-500 text-sm md:text-base max-w-2xl font-medium">
@@ -637,10 +637,10 @@ export function AvisosClient({
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <motion.button 
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => {
                             setToastMessage('📊 Abriendo panel de control de lectura...');
                             setTimeout(() => {
@@ -648,15 +648,15 @@ export function AvisosClient({
                                 router.push('/seguridad/control-lectura');
                             }, 1000);
                         }}
-                        className="h-12 px-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-zinc-300 hover:text-white font-bold rounded-2xl transition-all flex items-center gap-2 group relative overflow-hidden shadow-lg"
+                        className="h-12 px-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-zinc-300 hover:text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 group relative overflow-hidden shadow-lg"
                     >
                         <ShieldCheck size={18} className="text-indigo-400 group-hover:scale-110 transition-transform" />
                         <span className="text-sm">Control de lectura</span>
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
                     </motion.button>
                     <motion.button 
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => {
                             setEditingId(null);
                             setNewTitle('');
@@ -672,7 +672,7 @@ export function AvisosClient({
                             setSelectedFile(null);
                             setShowNewModal(true);
                         }}
-                        className="h-12 px-8 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-orange-900/20 transition-all flex items-center gap-3 group relative overflow-hidden"
+                        className="h-12 px-8 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-orange-900/20 transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] transition-transform" />
                         <Bell size={20} className="group-hover:rotate-12 transition-transform duration-300" /> 
@@ -681,14 +681,14 @@ export function AvisosClient({
                 </div>
             </div>
 
-            {/* Premium Tab Navigation */}
-            <div className="flex justify-center">
-                <div className="flex p-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl w-fit backdrop-blur-xl">
+            {/* Premium Tab Navigation - Mobile Responsive Scroll */}
+            <div className="flex justify-start md:justify-center overflow-x-auto pb-4 md:pb-0 scrollbar-hide">
+                <div className="flex p-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl w-fit backdrop-blur-xl whitespace-nowrap">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as TabType)}
-                        className={`relative flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-bold transition-all ${
+                        className={`relative flex items-center gap-2.5 px-4 md:px-6 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-all ${
                             activeTab === tab.id ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                         }`}
                     >

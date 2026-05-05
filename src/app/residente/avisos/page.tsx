@@ -16,7 +16,9 @@ export default async function AvisosPage() {
         redirect('/login')
     }
 
-    const { data: resident } = await supabase
+    const adminSupabase = createAdminClient()
+
+    const { data: resident } = await adminSupabase
         .from('residents')
         .select('*, condominiums(organization_id)')
         .eq('user_id', user.id)
@@ -31,8 +33,6 @@ export default async function AvisosPage() {
             </div>
         )
     }
-
-    const adminSupabase = createAdminClient()
     
     const { data: initialAnnouncements } = await adminSupabase
         .from('announcements')

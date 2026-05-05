@@ -14,11 +14,13 @@ import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { useUserRole } from '@/hooks/use-user-role'
 
 import { PlanExpirationBanner } from '@/components/dashboard/PlanExpirationBanner'
+import { IncomeComparisonChart } from '@/components/dashboard/IncomeComparisonChart'
 
 interface AdminDashboardClientProps {
     userEmail?: string
     userName?: string
     daysRemaining?: number
+    nextPaymentDate?: string
     stats: {
         totalFacturado: number
         totalCobrado: number
@@ -37,6 +39,7 @@ export default function AdminDashboardCondominioClient({
     userEmail, 
     userName, 
     daysRemaining = 999, 
+    nextPaymentDate,
     stats, 
     recentActivity = [] 
 }: AdminDashboardClientProps) {
@@ -65,90 +68,43 @@ export default function AdminDashboardCondominioClient({
 
     useEffect(() => {
         let isMounted = true
-        const fetchIncome = async () => {
+        
+        const fetchData = async () => {
             try {
-                setIsLoadingIncome(true)
-                setIncomeError(null)
-                const data = await financeService.getIncomeSummaryYear(selectedCondoId || undefined)
-                if (isMounted) setIncomeSummary(data)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setIncomeError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingIncome(false)
-            }
-        }
-        fetchIncome()
-        return () => { isMounted = false }
-    }, [selectedCondoId])
+                // Fetch stats that don't depend on selectedCondoId (Global stats)
+                // Note: If you want these to also filter by condo, you'd need to update the service methods
+                const [total, { total_deuda }, tasa, morosidadData] = await Promise.all([
+                    financeService.getTotalIngresos(),
+                    dashboardService.getDeudaTotal(),
+                    financeService.getTasaCobranza(),
+                    financeService.getMorosidad()
+                ])
 
-    useEffect(() => {
-        let isMounted = true
-        const fetchIngresos = async () => {
-            try {
-                setIsLoadingIngresos(true)
-                setIngresosError(null)
-                const total = await financeService.getTotalIngresos()
-                if (isMounted) setTotalIngresos(total)
+                if (isMounted) {
+                    setTotalIngresos(total)
+                    setTotalDeuda(total_deuda)
+                    setTasaCobranza(tasa)
+                    setMorosidad(morosidadData)
+                    setIsLoadingIngresos(false)
+                    setIsLoadingDeuda(false)
+                    setIsLoadingTasa(false)
+                    setIsLoadingMorosidad(false)
+                }
             } catch (err) {
-                console.error(err)
-                if (isMounted) setIngresosError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingIngresos(false)
+                console.error('Error fetching global stats:', err)
+                if (isMounted) {
+                    setIngresosError('Error')
+                    setDeudaError('Error')
+                    setTasaError('Error')
+                    setMorosidadError('Error')
+                    setIsLoadingIngresos(false)
+                    setIsLoadingDeuda(false)
+                    setIsLoadingTasa(false)
+                    setIsLoadingMorosidad(false)
+                }
             }
         }
-        const fetchDeuda = async () => {
-            try {
-                setIsLoadingDeuda(true)
-                setDeudaError(null)
-                const { total_deuda } = await dashboardService.getDeudaTotal()
-                if (isMounted) setTotalDeuda(total_deuda)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setDeudaError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingDeuda(false)
-            }
-        }
-        const fetchTasa = async () => {
-            try {
-                setIsLoadingTasa(true)
-                setTasaError(null)
-                const tasa = await financeService.getTasaCobranza()
-                if (isMounted) setTasaCobranza(tasa)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setTasaError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingTasa(false)
-            }
-        }
-        const fetchMorosidad = async () => {
-            try {
-                setIsLoadingMorosidad(true)
-                setMorosidadError(null)
-                const data = await financeService.getMorosidad()
-                if (isMounted) setMorosidad(data)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setMorosidadError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingMorosidad(false)
-            }
-        }
-        const fetchIncome = async () => {
-            try {
-                setIsLoadingIncome(true)
-                setIncomeError(null)
-                const data = await financeService.getIncomeSummary()
-                if (isMounted) setIncomeSummary(data)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setIncomeError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingIncome(false)
-            }
-        }
+
         const fetchCondos = async () => {
             const supabase = createClient()
             const { data } = await supabase.from('condominiums').select('id, name')
@@ -156,13 +112,31 @@ export default function AdminDashboardCondominioClient({
                 setCondominiums(data)
             }
         }
-        fetchIngresos()
-        fetchDeuda()
-        fetchTasa()
-        fetchMorosidad()
+
+        fetchData()
         fetchCondos()
         return () => { isMounted = false }
     }, [])
+
+    useEffect(() => {
+        let isMounted = true
+        const fetchIncome = async () => {
+            try {
+                setIsLoadingIncome(true)
+                setIncomeError(null)
+                // This method returns { month, total_cobrado, total_pendiente }
+                const data = await financeService.getIncomeSummaryYear(selectedCondoId || undefined)
+                if (isMounted) setIncomeSummary(data)
+            } catch (err) {
+                console.error('Error fetching income summary:', err)
+                if (isMounted) setIncomeError('Error al cargar datos')
+            } finally {
+                if (isMounted) setIsLoadingIncome(false)
+            }
+        }
+        fetchIncome()
+        return () => { isMounted = false }
+    }, [selectedCondoId])
 
     const container = {
         hidden: { opacity: 0 },
@@ -183,21 +157,16 @@ export default function AdminDashboardCondominioClient({
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
 
-            <PlanExpirationBanner daysRemaining={daysRemaining} />
-
             <motion.div
                 variants={container}
                 initial="hidden"
                 animate="show"
                 className="space-y-8"
             >
+                <PlanExpirationBanner dias={daysRemaining || 0} />
+
                 {/* Stats Grid */}
-                <motion.div
-                    variants={container}
-                    initial="hidden"
-                    animate="show"
-                    className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-                >
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <motion.div variants={item} whileHover={{ y: -5 }}>
                         <Card className="bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -293,71 +262,63 @@ export default function AdminDashboardCondominioClient({
                             </CardContent>
                         </Card>
                     </motion.div>
-                </motion.div>
+                </div>
+            </motion.div>
 
                 <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 lg:grid-cols-7">
                     {/* Main Chart Section */}
                     <motion.div variants={item} className="lg:col-span-4">
-                        <Card className="h-full bg-zinc-900 border-zinc-800">
-                            <CardHeader className="flex flex-row items-center justify-between">
-                                <div>
-                                    <CardTitle className="text-white">Resumen de Ingresos</CardTitle>
-                                    <CardDescription className="text-zinc-400">Balance anual de cobros vs pendientes.</CardDescription>
-                                </div>
-                                <select 
-                                    className="bg-zinc-950 border border-zinc-800 text-sm rounded px-2 py-1 text-zinc-300 outline-none focus:border-indigo-500 max-w-[150px] md:max-w-[200px] truncate"
-                                    value={selectedCondoId}
-                                    onChange={(e) => setSelectedCondoId(e.target.value)}
-                                >
-                                    <option value="">Global (todas las propiedades)</option>
-                                    {condominiums.map(condo => (
-                                        <option key={condo.id} value={condo.id}>{condo.name}</option>
-                                    ))}
-                                </select>
-                            </CardHeader>
-                            <CardContent className="pl-2">
-                                {isLoadingIncome ? (
-                                    <div className="h-[200px] md:h-[240px] w-full flex items-end justify-between px-2 gap-1 animate-pulse">
-                                        {[...Array(12)].map((_, i) => (
-                                            <div key={i} className="flex-1 bg-zinc-800 rounded-t-sm h-full opacity-20"></div>
-                                        ))}
+                        <Card className="h-full bg-zinc-900/50 border-zinc-800 backdrop-blur-sm overflow-hidden group">
+                            <CardHeader className="flex flex-row items-center justify-between border-b border-white/5 pb-6">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                                        <CardTitle className="text-white text-lg">Resumen de Ingresos</CardTitle>
                                     </div>
-                                ) : incomeError ? (
-                                    <div className="h-[200px] md:h-[240px] flex items-center justify-center text-rose-500 text-sm">{incomeError}</div>
-                                ) : incomeSummary.length === 0 ? (
-                                    <div className="h-[200px] md:h-[240px] flex items-center justify-center text-zinc-500 text-sm">Sin datos para mostrar</div>
-                                ) : (
-                                    <>
-                                        <div className="h-[200px] md:h-[240px] w-full flex items-end justify-between px-2 gap-1 md:gap-2">
-                                            {incomeSummary.map((item, i) => {
-                                                const maxAmount = Math.max(...incomeSummary.map(d => Math.max(d.total_cobrado, d.total_pendiente, 1)));
-                                                
-                                                const cobradoHeight = (item.total_cobrado / maxAmount) * 100;
-                                                const pendienteHeight = (item.total_pendiente / maxAmount) * 100;
-
-                                                return (
-                                                    <div key={i} className="flex-1 flex items-end justify-center gap-[2px] h-full relative group transition-all">
-                                                        {/* Green Bar (Cobrado) */}
-                                                        <div className="w-1/2 bg-emerald-500 hover:bg-emerald-400 rounded-t-sm transition-all" style={{ height: `${Math.max(cobradoHeight, 2)}%` }}></div>
-                                                        {/* Red/Orange Bar (Pendiente) */}
-                                                        <div className="w-1/2 bg-amber-500 hover:bg-amber-400 rounded-t-sm transition-all" style={{ height: `${Math.max(pendienteHeight, 2)}%` }}></div>
-                                                        
-                                                        {/* Tooltip on hover */}
-                                                        <div className="opacity-0 group-hover:opacity-100 absolute -top-16 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white text-xs rounded p-2 z-10 whitespace-nowrap pointer-events-none transition-opacity">
-                                                            <div className="font-bold mb-1">{item.month}</div>
-                                                            <div className="text-emerald-400">Cobrado: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(item.total_cobrado)}</div>
-                                                            <div className="text-amber-400">Pendiente: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(item.total_pendiente)}</div>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
+                                    <CardDescription className="text-zinc-500 text-xs">Comparativa de flujo de caja y recaudación mensual.</CardDescription>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="hidden md:flex items-center gap-4 mr-4 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                            <span>Cobrado</span>
                                         </div>
-                                        <div className="flex justify-between mt-2 px-2 text-[8px] md:text-[10px] text-zinc-500">
-                                            {incomeSummary.map((item, i) => (
-                                                <span key={i} className="flex-1 text-center truncate px-[1px]">{item.month}</span>
-                                            ))}
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-2 h-2 rounded-full bg-amber-500" />
+                                            <span>Pendiente</span>
                                         </div>
-                                    </>
+                                        <div className="h-4 w-px bg-zinc-800 mx-1" />
+                                        <div className="flex items-center gap-1.5 text-indigo-400">
+                                            <Activity className="h-3 w-3" />
+                                            <span>Tasa: {tasaCobranza?.toFixed(1)}%</span>
+                                        </div>
+                                    </div>
+                                    <select 
+                                        className="bg-zinc-950/50 border border-zinc-800 text-xs rounded-lg px-3 py-1.5 text-zinc-400 outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all cursor-pointer hover:bg-zinc-900"
+                                        value={selectedCondoId}
+                                        onChange={(e) => setSelectedCondoId(e.target.value)}
+                                    >
+                                        <option value="">Todo el Portafolio</option>
+                                        {condominiums.map(condo => (
+                                            <option key={condo.id} value={condo.id}>{condo.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pt-6">
+                                <IncomeComparisonChart 
+                                    data={incomeSummary} 
+                                    isLoading={isLoadingIncome} 
+                                />
+                                
+                                {incomeError && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm z-10">
+                                        <div className="text-rose-500 text-sm flex flex-col items-center gap-2">
+                                            <AlertTriangle className="h-5 w-5" />
+                                            <span>{incomeError}</span>
+                                            <Button variant="ghost" size="sm" onClick={() => setSelectedCondoId(selectedCondoId)} className="mt-2 text-zinc-400 hover:text-white">Reintentar</Button>
+                                        </div>
+                                    </div>
                                 )}
                             </CardContent>
                         </Card>
@@ -461,7 +422,7 @@ export default function AdminDashboardCondominioClient({
                         variants={container}
                         initial="hidden"
                         animate="show"
-                        className="grid gap-4 md:grid-cols-3"
+                        className="grid gap-4 md:grid-cols-2"
                     >
                         <Link href="/dashboard/morosos" className="block">
                             <motion.div variants={item} whileHover={{ y: -5 }}>
@@ -489,22 +450,6 @@ export default function AdminDashboardCondominioClient({
                                         <div>
                                             <p className="text-2xl font-bold text-white">{stats.incidenciasPendientes || 0}</p>
                                             <p className="text-sm text-zinc-400">Incidencias pendientes</p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        </Link>
-
-                        <Link href="/dashboard/avisos" className="block">
-                            <motion.div variants={item} whileHover={{ y: -5 }}>
-                                <Card className="bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors cursor-pointer group h-full">
-                                    <CardContent className="p-6 flex items-center gap-4">
-                                        <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 flex-shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                                            <Megaphone className="h-6 w-6" />
-                                        </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-white">{stats.anuncios || 0}</p>
-                                            <p className="text-sm text-zinc-400">Anuncios</p>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -586,7 +531,6 @@ export default function AdminDashboardCondominioClient({
                         </motion.div>
                     </Link>
                 </motion.div>
-            </motion.div>
         </div>
     )
 }

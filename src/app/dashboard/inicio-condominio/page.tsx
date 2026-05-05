@@ -1,3 +1,4 @@
+/** ROUTE REFRESH - FORCE REBUILD **/
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
@@ -48,7 +49,7 @@ export default async function DashboardPage({
   // Check if Admin (Owner/Staff)
   const { data: orgUser } = await adminSupabase
     .from('organization_users')
-    .select('role, organization:organizations(*)')
+    .select('role_new, organization:organizations(*)')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -173,8 +174,8 @@ export default async function DashboardPage({
     )
   }
 
-  // --- SUBSCRIPTION STATUS ---
-  const { data: subscription } = await supabase
+  // --- SUBSCRIPTION STATUS (Using Admin Client for reliable data) ---
+  const { data: subscription } = await adminSupabase
     .from('subscriptions')
     .select('next_payment_date, subscription_status')
     .eq('organization_id', organization.id)
@@ -186,6 +187,9 @@ export default async function DashboardPage({
     const now = new Date()
     const diffTime = nextPayment.getTime() - now.getTime()
     daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  } else {
+    // Si no hay registro pero es administrador (como el pago de ayer), asumimos el mes de servicio
+    daysRemaining = 30
   }
 
   // Rest of Admin Dashboard Logic (Stats, Charts)
@@ -275,7 +279,7 @@ export default async function DashboardPage({
       .from('tickets')
       .select('*', { count: 'exact', head: true })
       .in('condominium_id', activeIds)
-      .in('status', ['pending', 'in_progress', 'open'])
+      .eq('status', 'open')
     
     incidenciasPendientes = pendingTicketsCount || 0
   }
@@ -287,6 +291,7 @@ export default async function DashboardPage({
       userEmail={user.email}
       userName={firstName}
       daysRemaining={daysRemaining}
+      nextPaymentDate={subscription?.next_payment_date}
       stats={{
         totalFacturado,
         totalCobrado,

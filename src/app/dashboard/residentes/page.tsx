@@ -96,11 +96,8 @@ export default function ResidentsPage() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            const { data: orgUser } = await supabase
-                .from('organization_users')
-                .select('organization_id')
-                .eq('user_id', user.id)
-                .single()
+            const response = await fetch('/api/auth/org-user')
+            const { orgUser } = await response.json()
 
             if (!orgUser) {
                 if (isDemo) {

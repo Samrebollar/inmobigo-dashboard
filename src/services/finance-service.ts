@@ -711,7 +711,7 @@ export const financeService = {
     async getIncomeSummaryYear(condominiumId?: string): Promise<Array<{ month: string, total_cobrado: number, total_pendiente: number }>> {
         const supabase = createClient()
         // If condominiumId is not defined, supabase handles it as null which matches our RPC default
-        const { data, error } = await supabase.rpc('get_income_summary_year', condominiumId ? { p_condominium_id: condominiumId } : {})
+        const { data, error } = await supabase.rpc('get_income_summary_year', { p_condominium_id: condominiumId || null })
         
         if (error) {
             console.error('[financeService.getIncomeSummaryYear] error:', error)

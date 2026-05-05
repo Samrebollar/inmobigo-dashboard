@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createAnnouncement, deleteAnnouncementAction } from '@/app/actions/announcement-actions'
+import { createAnnouncement, deleteAnnouncementAction, getAdminAnnouncementsAction } from '@/app/actions/announcement-actions'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
@@ -252,23 +252,24 @@ export function AvisosClient({
         }
         
         try {
-            console.log('📡 [Avisos] Buscando anuncios para Org:', admin.organization_id);
-            const { data, error } = await supabase
-                .from('announcements')
-                .select('*')
-                .eq('organization_id', admin.organization_id)
-                .order('created_at', { ascending: false })
+            console.log('📡 [Avisos] Buscando anuncios para Org (Server Action):', admin.organization_id);
+            const result = await getAdminAnnouncementsAction(admin.organization_id);
 
-            console.log('📦 [Avisos] Resultado raw de Supabase:', { data, error });
-
-            if (error) throw error
-
-            if (data) {
-                const mappedAnnouncements = data.map(ann => mapDbToUI(ann))
-                setAnnouncements(mappedAnnouncements)
+            if (!result.success) {
+                console.error('❌ Error fetching announcements:', result.error);
+                return;
             }
-        } catch (error) {
-            console.error('Error fetching announcements:', error)
+
+            if (result.data) {
+                const mappedAnnouncements = result.data.map((ann: any) => mapDbToUI(ann));
+                setAnnouncements(mappedAnnouncements);
+            }
+        } catch (error: any) {
+            console.error('🔥 Exception fetching announcements:', {
+                message: error?.message,
+                details: error?.details,
+                error
+            });
         }
     }
 

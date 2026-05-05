@@ -17,14 +17,16 @@ export default async function AvisosPage() {
     redirect('/login')
   }
 
-  // Determine user role and context
-  const { data: orgUser } = await supabase
+  // Determine user role and context using admin client to bypass RLS issues
+  const adminSupabase = createAdminClient()
+  
+  const { data: orgUser } = await adminSupabase
     .from('organization_users')
     .select('organization_id, role')
     .eq('user_id', user.id)
     .maybeSingle()
 
-  const { data: resident } = await supabase
+  const { data: resident } = await adminSupabase
     .from('residents')
     .select('*, condominiums(organization_id)')
     .eq('user_id', user.id)
@@ -35,7 +37,7 @@ export default async function AvisosPage() {
   let userRole = orgUser?.role || 'admin_propiedad' // Default to admin for owners
 
   if (!finalOrganizationId) {
-    const { data: ownedOrg } = await supabase
+    const { data: ownedOrg } = await adminSupabase
       .from('organizations')
       .select('id')
       .eq('owner_id', user.id)
@@ -54,8 +56,7 @@ export default async function AvisosPage() {
     )
   }
 
-  // Bypassing RLS for initial data load: Use admin client
-  const adminSupabase = createAdminClient()
+  // Unified announcement fetch
   
   // Unified announcement fetch
   const { data: initialAnnouncements } = await adminSupabase

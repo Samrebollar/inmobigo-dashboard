@@ -14,11 +14,13 @@ import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { useUserRole } from '@/hooks/use-user-role'
 
 import { PlanExpirationBanner } from '@/components/dashboard/PlanExpirationBanner'
+import { IncomeComparisonChart } from '@/components/dashboard/IncomeComparisonChart'
 
 interface AdminDashboardClientProps {
     userEmail?: string
     userName?: string
     daysRemaining?: number
+    nextPaymentDate?: string
     stats: {
         totalFacturado: number
         totalCobrado: number
@@ -37,6 +39,7 @@ export default function AdminDashboardPropiedadesClient({
     userEmail, 
     userName, 
     daysRemaining = 999, 
+    nextPaymentDate,
     stats, 
     recentActivity = [] 
 }: AdminDashboardClientProps) {
@@ -140,7 +143,8 @@ export default function AdminDashboardPropiedadesClient({
             try {
                 setIsLoadingIncome(true)
                 setIncomeError(null)
-                const data = await financeService.getIncomeSummary()
+                // Usar getIncomeSummaryYear para consistencia con el dashboard de condominios
+                const data = await financeService.getIncomeSummaryYear(selectedCondoId || undefined)
                 if (isMounted) setIncomeSummary(data)
             } catch (err) {
                 console.error(err)
@@ -183,21 +187,16 @@ export default function AdminDashboardPropiedadesClient({
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
 
-            <PlanExpirationBanner daysRemaining={daysRemaining} />
-
             <motion.div
                 variants={container}
                 initial="hidden"
                 animate="show"
                 className="space-y-8"
             >
+                <PlanExpirationBanner dias={daysRemaining || 0} />
+
                 {/* Stats Grid */}
-                <motion.div
-                    variants={container}
-                    initial="hidden"
-                    animate="show"
-                    className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-                >
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <motion.div variants={item} whileHover={{ y: -5 }}>
                         <Card className="bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -293,9 +292,10 @@ export default function AdminDashboardPropiedadesClient({
                             </CardContent>
                         </Card>
                     </motion.div>
-                </motion.div>
+                </div>
+            </motion.div>
 
-                <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 lg:grid-cols-7">
+            <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 lg:grid-cols-7">
                     {/* Main Chart Section */}
                     <motion.div variants={item} className="lg:col-span-4">
                         <Card className="h-full bg-zinc-900 border-zinc-800">
@@ -316,48 +316,19 @@ export default function AdminDashboardPropiedadesClient({
                                 </select>
                             </CardHeader>
                             <CardContent className="pl-2">
-                                {isLoadingIncome ? (
-                                    <div className="h-[200px] md:h-[240px] w-full flex items-end justify-between px-2 gap-1 animate-pulse">
-                                        {[...Array(12)].map((_, i) => (
-                                            <div key={i} className="flex-1 bg-zinc-800 rounded-t-sm h-full opacity-20"></div>
-                                        ))}
+                                <IncomeComparisonChart 
+                                    data={incomeSummary} 
+                                    isLoading={isLoadingIncome} 
+                                />
+                                
+                                {incomeError && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm z-10">
+                                        <div className="text-rose-500 text-sm flex flex-col items-center gap-2">
+                                            <AlertTriangle className="h-5 w-5" />
+                                            <span>{incomeError}</span>
+                                            <Button variant="ghost" size="sm" onClick={() => setSelectedCondoId(selectedCondoId)} className="mt-2 text-zinc-400 hover:text-white">Reintentar</Button>
+                                        </div>
                                     </div>
-                                ) : incomeError ? (
-                                    <div className="h-[200px] md:h-[240px] flex items-center justify-center text-rose-500 text-sm">{incomeError}</div>
-                                ) : incomeSummary.length === 0 ? (
-                                    <div className="h-[200px] md:h-[240px] flex items-center justify-center text-zinc-500 text-sm">Sin datos para mostrar</div>
-                                ) : (
-                                    <>
-                                        <div className="h-[200px] md:h-[240px] w-full flex items-end justify-between px-2 gap-1 md:gap-2">
-                                            {incomeSummary.map((item, i) => {
-                                                const maxAmount = Math.max(...incomeSummary.map(d => Math.max(d.total_cobrado, d.total_pendiente, 1)));
-                                                
-                                                const cobradoHeight = (item.total_cobrado / maxAmount) * 100;
-                                                const pendienteHeight = (item.total_pendiente / maxAmount) * 100;
-
-                                                return (
-                                                    <div key={i} className="flex-1 flex items-end justify-center gap-[2px] h-full relative group transition-all">
-                                                        {/* Green Bar (Cobrado) */}
-                                                        <div className="w-1/2 bg-emerald-500 hover:bg-emerald-400 rounded-t-sm transition-all" style={{ height: `${Math.max(cobradoHeight, 2)}%` }}></div>
-                                                        {/* Red/Orange Bar (Pendiente) */}
-                                                        <div className="w-1/2 bg-amber-500 hover:bg-amber-400 rounded-t-sm transition-all" style={{ height: `${Math.max(pendienteHeight, 2)}%` }}></div>
-                                                        
-                                                        {/* Tooltip on hover */}
-                                                        <div className="opacity-0 group-hover:opacity-100 absolute -top-16 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white text-xs rounded p-2 z-10 whitespace-nowrap pointer-events-none transition-opacity">
-                                                            <div className="font-bold mb-1">{item.month}</div>
-                                                            <div className="text-emerald-400">Cobrado: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(item.total_cobrado)}</div>
-                                                            <div className="text-amber-400">Pendiente: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(item.total_pendiente)}</div>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                        <div className="flex justify-between mt-2 px-2 text-[8px] md:text-[10px] text-zinc-500">
-                                            {incomeSummary.map((item, i) => (
-                                                <span key={i} className="flex-1 text-center truncate px-[1px]">{item.month}</span>
-                                            ))}
-                                        </div>
-                                    </>
                                 )}
                             </CardContent>
                         </Card>
@@ -461,7 +432,7 @@ export default function AdminDashboardPropiedadesClient({
                         variants={container}
                         initial="hidden"
                         animate="show"
-                        className="grid gap-4 md:grid-cols-3"
+                        className="grid gap-4 md:grid-cols-2"
                     >
                         <Link href="/dashboard/morosos" className="block">
                             <motion.div variants={item} whileHover={{ y: -5 }}>
@@ -489,22 +460,6 @@ export default function AdminDashboardPropiedadesClient({
                                         <div>
                                             <p className="text-2xl font-bold text-white">{stats.incidenciasPendientes || 0}</p>
                                             <p className="text-sm text-zinc-400">Incidencias pendientes</p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        </Link>
-
-                        <Link href="/dashboard/avisos" className="block">
-                            <motion.div variants={item} whileHover={{ y: -5 }}>
-                                <Card className="bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors cursor-pointer group h-full">
-                                    <CardContent className="p-6 flex items-center gap-4">
-                                        <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 flex-shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                                            <Megaphone className="h-6 w-6" />
-                                        </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-white">{stats.anuncios || 0}</p>
-                                            <p className="text-sm text-zinc-400">Anuncios</p>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -586,7 +541,6 @@ export default function AdminDashboardPropiedadesClient({
                         </motion.div>
                     </Link>
                 </motion.div>
-            </motion.div>
         </div>
     )
 }

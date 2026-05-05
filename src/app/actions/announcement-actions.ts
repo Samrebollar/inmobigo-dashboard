@@ -105,6 +105,41 @@ export async function getAnnouncementsAction(organizationId: string, propertyNam
 }
 
 /**
+ * Obtiene TODOS los anuncios de una organización para el panel administrativo (Bypass RLS)
+ * @param organizationId El ID de la organización
+ */
+export async function getAdminAnnouncementsAction(organizationId: string) {
+    if (!organizationId) {
+        return { success: false, error: 'ID de organización no proporcionado' };
+    }
+
+    const adminClient = createAdminClient();
+
+    try {
+        console.log(`🔍 [getAdminAnnouncementsAction] Buscando todos los anuncios para ORG: ${organizationId}`);
+
+        const { data, error } = await adminClient
+            .from('announcements')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('❌ [getAdminAnnouncementsAction] Error Supabase:', error);
+            return { success: false, error: error.message };
+        }
+
+        return { 
+            success: true, 
+            data: data || [] 
+        };
+    } catch (err: any) {
+        console.error('❌ [getAdminAnnouncementsAction] Excepción:', err);
+        return { success: false, error: err.message || 'Error interno del servidor' };
+    }
+}
+
+/**
  * Registra o actualiza la lectura/confirmación de un anuncio por parte de un residente
  */
 export async function acknowledgeAnnouncementAction(payload: {

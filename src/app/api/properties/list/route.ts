@@ -20,6 +20,7 @@ export async function GET() {
         .maybeSingle()
 
     let organizationId = orgUser?.organization_id
+    console.log(`[API /properties/list] User: ${user.id}, OrgID: ${organizationId}`)
 
     if (!organizationId) {
         // Fallback: check if owner

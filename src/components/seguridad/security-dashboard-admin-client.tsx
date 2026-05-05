@@ -23,6 +23,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
+import { QRScannerModal } from '@/components/seguridad/modals/qr-scanner-modal'
+import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-modal'
 
 interface SecurityDashboardClientProps {
     userEmail?: string
@@ -43,6 +45,8 @@ export default function SecurityDashboardAdminClient({
     condoName
 }: SecurityDashboardClientProps) {
     const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria' | 'alertas'>('visitas')
+    const [isQRScannerOpen, setIsQRScannerOpen] = useState(false)
+    const [isManualVisitOpen, setIsManualVisitOpen] = useState(false)
     
     // Mocks para KPIs operativos en tiempo real
     const operationalStats = [
@@ -163,15 +167,16 @@ export default function SecurityDashboardAdminClient({
                         {/* Acciones Rápidas */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {[
-                                { label: 'Escanear QR', icon: QrCode, color: 'bg-indigo-600 hover:bg-indigo-500', desc: 'Acceso rápido' },
-                                { label: 'Visita', icon: UserPlus, color: 'bg-emerald-600 hover:bg-emerald-500', desc: 'Registro manual' },
-                                { label: 'Paquete', icon: Package, color: 'bg-amber-600 hover:bg-amber-500', desc: 'Recepción' },
-                                { label: 'Incidente', icon: AlertTriangle, color: 'bg-rose-600 hover:bg-rose-500', desc: 'Reportar falla' },
+                                { label: 'Escanear QR', icon: QrCode, color: 'bg-indigo-600 hover:bg-indigo-500', desc: 'Acceso rápido', onClick: () => setIsQRScannerOpen(true) },
+                                { label: 'Visita', icon: UserPlus, color: 'bg-emerald-600 hover:bg-emerald-500', desc: 'Registro manual', onClick: () => setIsManualVisitOpen(true) },
+                                { label: 'Paquete', icon: Package, color: 'bg-amber-600 hover:bg-amber-500', desc: 'Recepción', onClick: () => {} },
+                                { label: 'Incidente', icon: AlertTriangle, color: 'bg-rose-600 hover:bg-rose-500', desc: 'Reportar falla', onClick: () => {} },
                             ].map((action, i) => (
                                 <motion.button
                                     key={i}
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
+                                    onClick={action.onClick}
                                     className={cn(
                                         "flex flex-col items-center justify-center p-6 rounded-2xl transition-all shadow-xl gap-3 text-white group",
                                         action.color
@@ -282,6 +287,16 @@ export default function SecurityDashboardAdminClient({
                     </div>
                 </div>
             </motion.div>
+
+            {/* Modales Operativos */}
+            <QRScannerModal 
+                isOpen={isQRScannerOpen} 
+                onClose={() => setIsQRScannerOpen(false)} 
+            />
+            <ManualVisitModal 
+                isOpen={isManualVisitOpen} 
+                onClose={() => setIsManualVisitOpen(false)} 
+            />
         </div>
     )
 }

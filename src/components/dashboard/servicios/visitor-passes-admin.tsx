@@ -52,9 +52,44 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
 
     useEffect(() => {
         const orgId = admin?.organization_id
-        if (orgId && initialPasses) {
+        if (!orgId) return
+
+        // 1. Sincronizar pases iniciales
+        if (initialPasses) {
             setPasses(initialPasses)
             setLoading(false)
+        }
+
+        // 2. Suscripción Realtime para actualizaciones automáticas
+        const channel = supabase
+            .channel(`realtime-passes-dashboard-${orgId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'visitor_passes',
+                    filter: `organization_id=eq.${orgId}`
+                },
+                (payload) => {
+                    console.log('🔥 Cambio en pases (Dashboard) detectado:', payload)
+                    
+                    if (payload.eventType === 'INSERT') {
+                        const newPass = payload.new as VisitorPass
+                        setPasses(prev => [newPass, ...prev])
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updatedPass = payload.new as VisitorPass
+                        setPasses(prev => prev.map(p => p.id === updatedPass.id ? updatedPass : p))
+                    } else if (payload.eventType === 'DELETE') {
+                        const deletedId = (payload.old as any).id
+                        setPasses(prev => prev.filter(p => p.id !== deletedId))
+                    }
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
         }
     }, [initialPasses, admin?.organization_id])
 
@@ -83,11 +118,28 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
     const getDisplayStatus = (pass: VisitorPass) => {
         if (pass.status !== 'pending') return pass.status
         
-        const now = new Date()
-        // Crear fecha de fin combinando visit_date y end_time
-        const visitEndDateTime = new Date(`${pass.visit_date}T${pass.end_time}`)
-        
-        return now > visitEndDateTime ? 'expired' : 'pending'
+        try {
+            const now = new Date()
+            
+            // Asegurarnos de que el formato de hora sea HH:mm:ss o HH:mm
+            let timeStr = pass.end_time
+            if (timeStr && timeStr.length === 5) timeStr += ':59' // Si es 21:00 -> 21:00:59
+            if (!timeStr) timeStr = '23:59:59'
+
+            // Construcción robusta de la fecha de fin
+            const [year, month, day] = pass.visit_date.split('-').map(Number)
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number)
+            
+            const visitEndDateTime = new Date(year, month - 1, day, hours, minutes, seconds || 0)
+            
+            // Si la fecha es inválida, confiar en el estado de la base de datos
+            if (isNaN(visitEndDateTime.getTime())) return pass.status
+
+            return now > visitEndDateTime ? 'expired' : 'pending'
+        } catch (e) {
+            console.error('Error parsing pass expiration:', e)
+            return pass.status
+        }
     }
 
     const handleRegisterEntry = async (pass: VisitorPass) => {
@@ -353,8 +405,16 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
                                                     </div>
                                                 </>
                                             ) : (
-                                                <div className="w-full h-10 flex items-center justify-center bg-zinc-800/10 rounded-xl border border-zinc-800/30">
-                                                    <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">Pase No Gestionable</p>
+                                                <div className={`w-full h-10 flex items-center justify-center rounded-xl border transition-all duration-500 ${
+                                                    (currentStatus === 'used' || pass.status === 'used')
+                                                        ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)]' 
+                                                        : 'bg-zinc-800/10 border-zinc-800/30'
+                                                }`}>
+                                                    <p className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${
+                                                        (currentStatus === 'used' || pass.status === 'used') ? 'text-emerald-400' : 'text-zinc-500'
+                                                    }`}>
+                                                        {(currentStatus === 'used' || pass.status === 'used') ? 'Visita Ingresada' : 'Pase No Gestionable'}
+                                                    </p>
                                                 </div>
                                             )}
                                         </div>

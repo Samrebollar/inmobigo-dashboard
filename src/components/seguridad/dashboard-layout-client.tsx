@@ -65,9 +65,9 @@ export function DashboardLayoutClient({
     }, [isSidebarOpen])
 
     return (
-        <div className="flex h-screen w-full bg-zinc-950 text-white overflow-hidden pointer-events-auto">
+        <div className="flex h-screen w-full bg-black text-white overflow-hidden pointer-events-auto">
             {/* Desktop Sidebar */}
-            <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-zinc-800 bg-zinc-900/50 backdrop-blur-xl flex-col">
+            <aside className="hidden lg:flex w-64 flex-shrink-0 border-r border-zinc-900 bg-black flex-col">
                 {sidebarContent}
             </aside>
 
@@ -80,16 +80,16 @@ export function DashboardLayoutClient({
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsSidebarOpen(false)}
-                            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+                            className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden"
                         />
                         <motion.aside
                             initial={{ x: '-100%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '-100%' }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="fixed inset-y-0 left-0 z-50 w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col lg:hidden"
+                            className="fixed inset-y-0 left-0 z-50 w-72 bg-black border-r border-zinc-900 flex flex-col lg:hidden"
                         >
-                            <div className="flex h-16 items-center justify-between border-b border-zinc-800 px-6">
+                            <div className="flex h-16 items-center justify-between border-b border-zinc-900 px-6">
                                 <Link href="/seguridad" className="text-lg font-bold tracking-tight text-white flex items-center gap-3">
                                     <img src="/logo-inmobigo.png" alt="InmobiGo Logo" className="h-12 w-auto object-contain" />
                                     <span>InmobiGo</span>
@@ -112,7 +112,7 @@ export function DashboardLayoutClient({
             {/* Main Content */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 {/* Header */}
-                <header className="flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4 md:px-6 backdrop-blur-xl sticky top-0 z-30 w-full">
+                <header className="flex h-16 items-center justify-between border-b border-zinc-900 bg-black px-4 md:px-6 sticky top-0 z-30 w-full">
                     <div className="flex items-center gap-4 flex-1">
                         <button
                             onClick={() => setIsSidebarOpen(true)}
@@ -121,7 +121,7 @@ export function DashboardLayoutClient({
                             <Menu size={24} />
                         </button>
 
-                        <div className="hidden md:flex items-center gap-4 bg-zinc-900/50 px-3 py-1.5 rounded-lg border border-zinc-800 text-zinc-400 focus-within:border-indigo-500/50 focus-within:text-white transition-colors w-full max-w-md">
+                        <div className="hidden md:flex items-center gap-4 bg-zinc-900/30 px-3 py-1.5 rounded-lg border border-zinc-900 text-zinc-400 focus-within:border-indigo-500/50 focus-within:text-white transition-colors w-full max-w-md">
                             <Search size={16} />
                             {headerActions}
                         </div>
@@ -144,91 +144,16 @@ export function DashboardLayoutClient({
                                 <img
                                     src={avatarUrl}
                                     alt={displayName}
-                                    className="h-8 w-8 md:h-9 md:h-9 rounded-full object-cover border-2 border-zinc-800 hover:border-indigo-500 transition-colors"
+                                    className="h-8 w-8 md:h-9 md:h-9 rounded-full object-cover border-2 border-zinc-900 hover:border-indigo-500 transition-colors"
                                 />
                             ) : (
-                                <div className="h-8 w-8 md:h-9 md:h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 cursor-pointer border-2 border-zinc-800 hover:border-indigo-500 transition-colors"></div>
+                                <div className="h-8 w-8 md:h-9 md:h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 cursor-pointer border-2 border-zinc-900 hover:border-indigo-500 transition-colors"></div>
                             )}
                         </Link>
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto bg-zinc-950 relative">
-                    {/* BANNERS SECTION */}
-                    <div className="sticky top-0 z-20 w-full flex flex-col">
-                        {isDemoMode && (
-                            <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 md:px-8 py-3 flex items-center justify-between backdrop-blur-md">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                                    <p className="text-[10px] md:text-xs font-medium text-amber-200/80 truncate">
-                                        <span className="font-bold text-amber-500 uppercase tracking-wider mr-2 hidden xs:inline">Modo Demo:</span>
-                                        Estás previsualizando las funciones. Suscríbete para activar.
-                                    </p>
-                                </div>
-                                <Link
-                                    href="/seguridad/configuracion/planes"
-                                    className="text-[9px] md:text-[10px] font-black uppercase tracking-widest bg-amber-500 text-black px-3 md:px-4 py-1.5 rounded hover:bg-amber-400 transition-colors flex-shrink-0"
-                                >
-                                    Ver Planes
-                                </Link>
-                            </div>
-                        )}
-
-                        {!isDemoMode && subscriptionInfo && (
-                            <div className="bg-indigo-600/10 border-b border-indigo-500/20 px-4 md:px-8 py-2.5 flex items-center justify-between backdrop-blur-md">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/20 shadow-[0_0_15px_rgba(79,70,229,0.1)]">
-                                        <CreditCard size={14} className="text-indigo-400" />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-[10px] md:text-xs font-bold text-indigo-100 uppercase tracking-tight">
-                                                Plan {subscriptionInfo.planName}
-                                            </p>
-                                            {subscriptionInfo.daysRemaining > 0 ? (
-                                                <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[8px] font-bold text-emerald-400 border border-emerald-500/20">
-                                                    <div className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
-                                                    ACTIVO
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2 py-0.5 text-[8px] font-bold text-rose-400 border border-rose-500/20">
-                                                    <div className="h-1 w-1 rounded-full bg-rose-400" />
-                                                    EXPIRADO
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[9px] md:text-[10px] text-zinc-400">
-                                            <Clock size={10} className="text-zinc-500" />
-                                            <span>
-                                                {subscriptionInfo.daysRemaining > 0 
-                                                    ? `Próximo pago: ${subscriptionInfo.nextPaymentDate}`
-                                                    : `Venció el: ${subscriptionInfo.nextPaymentDate}`
-                                                }
-                                            </span>
-                                            <span className="h-1 w-1 rounded-full bg-zinc-700" />
-                                            <span className={cn(
-                                                "font-bold",
-                                                subscriptionInfo.daysRemaining <= 0 ? "text-rose-400" : (subscriptionInfo.daysRemaining <= 5 ? "text-amber-400" : "text-indigo-400/80")
-                                            )}>
-                                                {subscriptionInfo.daysRemaining > 0 
-                                                    ? `${subscriptionInfo.daysRemaining} días restantes`
-                                                    : "Tu cuenta está bloqueada"
-                                                }
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <Link
-                                    href="/seguridad/configuracion/planes"
-                                    className="group flex items-center gap-2 text-[9px] md:text-[10px] font-bold text-zinc-400 hover:text-white transition-all bg-zinc-900/50 hover:bg-zinc-800 px-3 py-1.5 rounded-md border border-zinc-800"
-                                >
-                                    <span>Gestionar</span>
-                                    <X size={10} className="text-zinc-600 group-hover:text-zinc-400 rotate-45" />
-                                </Link>
-                            </div>
-                        )}
-                    </div>
-
+                <div className="flex-1 overflow-auto bg-black relative">
                     <div className="min-h-full">
                         {children}
                     </div>

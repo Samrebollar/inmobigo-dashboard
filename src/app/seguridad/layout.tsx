@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle } from 'lucide-react'
+import { LayoutDashboard, Settings, Wrench, LogOut, User, CreditCard, Zap, Bell } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/seguridad/dashboard-layout-client'
 
 export default async function DashboardLayout({
@@ -128,31 +128,18 @@ export default async function DashboardLayout({
             nextPaymentDate: nextPayment.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
         }
     }
-    // Metadata is IGNORED for authorization to prevent "Self-declared Admins"
 
-    const isResident = role === 'resident'
-
-    // RBAC Logic for Sidebar
-    const isStaff = ['owner', 'admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
     const isAdmin = ['owner', 'admin', 'admin_condominio', 'admin_propiedad'].includes(role)
-
-    const showProperties = isStaff
-    const showResidents = isStaff
-    const showFinance = isStaff || isResident
-    const showSettings = isAdmin
-    const showMaintenance = true
-    const showReports = isStaff
-    const showNotices = isStaff
 
     const sidebarContent = (
         <>
-            <div className="hidden lg:flex h-20 items-center border-b border-zinc-800 px-6">
+            <div className="hidden lg:flex h-20 items-center border-b border-zinc-900 px-6 bg-black">
                 <Link href="/seguridad" className="flex items-center gap-3">
                     <img src="/logo-inmobigo.png" alt="InmobiGo Logo" className="h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(79,70,229,0.4)]" />
                     <span className="text-xl font-bold tracking-tight text-white">InmobiGo</span>
                 </Link>
             </div>
-            <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+            <nav className="flex-1 flex flex-col gap-2 p-4 overflow-y-auto bg-black [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                 {user.email === 'acostasamuel947@gmail.com' && (
                     <Link
                         href="/owner/dashboard"
@@ -165,155 +152,49 @@ export default async function DashboardLayout({
 
                 <Link
                     href="/seguridad"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                 >
                     <LayoutDashboard size={18} />
                     <span>Dashboard</span>
                 </Link>
 
-                {showProperties && (
-                    <Link
-                        href="/seguridad/propiedades"
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                    >
-                        <Building2 size={18} />
-                        <span>{isPropiedades ? 'Portafolio de Propiedades' : 'Propiedades'}</span>
-                    </Link>
-                )}
+                <Link
+                    href="/seguridad/maintenance"
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
+                >
+                    <Wrench size={18} />
+                    <span>Mantenimiento</span>
+                </Link>
 
-                {showResidents && (
-                    <Link
-                        href="/seguridad/residentes"
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                    >
-                        <Users size={18} />
-                        <span>{isPropiedades ? 'Inquilinos' : 'Residentes'}</span>
-                    </Link>
-                )}
+                <Link
+                    href="/seguridad/avisos"
+                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
+                >
+                    <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
+                    <span>Avisos</span>
+                </Link>
 
-                {showFinance && (
-                    <>
-                        <Link
-                            href={isResident ? "/seguridad/payments" : "/seguridad/finance"}
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                        >
-                            <CreditCard size={18} />
-                            <span>{isResident ? 'Pagos' : (isPropiedades ? 'Rentas' : 'Finanzas')}</span>
-                        </Link>
-                        {!isResident && (
-                            <Link
-                                href="/seguridad/contabilidad-inteligente"
-                                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                            >
-                                <Brain size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                                <span>Contabilidad Inteligente</span>
-                            </Link>
-                        )}
-                        {!isResident && (
-                            <Link
-                                href="/seguridad/validacion-pagos"
-                                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                            >
-                                <CheckCircle size={18} className="text-zinc-400" />
-                                <span>Validación de Pagos</span>
-                            </Link>
-                        )}
-                    </>
-                )}
+                <div className="my-4 border-t border-zinc-900"></div>
 
-                {showMaintenance && (
-                    <Link
-                        href="/seguridad/maintenance"
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                    >
-                        <Wrench size={18} />
-                        <span>Mantenimiento</span>
-                    </Link>
-                )}
-
-                {isResident && (
-                    <>
-                        <Link
-                            href="/seguridad/transparencia"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                        >
-                            <BarChart3 size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                            <span>{isPropiedades ? 'Finanzas del Portafolio' : 'Finanzas del Condominio'}</span>
-                        </Link>
-                        <Link
-                            href="/seguridad/amenidades"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                        >
-                            <LayoutDashboard size={18} />
-                            <span>Amenidades</span>
-                        </Link>
-                        <Link
-                            href="/seguridad/servicios"
-                            className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                        >
-                            <Smartphone size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
-                            <span>Servicios</span>
-                        </Link>
-                    </>
-                )}
-
-                {showReports && (
-                    <Link
-                        href="/seguridad/reportes"
-                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                    >
-                        <BarChart3 size={18} />
-                        <span>Reportes</span>
-                    </Link>
-                )}
-
-                {showNotices && (
-                    <>
-                        <Link
-                            href="/seguridad/morosos"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-rose-500/20"
-                        >
-                            <AlertTriangle size={18} className="text-rose-500/80 group-hover:text-rose-400" />
-                            <span>Morosos</span>
-                        </Link>
-                        <Link
-                            href="/seguridad/avisos"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
-                        >
-                            <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
-                            <span>Avisos</span>
-                        </Link>
-                        <Link
-                            href="/seguridad/premium-services"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
-                        >
-                            <Sparkles size={18} className="text-indigo-400" />
-                            <span>Servicios Premium</span>
-                        </Link>
-                    </>
-                )}
-
-                <div className="my-4 border-t border-zinc-800/50"></div>
-
-                {showSettings && (
+                {isAdmin && (
                     <>
                         <Link
                             href="/seguridad/configuracion/planes"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                         >
                             <CreditCard size={18} />
                             <span>Planes</span>
                         </Link>
                         <Link
                             href="/seguridad/integrations"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                         >
                             <Zap size={18} />
                             <span>Integraciones</span>
                         </Link>
                         <Link
                             href="/seguridad/configuracion"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                         >
                             <Settings size={18} />
                             <span>Configuración</span>
@@ -321,10 +202,10 @@ export default async function DashboardLayout({
                     </>
                 )}
             </nav>
-            <div className="p-4 border-t border-zinc-800 bg-zinc-900/30 space-y-1">
+            <div className="p-4 border-t border-zinc-900 bg-black space-y-1">
                 <Link
                     href="/seguridad/perfil"
-                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                 >
                     <User size={18} />
                     <span>Perfil</span>

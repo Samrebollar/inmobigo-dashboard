@@ -27,8 +27,13 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
                 
                 const res = await fetch(`/api/finance/revenue-chart?${params.toString()}`)
                 if (res.ok) {
-                    const data = await res.json()
-                    setChartData(data)
+                    const contentType = res.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const data = await res.json()
+                        setChartData(data)
+                    } else {
+                        console.error('RevenueChart: Expected JSON but got something else');
+                    }
                 }
             } catch (e) {
                 console.error('Error fetching revenue chart data', e)

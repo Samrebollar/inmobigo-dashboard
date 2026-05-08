@@ -11,9 +11,20 @@ export const propertiesService = {
         try {
             // Usamos la API server-side para saltar problemas de RLS en el cliente
             const response = await fetch('/api/properties/list')
-            const result = await response.json()
             
-            if (result.error) throw new Error(result.error)
+            if (!response.ok) {
+                console.warn(`[propertiesService] API returned status ${response.status}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('[propertiesService] Expected JSON but received:', text.substring(0, 100));
+                throw new Error('Server returned HTML instead of JSON. Check API route or middleware.');
+            }
+
+            const result = await response.json()
             return result.properties || []
         } catch (error: any) {
             console.error('Error fetching properties via API:', error)

@@ -8,9 +8,19 @@ interface DashboardHeaderProps {
     userEmail?: string
     userName?: string
     condoName?: string
+    availableCondos?: any[]
+    selectedCondo?: string
+    onCondoChange?: (condoId: string) => void
 }
 
-export function DashboardHeader({ userEmail, userName, condoName = 'Condominio Central' }: DashboardHeaderProps) {
+export function DashboardHeader({ 
+    userEmail, 
+    userName, 
+    condoName = 'Condominio Central',
+    availableCondos = [],
+    selectedCondo,
+    onCondoChange
+}: DashboardHeaderProps) {
     const [mounted, setMounted] = useState(false)
     const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -95,10 +105,17 @@ export function DashboardHeader({ userEmail, userName, condoName = 'Condominio C
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 group-hover:text-indigo-400 transition-colors">
                         <MapPin size={14} />
                     </div>
-                    <select className="appearance-none bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-[10px] font-black uppercase tracking-[0.15em] py-2.5 pl-10 pr-10 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer hover:border-zinc-700 hover:bg-zinc-900 transition-all w-full md:w-60">
-                        <option className="bg-zinc-950">Todas las propiedades</option>
-                        <option className="bg-zinc-950">Las palmas</option>
-                        <option className="bg-zinc-950">Zacil</option>
+                    <select 
+                        value={selectedCondo || ""}
+                        onChange={(e) => onCondoChange?.(e.target.value)}
+                        className="appearance-none bg-zinc-900/50 border border-zinc-800 text-zinc-300 text-[10px] font-black uppercase tracking-[0.15em] py-2.5 pl-10 pr-10 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer hover:border-zinc-700 hover:bg-zinc-900 transition-all w-full md:w-60"
+                    >
+                        <option value="" className="bg-zinc-950">Todas las propiedades</option>
+                        {availableCondos.map((condo) => (
+                            <option key={condo.id} value={condo.id} className="bg-zinc-950">
+                                {condo.name}
+                            </option>
+                        ))}
                     </select>
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-600">
                         <ChevronDown size={14} />

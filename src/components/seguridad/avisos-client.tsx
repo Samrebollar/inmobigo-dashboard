@@ -138,7 +138,7 @@ export function AvisosClient({
             imageUrl: ann.image_url
         }
     }
-    const [activeTab, setActiveTab] = useState<TabType>('announcements')
+    const [activeTab, setActiveTab] = useState<TabType>('packages')
     const [showNewModal, setShowNewModal] = useState(false)
     const [showQRModal, setShowQRModal] = useState<string | null>(null)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -594,14 +594,12 @@ export function AvisosClient({
 
 
     const condoTabs = [
-        { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
         { id: 'packages', label: 'Paquetería', icon: Package, color: 'text-amber-400', bg: 'bg-amber-500/10' },
         { id: 'access', label: 'Accesos', icon: QrCode, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         { id: 'amenities', label: 'Amenidades', icon: PartyPopper, color: 'text-rose-400', bg: 'bg-rose-500/10' }
     ]
 
     const propTabs = [
-        { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
         { id: 'contracts', label: 'Contratos', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-500/10' },
         { id: 'inventory', label: 'Inventario', icon: ClipboardList, color: 'text-emerald-400', bg: 'bg-emerald-500/10' }
     ]
@@ -637,57 +635,31 @@ export function AvisosClient({
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <motion.button 
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                            setToastMessage('📊 Abriendo panel de control de lectura...');
-                            setTimeout(() => {
-                                setToastMessage(null);
-                                router.push('/seguridad/control-lectura');
-                            }, 1000);
-                        }}
-                        className="h-12 px-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-zinc-300 hover:text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 group relative overflow-hidden shadow-lg"
-                    >
-                        <ShieldCheck size={18} className="text-indigo-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-sm">Control de lectura</span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                    </motion.button>
-                    <motion.button 
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                            setEditingId(null);
-                            setNewTitle('');
-                            setNewDescription('');
-                            setNewCategory('📢 Informativo');
-                            setNewEventDate('');
-                            setNewStartTime('');
-                            setNewEndTime('');
-                            setNewLocation('');
-                            setNewPriority('Normal');
-                            setNewVisibility('Todos');
-                            setNewTargetUnit('');
-                            setSelectedFile(null);
-                            setShowNewModal(true);
-                        }}
-                        className="h-12 px-8 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-orange-900/20 transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] transition-transform" />
-                        <Bell size={20} className="group-hover:rotate-12 transition-transform duration-300" /> 
-                        <span>Crear Anuncio</span>
-                    </motion.button>
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                    {/* Botones eliminados para Seguridad */}
                 </div>
             </div>
 
             {/* Premium Tab Navigation - Mobile Responsive Scroll */}
             <div className="flex justify-start md:justify-center overflow-x-auto pb-4 md:pb-0 scrollbar-hide">
                 <div className="flex p-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl w-fit backdrop-blur-xl whitespace-nowrap">
-                {tabs.map((tab) => (
+                {/* Pestañas simplificadas */}
+                <button
+                    onClick={() => setActiveTab('packages')}
+                    className={cn(
+                        "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                        activeTab === 'packages' 
+                            ? "bg-zinc-800 text-white shadow-lg" 
+                            : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                    )}
+                >
+                    <Package size={16} className={activeTab === 'packages' ? "text-amber-500" : ""} />
+                    Paquetería
+                </button>
+                {tabs.filter(t => t.id !== 'packages').map((tab) => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as TabType)}
+                        onClick={() => setActiveTab(tab.id as any)}
                         className={`relative flex items-center gap-2.5 px-4 md:px-6 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-all ${
                             activeTab === tab.id ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                         }`}
@@ -715,125 +687,6 @@ export function AvisosClient({
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.3 }}
                 >
-                    {activeTab === 'announcements' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {announcements.map((ann, i) => (
-                                <motion.div 
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: i * 0.1 }}
-                                    key={ann.id}
-                                >
-                                    <Card className="bg-zinc-900/40 border-zinc-800 hover:border-indigo-500/50 transition-all duration-300 group overflow-hidden h-full relative">
-                                        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 blur-3xl rounded-full" />
-                                        <CardContent className="p-6 pt-7">
-                                            <div className="flex justify-between items-center mb-5">
-                                                <Badge className={`px-2.5 py-1 rounded-lg border-0 shadow-sm ${
-                                                    ann.category.includes('Informativo') ? 'bg-indigo-500/20 text-indigo-400' :
-                                                    ann.category.includes('Social') || ann.category.includes('Evento') ? 'bg-emerald-500/20 text-emerald-400' :
-                                                    ann.category.includes('Urgente') ? 'bg-rose-500/20 text-rose-400' :
-                                                    'bg-amber-500/20 text-amber-400'
-                                                }`}>
-                                                    {ann.category}
-                                                </Badge>
-                                                <span suppressHydrationWarning className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{ann.date}</span>
-                                            </div>
-                                            <h3 className="text-xl font-bold text-white mb-3 group-hover:text-indigo-400 transition-colors leading-tight">
-                                                {ann.title}
-                                            </h3>
-                                            <p className={cn(
-                                                "text-zinc-500 text-sm leading-relaxed mb-6 font-medium transition-all duration-500",
-                                                !expandedIds.has(ann.id) && "line-clamp-2"
-                                            )}>
-                                                {ann.description}
-                                            </p>
-
-                                            { (ann.imageUrl || (ann as any).image_url) && (() => {
-                                                const url = ann.imageUrl || (ann as any).image_url;
-                                                const isPdf = url && url.toLowerCase().includes('.pdf');
-
-                                                if (isPdf) {
-                                                    return (
-                                                        <motion.a 
-                                                            whileHover={{ scale: 1.02 }}
-                                                            whileTap={{ scale: 0.98 }}
-                                                            href={url} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="mb-6 block p-6 bg-zinc-950/60 border border-zinc-800/80 rounded-3xl hover:border-indigo-500/40 transition-all group/file relative overflow-hidden shadow-2xl"
-                                                        >
-                                                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover/file:opacity-100 transition-opacity" />
-                                                            <div className="relative flex items-center gap-5">
-                                                                <div className="h-14 w-14 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center ring-1 ring-rose-500/20 shadow-inner shrink-0 group-hover/file:bg-rose-500/20 transition-all">
-                                                                    <File size={28} />
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <p className="text-sm font-bold text-white mb-1 truncate">Documento Adjunto (PDF)</p>
-                                                                    <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest flex items-center gap-2">
-                                                                        Ver archivo <ArrowRight size={10} className="group-hover/file:translate-x-1 transition-transform" />
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        </motion.a>
-                                                    )
-                                                }
-
-                                                return (
-                                                    <div className="mb-6 relative w-full h-48 rounded-2xl overflow-hidden border border-zinc-800/80 group-hover:border-indigo-500/30 transition-all bg-black/40 ring-1 ring-white/10 shadow-2xl z-10">
-                                                        <img 
-                                                            src={url} 
-                                                            alt={ann.title}
-                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 pointer-events-none"
-                                                            onError={(e) => {
-                                                                (e.target as any).style.display = 'none';
-                                                            }}
-                                                        />
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                                                    </div>
-                                                )
-                                            })()}
-                                            
-                                            <div className="flex items-center justify-between pt-5 border-t border-zinc-800/50">
-                                                <motion.button 
-                                                    whileHover={{ x: 5 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={() => toggleExpand(ann.id)}
-                                                    className={cn(
-                                                        "flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all",
-                                                        expandedIds.has(ann.id) ? "text-indigo-400" : "text-zinc-500 hover:text-white"
-                                                    )}
-                                                >
-                                                    {expandedIds.has(ann.id) ? 'Ver menos' : 'Leer más'} 
-                                                    <ArrowRight size={14} className={cn("transition-transform duration-300", expandedIds.has(ann.id) && "rotate-90")} />
-                                                </motion.button>
-                                                
-                                                <div className="flex items-center gap-3">
-                                                    <motion.button 
-                                                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(99, 102, 241, 0.15)' }}
-                                                        whileTap={{ scale: 0.9 }}
-                                                        onClick={() => handleEdit(ann)}
-                                                        className="p-2.5 bg-zinc-800/40 text-zinc-400 hover:text-indigo-400 rounded-xl border border-zinc-800/50 hover:border-indigo-500/30 transition-all shadow-lg"
-                                                        title="Editar"
-                                                    >
-                                                        <Edit2 size={15} />
-                                                    </motion.button>
-                                                    <motion.button 
-                                                        whileHover={{ scale: 1.1, backgroundColor: 'rgba(244, 63, 94, 0.15)' }}
-                                                        whileTap={{ scale: 0.9 }}
-                                                        onClick={() => handleDelete(ann)}
-                                                        className="p-2.5 bg-zinc-800/40 text-zinc-400 hover:text-rose-400 rounded-xl border border-zinc-800/50 hover:border-rose-500/30 transition-all shadow-lg"
-                                                        title="Eliminar"
-                                                    >
-                                                        <Trash2 size={15} />
-                                                    </motion.button>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            ))}
-                        </div>
-                    )}
 
                     {/* Amenities Reservations Grid */}
                     {activeTab === 'amenities' && (

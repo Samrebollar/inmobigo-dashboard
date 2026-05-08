@@ -95,11 +95,20 @@ export default async function SecurityDashboardPage() {
       console.error('Error fetching tickets count:', e)
     }
 
+    // 4. Fetch all available condominiums for this context
+    const { data: availableCondos } = await adminSupabase
+      .from('condominiums')
+      .select('id, name')
+      .eq('organization_id', safeOrgId)
+      .eq('status', 'active')
+
     return (
       <SecurityDashboardAdminClient
         userEmail={user.email}
         userName={firstName}
         condoName={condoName || 'InmobiGo Control'}
+        organizationId={safeOrgId}
+        availableCondos={availableCondos || []}
         stats={{
           incidenciasPendientes: pendingTicketsCount,
           anuncios: 0

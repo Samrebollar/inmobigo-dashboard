@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { 
     Users, 
@@ -22,6 +23,7 @@ import {
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/utils/supabase/client'
 import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { QRScannerModal } from '@/components/seguridad/modals/qr-scanner-modal'
 import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-modal'
@@ -35,6 +37,8 @@ interface SecurityDashboardClientProps {
     }
     recentActivity?: any[]
     condoName?: string
+    organizationId?: string
+    availableCondos?: any[]
 }
 
 export default function SecurityDashboardAdminClient({ 
@@ -42,27 +46,132 @@ export default function SecurityDashboardAdminClient({
     userName, 
     stats = { incidenciasPendientes: 0, anuncios: 0 }, 
     recentActivity = [],
-    condoName
+    condoName,
+    organizationId,
+    availableCondos = []
 }: SecurityDashboardClientProps) {
+    const router = useRouter()
+    const supabase = createClient()
+    const [selectedCondoId, setSelectedCondoId] = useState<string>('')
     const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria' | 'alertas'>('visitas')
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false)
     const [isManualVisitOpen, setIsManualVisitOpen] = useState(false)
     
+    // Estados de datos reales
+    const [visitorPasses, setVisitorPasses] = useState<any[]>([])
+    const [packageAlerts, setPackageAlerts] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
+
+    // Suscripción Realtime y Carga Inicial
+    useEffect(() => {
+        if (!organizationId) return
+
+        const fetchInitialData = async () => {
+            setLoading(true)
+            try {
+                // Fetch Visitas
+                const { data: passes } = await supabase
+                    .from('visitor_passes')
+                    .select('*')
+                    .eq('organization_id', organizationId)
+                    .order('created_at', { ascending: false })
+                
+                // Fetch Paquetes
+                const { data: packages } = await supabase
+                    .from('package_alerts')
+                    .select('*')
+                    .eq('organization_id', organizationId)
+                    .order('created_at', { ascending: false })
+
+                setVisitorPasses(passes || [])
+                setPackageAlerts(packages || [])
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchInitialData()
+
+        // Canal de Realtime
+        const channel = supabase
+            .channel(`security-dashboard-${organizationId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'visitor_passes', filter: `organization_id=eq.${organizationId}` },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        setVisitorPasses(prev => [payload.new, ...prev])
+                    } else if (payload.eventType === 'UPDATE') {
+                        setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+                    } else if (payload.eventType === 'DELETE') {
+                        setVisitorPasses(prev => prev.filter(p => p.id !== payload.old.id))
+                    }
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'package_alerts', filter: `organization_id=eq.${organizationId}` },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        setPackageAlerts(prev => [payload.new, ...prev])
+                    } else if (payload.eventType === 'UPDATE') {
+                        setPackageAlerts(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+                    } else if (payload.eventType === 'DELETE') {
+                        setPackageAlerts(prev => prev.filter(p => p.id !== payload.old.id))
+                    }
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [organizationId])
+
+    // Filtrar datos por condominio seleccionado
+    const filteredPasses = selectedCondoId 
+        ? visitorPasses.filter(p => p.condominium_id === selectedCondoId)
+        : visitorPasses
+
+    const filteredPackages = selectedCondoId
+        ? packageAlerts.filter(p => p.condominium_id === selectedCondoId)
+        : packageAlerts
+    
     // Mocks para KPIs operativos en tiempo real
+    // KPIs operativos calculados en tiempo real
     const operationalStats = [
-        { label: 'Accesos Hoy', value: '124', icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'hover:border-emerald-500/50' },
-        { label: 'Visitas Activas', value: '12', icon: UserPlus, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'hover:border-indigo-500/50' },
-        { label: 'Paquetes Pendientes', value: '08', icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'hover:border-amber-500/50' },
-        { label: 'Incidencias', value: stats.incidenciasPendientes.toString(), icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
+        { label: 'Accesos Hoy', value: filteredPasses.filter(p => {
+            const today = new Date().toDateString();
+            return new Date(p.created_at).toDateString() === today;
+        }).length.toString().padStart(2, '0'), icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'hover:border-emerald-500/50' },
+        { label: 'Visitas Activas', value: filteredPasses.filter(p => p.status === 'pendiente').length.toString().padStart(2, '0'), icon: UserPlus, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'hover:border-indigo-500/50' },
+        { label: 'Paquetes Pendientes', value: filteredPackages.filter(p => p.status === 'pending').length.toString().padStart(2, '0'), icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'hover:border-amber-500/50' },
+        { label: 'Incidencias', value: stats.incidenciasPendientes.toString().padStart(2, '0'), icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
     ]
 
-    // Mocks para el Feed de Actividad
+    // Feed de Actividad dinámico basado en datos reales
     const activityFeed = [
-        { id: 1, type: 'qr', title: 'QR Aprobado', house: 'Casa 45', details: 'Visitante: Juan Pérez', time: 'Hace 2 min', status: 'success' },
-        { id: 2, type: 'package', title: 'Paquete Recibido', house: 'Depto 203', details: 'Amazon - Tracking: 456X', time: 'Hace 5 min', status: 'pending' },
-        { id: 3, type: 'access', title: 'Acceso Denegado', house: 'Casa 12', details: 'QR Expirado', time: 'Hace 15 min', status: 'error' },
-        { id: 4, type: 'incident', title: 'Falla Eléctrica', house: 'Área Común', details: 'Reportado por Guardia', time: 'Hace 30 min', status: 'warning' },
-    ]
+        ...filteredPasses.slice(0, 3).map(p => ({
+            id: p.id,
+            type: 'qr',
+            title: p.status === 'registrado' ? 'Acceso Registrado' : 'Pase Generado',
+            house: p.unit_number || 'S/N',
+            details: `Visitante: ${p.visitor_name}`,
+            time: p.created_at ? new Date(p.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
+            status: p.status === 'registrado' ? 'success' : 'pending'
+        })),
+        ...filteredPackages.slice(0, 2).map(pkg => ({
+            id: pkg.id,
+            type: 'package',
+            title: 'Paquete Recibido',
+            house: pkg.unit_number || 'S/N',
+            details: `${pkg.carrier || 'Amazon'} - ${pkg.resident_name}`,
+            time: pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
+            status: pkg.status === 'delivered' ? 'success' : 'pending'
+        }))
+    ].sort((a, b) => b.id.localeCompare(a.id)).slice(0, 5) // Simple sort by ID/string as proxy for time for now
 
     const container = {
         hidden: { opacity: 0 },
@@ -79,7 +188,14 @@ export default function SecurityDashboardAdminClient({
 
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8 bg-black min-h-screen">
-            <DashboardHeader userEmail={userEmail} userName={userName} condoName={condoName} />
+            <DashboardHeader 
+                userEmail={userEmail} 
+                userName={userName} 
+                condoName={condoName} 
+                availableCondos={availableCondos}
+                selectedCondo={selectedCondoId}
+                onCondoChange={setSelectedCondoId}
+            />
 
             <motion.div
                 variants={container}
@@ -169,7 +285,7 @@ export default function SecurityDashboardAdminClient({
                             {[
                                 { label: 'Escanear QR', icon: QrCode, color: 'bg-indigo-600 hover:bg-indigo-500', desc: 'Acceso rápido', onClick: () => setIsQRScannerOpen(true) },
                                 { label: 'Visita', icon: UserPlus, color: 'bg-emerald-600 hover:bg-emerald-500', desc: 'Registro manual', onClick: () => setIsManualVisitOpen(true) },
-                                { label: 'Paquete', icon: Package, color: 'bg-amber-600 hover:bg-amber-500', desc: 'Recepción', onClick: () => {} },
+                                { label: 'Paquete', icon: Package, color: 'bg-amber-600 hover:bg-amber-500', desc: 'Recepción', onClick: () => router.push('/seguridad/avisos') },
                                 { label: 'Incidente', icon: AlertTriangle, color: 'bg-rose-600 hover:bg-rose-500', desc: 'Reportar falla', onClick: () => {} },
                             ].map((action, i) => (
                                 <motion.button
@@ -234,31 +350,35 @@ export default function SecurityDashboardAdminClient({
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-zinc-900/50">
-                                            {[...Array(5)].map((_, i) => (
-                                                <tr key={i} className="hover:bg-zinc-900/30 transition-colors group">
+                                            {activeTab === 'visitas' && filteredPasses.map((pass, i) => (
+                                                <tr key={pass.id} className="hover:bg-zinc-900/30 transition-colors group">
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 font-bold text-xs">
-                                                                {String.fromCharCode(65 + i)}
+                                                            <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-indigo-400 font-bold text-xs">
+                                                                {pass.visitor_name?.charAt(0) || 'V'}
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-bold text-zinc-200">Visitante Ejemplo {i+1}</p>
-                                                                <p className="text-[10px] text-zinc-600">ID: 4567-{i}</p>
+                                                                <p className="text-sm font-bold text-zinc-200">{pass.visitor_name}</p>
+                                                                <p className="text-[10px] text-zinc-600">ID: {pass.id.substring(0, 8)}</p>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400">Casa 1{i+1}</td>
+                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400">
+                                                        {pass.unit_number || 'S/N'}
+                                                    </td>
                                                     <td className="px-6 py-4">
                                                         <span className={cn(
                                                             "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
-                                                            i % 3 === 0 ? "bg-emerald-500/10 text-emerald-500" :
-                                                            i % 3 === 1 ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
+                                                            pass.status === 'registrado' ? "bg-emerald-500/10 text-emerald-500" :
+                                                            pass.status === 'pendiente' ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
                                                         )}>
                                                             <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                                            {i % 3 === 0 ? "Aprobado" : i % 3 === 1 ? "Pendiente" : "Problema"}
+                                                            {pass.status}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500">14:2{i} PM</td>
+                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500">
+                                                        {pass.created_at ? new Date(pass.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    </td>
                                                     <td className="px-6 py-4 text-right">
                                                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500/10 hover:text-indigo-400">
                                                             <ChevronRight className="h-4 w-4" />
@@ -266,6 +386,50 @@ export default function SecurityDashboardAdminClient({
                                                     </td>
                                                 </tr>
                                             ))}
+
+                                            {activeTab === 'paqueteria' && filteredPackages.map((pkg, i) => (
+                                                <tr key={pkg.id} className="hover:bg-zinc-900/30 transition-colors group">
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-400 font-bold text-xs">
+                                                                <Package size={14} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-bold text-zinc-200">{pkg.carrier || 'Paquetería'}</p>
+                                                                <p className="text-[10px] text-zinc-600">Residente: {pkg.resident_name}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400">
+                                                        {pkg.unit_number || 'S/N'}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={cn(
+                                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
+                                                            pkg.status === 'delivered' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                                                        )}>
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                                            {pkg.status === 'delivered' ? 'Entregado' : 'Pendiente'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500">
+                                                        {pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500/10 hover:text-indigo-400">
+                                                            <ChevronRight className="h-4 w-4" />
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+
+                                            {(activeTab === 'visitas' ? filteredPasses : filteredPackages).length === 0 && (
+                                                <tr>
+                                                    <td colSpan={5} className="px-6 py-12 text-center text-zinc-500 font-medium">
+                                                        No hay registros para mostrar en esta propiedad.
+                                                    </td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -296,6 +460,8 @@ export default function SecurityDashboardAdminClient({
             <ManualVisitModal 
                 isOpen={isManualVisitOpen} 
                 onClose={() => setIsManualVisitOpen(false)} 
+                organizationId={organizationId}
+                availableCondos={availableCondos}
             />
         </div>
     )

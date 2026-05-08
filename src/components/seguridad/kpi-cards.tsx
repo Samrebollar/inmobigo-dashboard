@@ -37,8 +37,13 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
                 
                 const res = await fetch(`/api/finance/metrics?${params.toString()}`)
                 if (res.ok) {
-                    const data = await res.json()
-                    setMetrics(data)
+                    const contentType = res.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const data = await res.json()
+                        setMetrics(data)
+                    } else {
+                        console.error('KPICards: Expected JSON but got something else');
+                    }
                 }
             } catch (e) {
                 console.error('Error fetching finance metrics:', e)

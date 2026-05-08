@@ -14,17 +14,27 @@ interface PlanExpirationBannerProps {
 
 export function PlanExpirationBanner({ daysRemaining: initialDays, nextPaymentDate, onClose }: PlanExpirationBannerProps) {
     const [isVisible, setIsVisible] = useState(true)
-    const [dias, setDias] = useState(initialDays || 30)
+    const [dias, setDias] = useState<number>(initialDays ?? 30)
+    const [mounted, setMounted] = useState(false)
+
+    // Handle hydration
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     // Calculate days dynamically if nextPaymentDate is provided
     useEffect(() => {
         if (nextPaymentDate) {
             const calculateDays = () => {
                 const nextPayment = new Date(nextPaymentDate)
+                if (isNaN(nextPayment.getTime())) return
+
                 const now = new Date()
                 const diffTime = nextPayment.getTime() - now.getTime()
                 const remaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                setDias(remaining)
+                if (!isNaN(remaining)) {
+                    setDias(remaining)
+                }
             }
             calculateDays()
             const timer = setInterval(calculateDays, 3600000)
@@ -32,7 +42,7 @@ export function PlanExpirationBanner({ daysRemaining: initialDays, nextPaymentDa
         }
     }, [nextPaymentDate])
 
-    if (!isVisible || dias > 31) return null
+    if (!isVisible || !mounted || isNaN(dias) || dias > 31) return null
 
     const handleClose = () => {
         setIsVisible(false)
@@ -41,7 +51,8 @@ export function PlanExpirationBanner({ daysRemaining: initialDays, nextPaymentDa
 
     // Premium SaaS Styles based on urgency
     const getPremiumStyles = () => {
-        if (dias <= 5) {
+        const currentDias = isNaN(dias) ? 30 : dias;
+        if (currentDias <= 5) {
             return {
                 bg: "bg-zinc-950/40",
                 border: "border-rose-500/30",
@@ -52,7 +63,7 @@ export function PlanExpirationBanner({ daysRemaining: initialDays, nextPaymentDa
                 progressColor: "bg-rose-600"
             }
         }
-        if (dias <= 14) {
+        if (currentDias <= 14) {
             return {
                 bg: "bg-zinc-950/40",
                 border: "border-amber-500/30",

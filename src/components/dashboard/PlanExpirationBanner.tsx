@@ -14,30 +14,40 @@ interface PlanExpirationBannerProps {
 
 export function PlanExpirationBanner({ dias: initialDias, nextPaymentDate, collapsed = false }: PlanExpirationBannerProps) {
     const [isVisible, setIsVisible] = useState(true)
-    const [dias, setDias] = useState(initialDias || 30)
+    const [dias, setDias] = useState<number>(initialDias ?? 30)
+    const [mounted, setMounted] = useState(false)
     
+    // Set mounted to true to handle client-side only rendering for dynamic dates
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
     // Calculate days dynamically if nextPaymentDate is provided
     useEffect(() => {
         if (nextPaymentDate) {
             const calculateDays = () => {
                 const nextPayment = new Date(nextPaymentDate)
+                if (isNaN(nextPayment.getTime())) return
+
                 const now = new Date()
                 const diffTime = nextPayment.getTime() - now.getTime()
                 const remaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                setDias(remaining)
+                if (!isNaN(remaining)) {
+                    setDias(remaining)
+                }
             }
             calculateDays()
-            // Optional: update every hour if page stays open
             const timer = setInterval(calculateDays, 3600000)
             return () => clearInterval(timer)
         }
     }, [nextPaymentDate])
 
-    if (!isVisible || dias > 31) return null
+    if (!isVisible || !mounted || isNaN(dias) || dias > 31) return null
 
     // Premium SaaS Styles based on urgency
     const getPremiumStyles = () => {
-        if (dias <= 5) {
+        const currentDias = isNaN(dias) ? 30 : dias;
+        if (currentDias <= 5) {
             return {
                 bg: "bg-zinc-950/40",
                 border: "border-rose-500/30",
@@ -48,7 +58,7 @@ export function PlanExpirationBanner({ dias: initialDias, nextPaymentDate, colla
                 progressColor: "bg-rose-600"
             }
         }
-        if (dias <= 14) {
+        if (currentDias <= 14) {
             return {
                 bg: "bg-zinc-950/40",
                 border: "border-amber-500/30",

@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { UserPlus, X, Home, MapPin, User, Clock, ShieldCheck, Save, Search, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
+import { createVisitorPassAction } from '@/app/actions/service-actions'
+import { toast } from 'sonner'
 
 interface ManualVisitModalProps {
     isOpen: boolean
@@ -20,6 +22,7 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
     const [residents, setResidents] = useState<any[]>([])
     const [selectedCondoId, setSelectedCondoId] = useState('')
     const [selectedResidentId, setSelectedResidentId] = useState('')
+    const [unitId, setUnitId] = useState('')
     const [unitNumber, setUnitNumber] = useState('')
     const [visitorName, setVisitorName] = useState('')
     const [entryTime, setEntryTime] = useState(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }))
@@ -35,6 +38,7 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
             setResidents([])
             setSelectedResidentId('')
             setUnitNumber('')
+            setUnitId('')
         }
     }, [selectedCondoId])
 
@@ -42,8 +46,9 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
     useEffect(() => {
         if (selectedResidentId) {
             const resident = residents.find(r => r.user_id === selectedResidentId)
-            if (resident?.units?.unit_number) {
+            if (resident?.units) {
                 setUnitNumber(resident.units.unit_number)
+                setUnitId(resident.units.id)
             }
         }
     }, [selectedResidentId, residents])
@@ -53,7 +58,7 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
         try {
             const { data, error } = await supabase
                 .from('residents')
-                .select('user_id, first_name, last_name, units(unit_number)')
+                .select('user_id, first_name, last_name, units(id, unit_number)')
                 .eq('condominium_id', condoId)
             
             if (data) {
@@ -72,13 +77,48 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
 
     if (!isOpen) return null
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (!visitorName || !selectedResidentId || !selectedCondoId) {
+            toast.error('Por favor completa todos los campos obligatorios')
+            return
+        }
+
         setIsLoading(true)
-        // Aquí iría la lógica de guardado real en la tabla visitor_passes
-        setTimeout(() => {
+        try {
+            const resident = residents.find(r => r.user_id === selectedResidentId)
+            const condo = condos.find(c => c.id === selectedCondoId)
+
+            const result = await createVisitorPassAction({
+                organization_id: organizationId,
+                unit_id: unitId,
+                resident_id: selectedResidentId,
+                visitor_name: visitorName,
+                authorized_by_name: resident?.fullName || 'Residente',
+                unit_name: unitNumber,
+                organization_name: condo?.name || 'InmobiGo',
+                status: 'used', // Manual registration at gate means they entered
+                visit_date: new Date().toISOString().split('T')[0],
+                start_time: entryTime,
+                access_type: 'guest',
+                qr_token: `manual-${crypto.randomUUID()}`
+            })
+
+            if (result.success) {
+                toast.success('Visita registrada correctamente')
+                onClose()
+                // Reset form
+                setVisitorName('')
+                setSelectedResidentId('')
+                setSelectedCondoId('')
+            } else {
+                toast.error(result.error || 'Error al registrar la visita')
+            }
+        } catch (error) {
+            console.error('Error saving manual visit:', error)
+            toast.error('Error inesperado al guardar')
+        } finally {
             setIsLoading(false)
-            onClose()
-        }, 1500)
+        }
     }
 
     return (
@@ -117,7 +157,7 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
                         </button>
                     </div>
 
-                    <div className="p-6 md:p-8 overflow-y-auto">
+                    <div className="p-6 md:p-8 overflow-y-auto font-sans">
                         <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
                             <div className="grid md:grid-cols-2 gap-6">
                                 {/* Propiedad */}

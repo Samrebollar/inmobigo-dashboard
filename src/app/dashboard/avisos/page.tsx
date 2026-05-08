@@ -66,19 +66,26 @@ export default async function AvisosPage() {
     .order('created_at', { ascending: false })
     .limit(50)
 
+  // Fetch available condominiums for filtering
+  const { data: availableCondos } = await adminSupabase
+    .from('condominiums')
+    .select('id, name')
+    .eq('organization_id', finalOrganizationId)
+    .eq('status', 'active')
+
   // CASE 1: ADMINISTRATOR / OWNER
   // If orgUser exists OR it's not a resident, treat as Admin context
   if (orgUser || !resident) {
     const { data: initialPasses } = await adminSupabase
       .from('visitor_passes')
-      .select('*')
+      .select('*, units(condominium_id)')
       .eq('organization_id', finalOrganizationId)
       .order('created_at', { ascending: false })
       .limit(50)
 
     const { data: initialAlerts } = await adminSupabase
       .from('package_alerts')
-      .select('*')
+      .select('*, units(condominium_id)')
       .eq('organization_id', finalOrganizationId)
       .in('status', ['pending', 'received'])
       .order('created_at', { ascending: false })
@@ -100,6 +107,7 @@ export default async function AvisosPage() {
           initialPasses={initialPasses || []} 
           initialAlerts={initialAlerts || []} 
           initialAnnouncements={initialAnnouncements || []}
+          availableCondos={availableCondos || []}
         />
       </div>
     )

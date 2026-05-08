@@ -152,6 +152,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         setIsGenerating(true)
         try {
             const orgId = resident.condominiums?.organization_id || resident.organization_id
+            const condoId = resident.condominium_id || resident.condominiums?.id
             const unitId = resident.unit_id || resident.units?.id
             
             if (!orgId) throw new Error('Organization ID not found')

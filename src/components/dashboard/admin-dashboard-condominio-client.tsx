@@ -163,7 +163,10 @@ export default function AdminDashboardCondominioClient({
                 animate="show"
                 className="space-y-8"
             >
-                <PlanExpirationBanner dias={daysRemaining || 0} />
+                <PlanExpirationBanner 
+                    nextPaymentDate={nextPaymentDate} 
+                    dias={daysRemaining || 0} 
+                />
 
                 {/* Stats Grid */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

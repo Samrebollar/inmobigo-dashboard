@@ -19,6 +19,7 @@ interface AdminDashboardClientProps {
     userEmail?: string
     userName?: string
     daysRemaining?: number
+    nextPaymentDate?: string
     stats: {
         totalFacturado: number
         totalCobrado: number
@@ -37,6 +38,7 @@ export default function AdminDashboardPropiedadesClient({
     userEmail, 
     userName, 
     daysRemaining = 999, 
+    nextPaymentDate,
     stats, 
     recentActivity = [] 
 }: AdminDashboardClientProps) {
@@ -183,7 +185,10 @@ export default function AdminDashboardPropiedadesClient({
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
 
-            <PlanExpirationBanner daysRemaining={daysRemaining} />
+            <PlanExpirationBanner 
+                daysRemaining={daysRemaining} 
+                nextPaymentDate={nextPaymentDate}
+            />
 
             <motion.div
                 variants={container}

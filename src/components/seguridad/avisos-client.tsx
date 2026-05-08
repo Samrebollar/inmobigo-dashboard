@@ -85,12 +85,14 @@ export function AvisosClient({
     admin,
     initialPasses = [], 
     initialAlerts = [],
-    initialAnnouncements = [] 
+    initialAnnouncements = [],
+    availableCondos = []
 }: { 
     admin: any
     initialPasses: any[]
     initialAlerts: any[]
     initialAnnouncements: any[]
+    availableCondos?: any[]
 }) {
     const router = useRouter()
     const supabase = createClient()
@@ -144,11 +146,61 @@ export function AvisosClient({
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [toastMessage, setToastMessage] = useState<string | null>(null)
+    const [selectedCondoId, setSelectedCondoId] = useState<string>('')
+    const [selectedCondoName, setSelectedCondoName] = useState<string>('')
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const [amenityReservations, setAmenityReservations] = useState<any[]>([])
     const [packageAlerts, setPackageAlerts] = useState<any[]>(initialAlerts)
     const [visitorPasses, setVisitorPasses] = useState<any[]>(initialPasses)
+
+    // Update selectedCondoName when ID changes
+    useEffect(() => {
+        if (selectedCondoId) {
+            const condo = availableCondos.find(c => c.id === selectedCondoId)
+            setSelectedCondoName(condo?.name || '')
+        } else {
+            setSelectedCondoName('')
+        }
+    }, [selectedCondoId, availableCondos])
+
+    // Derived filtered lists
+    const filteredAnnouncements = announcements.filter(ann => {
+        if (!selectedCondoId) return true
+        
+        // Filter by visibility. 'Todos' or specific condo name
+        const visibility = ann.visibility?.toLowerCase() || 'todos'
+        return visibility === 'todos' || visibility === selectedCondoName.toLowerCase()
+    })
+
+    const filteredPassesList = visitorPasses.filter(p => {
+        if (!selectedCondoId) return true
+        
+        // Try to match by condominium_id if available, or organization_name as fallback
+        const matchesId = p.condominium_id === selectedCondoId
+        const matchesName = p.organization_name?.toLowerCase() === selectedCondoName?.toLowerCase()
+        
+        return matchesId || matchesName
+    })
+
+    const filteredAlertsList = packageAlerts.filter(p => {
+        if (!selectedCondoId) return true
+        
+        const matchesId = p.condominium_id === selectedCondoId
+        const matchesName = p.organization_name?.toLowerCase() === selectedCondoName?.toLowerCase()
+        
+        return matchesId || matchesName
+    })
+
+    const filteredReservationsList = amenityReservations.filter(r => {
+        if (!selectedCondoId) return true
+        
+        // Amenity reservations usually link via resident -> condominium_id
+        const resCondoId = r.residentInfo?.condominium_id || r.condominium_id
+        const resCondoName = r.residentInfo?.condominiums?.name
+        
+        return resCondoId === selectedCondoId || resCondoName?.toLowerCase() === selectedCondoName?.toLowerCase()
+    })
     const [loadingAmenities, setLoadingAmenities] = useState(false)
 
     useEffect(() => {
@@ -635,8 +687,36 @@ export function AvisosClient({
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                    {/* Botones eliminados para Seguridad */}
+
+                <div className="flex flex-col items-end gap-3">
+                    {/* Property Selector - Positioned above action area */}
+                    {availableCondos && availableCondos.length > 0 && (
+                        <div className="relative group">
+                            <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+                            <div className="relative flex items-center bg-zinc-950 border border-zinc-800 rounded-2xl p-1 shadow-2xl">
+                                <div className="p-2 bg-indigo-500/10 rounded-xl mr-1">
+                                    <MapPin size={14} className="text-indigo-400" />
+                                </div>
+                                <select
+                                    value={selectedCondoId}
+                                    onChange={(e) => setSelectedCondoId(e.target.value)}
+                                    className="bg-transparent text-white text-[11px] font-black uppercase tracking-widest py-2 pl-2 pr-8 focus:outline-none cursor-pointer appearance-none min-w-[180px]"
+                                >
+                                    <option value="" className="bg-zinc-900 text-white">Todas las propiedades</option>
+                                    {availableCondos.map((condo) => (
+                                        <option key={condo.id} value={condo.id} className="bg-zinc-900 text-white">
+                                            {condo.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronRight size={12} className="text-zinc-500 absolute right-4 rotate-90 pointer-events-none" />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                        {/* Botones eliminados para Seguridad */}
+                    </div>
                 </div>
             </div>
 
@@ -699,7 +779,7 @@ export function AvisosClient({
                                 <div className="pr-4">
                                     <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Atención Requerida</p>
                                     <p className="text-xl font-bold text-white leading-tight">
-                                        {amenityReservations.filter(r => r.status === 'pending').length} <span className="text-sm font-medium text-zinc-500">pendientes</span>
+                                        {filteredReservationsList.filter(r => r.status === 'pending').length} <span className="text-sm font-medium text-zinc-500">pendientes</span>
                                     </p>
                                 </div>
                             </div>
@@ -709,12 +789,12 @@ export function AvisosClient({
                                     <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-10 text-zinc-500 font-bold animate-pulse">
                                         Cargando reservas...
                                     </div>
-                                ) : amenityReservations.length === 0 ? (
+                                ) : filteredReservationsList.length === 0 ? (
                                     <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-20 flex flex-col items-center">
                                         <Calendar size={48} className="text-zinc-800 mb-4" />
                                         <p className="text-zinc-500 font-bold">No hay reservas registradas en este condominio.</p>
                                     </div>
-                                ) : amenityReservations.map((res, index) => {
+                                ) : filteredReservationsList.map((res, index) => {
                                 const amenityName = res.amenities?.name || 'Amenidad'
                                 const residentName = res.residentInfo?.first_name 
                                     ? `${res.residentInfo.first_name} ${res.residentInfo.last_name || ''}`.trim() 
@@ -867,11 +947,11 @@ export function AvisosClient({
                     )}
 
                     {activeTab === 'packages' && !isPropiedades && (
-                        <PackageAlertsAdmin admin={admin} initialAlerts={packageAlerts} />
+                        <PackageAlertsAdmin admin={admin} initialAlerts={filteredAlertsList} />
                     )}
 
                     {activeTab === 'access' && !isPropiedades && (
-                        <VisitorPassesAdmin admin={admin} initialPasses={visitorPasses} />
+                        <VisitorPassesAdmin admin={admin} initialPasses={filteredPassesList} />
                     )}
 
                     {activeTab === 'contracts' && isPropiedades && (

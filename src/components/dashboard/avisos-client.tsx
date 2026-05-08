@@ -85,12 +85,14 @@ export function AvisosClient({
     admin,
     initialPasses = [], 
     initialAlerts = [],
-    initialAnnouncements = [] 
+    initialAnnouncements = [],
+    availableCondos = []
 }: { 
     admin: any
     initialPasses: any[]
     initialAlerts: any[]
     initialAnnouncements: any[]
+    availableCondos?: any[]
 }) {
     const router = useRouter()
     const supabase = createClient()
@@ -99,6 +101,20 @@ export function AvisosClient({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null)
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+    // Filter states
+    const [selectedCondoId, setSelectedCondoId] = useState('')
+    const [selectedCondoName, setSelectedCondoName] = useState('')
+
+    // Sync condo name when ID changes
+    useEffect(() => {
+        if (selectedCondoId) {
+            const condo = availableCondos.find(c => c.id === selectedCondoId)
+            setSelectedCondoName(condo?.name || '')
+        } else {
+            setSelectedCondoName('')
+        }
+    }, [selectedCondoId, availableCondos])
 
     const toggleExpand = (id: string) => {
         setExpandedIds(prev => {
@@ -135,8 +151,9 @@ export function AvisosClient({
             location: ann.location,
             visibility: ann.visibility,
             targetUnit: ann.target_id,
-            imageUrl: ann.image_url
-        }
+            imageUrl: ann.image_url,
+            organization_name: ann.organization_name // Prop used for filtering fallback
+        } as any
     }
     const [activeTab, setActiveTab] = useState<TabType>('announcements')
     const [showNewModal, setShowNewModal] = useState(false)
@@ -147,8 +164,14 @@ export function AvisosClient({
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const [amenityReservations, setAmenityReservations] = useState<any[]>([])
-    const [packageAlerts, setPackageAlerts] = useState<any[]>(initialAlerts)
-    const [visitorPasses, setVisitorPasses] = useState<any[]>(initialPasses)
+    const [packageAlerts, setPackageAlerts] = useState<any[]>(initialAlerts.map(p => ({
+        ...p,
+        condominium_id: p.units?.condominium_id
+    })))
+    const [visitorPasses, setVisitorPasses] = useState<any[]>(initialPasses.map(p => ({
+        ...p,
+        condominium_id: p.units?.condominium_id
+    })))
     const [loadingAmenities, setLoadingAmenities] = useState(false)
 
     useEffect(() => {
@@ -190,9 +213,11 @@ export function AvisosClient({
                 (payload) => {
                     console.log('🔥 CAMBIO DETECTADO (Admin):', payload)
                     if (payload.eventType === 'INSERT') {
-                        const newAlert = payload.new as any
+                        const newAlert = {
+                            ...payload.new as any,
+                            condominium_id: (payload.new as any).condominium_id // Will be null unless we fetch it or it's in the payload
+                        }
                         setPackageAlerts(prev => [newAlert, ...prev])
-                        // toast.info(`📦 Nuevo paquete: ${newAlert.carrier} para ${newAlert.resident_name}`)
                     } else if (payload.eventType === 'UPDATE') {
                         setPackageAlerts(prev => prev.map(a => a.id === (payload.new as any).id ? payload.new : a))
                     } else if (payload.eventType === 'DELETE') {
@@ -200,9 +225,7 @@ export function AvisosClient({
                     }
                 }
             )
-            .subscribe((status) => {
-                console.log("🔥 ESTADO REALTIME (Admin):", status)
-            })
+            .subscribe()
 
         // 3. Visitor Passes Subscription
         const accessChannel = supabase
@@ -218,9 +241,11 @@ export function AvisosClient({
                 (payload) => {
                     console.log('Realtime Event (Access):', payload)
                     if (payload.eventType === 'INSERT') {
-                        const newPass = payload.new
+                        const newPass = {
+                            ...payload.new as any,
+                            condominium_id: (payload.new as any).condominium_id
+                        }
                         setVisitorPasses(prev => [newPass, ...prev])
-                        // toast.info(`🎫 Nuevo pase de acceso: ${newPass.visitor_name}`)
                     } else if (payload.eventType === 'UPDATE') {
                         setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
                     } else if (payload.eventType === 'DELETE') {
@@ -607,6 +632,41 @@ export function AvisosClient({
         { id: 'inventory', label: 'Inventario', icon: ClipboardList, color: 'text-emerald-400', bg: 'bg-emerald-500/10' }
     ]
 
+    // Robust Filtering Logic
+    const filteredAnnouncements = announcements.filter(ann => {
+        if (!selectedCondoId) return true
+        
+        // Announcements use visibility column for property name
+        const matchesName = ann.visibility?.toLowerCase() === selectedCondoName?.toLowerCase()
+        const isAll = ann.visibility === 'Todos'
+        
+        return matchesName || isAll
+    })
+
+    const filteredPassesList = visitorPasses.filter(p => {
+        if (!selectedCondoId) return true
+        
+        const matchesId = p.condominium_id === selectedCondoId
+        const matchesName = p.organization_name?.toLowerCase() === selectedCondoName?.toLowerCase()
+        
+        return matchesId || matchesName
+    })
+
+    const filteredAlertsList = packageAlerts.filter(p => {
+        if (!selectedCondoId) return true
+        
+        const matchesId = p.condominium_id === selectedCondoId
+        const matchesName = p.organization_name?.toLowerCase() === selectedCondoName?.toLowerCase()
+        
+        return matchesId || matchesName
+    })
+
+    const filteredReservationsList = amenityReservations.filter(res => {
+        if (!selectedCondoId) return true
+        const resCondoId = res.residentInfo?.condominiums?.id || res.condominium_id
+        return resCondoId === selectedCondoId
+    })
+
     const tabs = isPropiedades ? propTabs : condoTabs
 
     return (
@@ -638,47 +698,75 @@ export function AvisosClient({
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <div className="flex items-center gap-3">
-                    <motion.button 
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                            setToastMessage('📊 Abriendo panel de control de lectura...');
-                            setTimeout(() => {
-                                setToastMessage(null);
-                                router.push('/dashboard/control-lectura');
-                            }, 1000);
-                        }}
-                        className="h-12 px-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-zinc-300 hover:text-white font-bold rounded-2xl transition-all flex items-center gap-2 group relative overflow-hidden shadow-lg"
-                    >
-                        <ShieldCheck size={18} className="text-indigo-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-sm">Control de lectura</span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                    </motion.button>
-                    <motion.button 
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                            setEditingId(null);
-                            setNewTitle('');
-                            setNewDescription('');
-                            setNewCategory('📢 Informativo');
-                            setNewEventDate('');
-                            setNewStartTime('');
-                            setNewEndTime('');
-                            setNewLocation('');
-                            setNewPriority('Normal');
-                            setNewVisibility('Todos');
-                            setNewTargetUnit('');
-                            setSelectedFile(null);
-                            setShowNewModal(true);
-                        }}
-                        className="h-12 px-8 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-orange-900/20 transition-all flex items-center gap-3 group relative overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] transition-transform" />
-                        <Bell size={20} className="group-hover:rotate-12 transition-transform duration-300" /> 
-                        <span>Crear Anuncio</span>
-                    </motion.button>
+
+                <div className="flex flex-col items-end gap-3">
+                    {/* Property Selector - Now Above Buttons */}
+                    {availableCondos.length > 0 && (
+                        <div className="relative group">
+                            <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+                            <div className="relative flex items-center bg-zinc-950 border border-zinc-800 rounded-2xl p-1 shadow-2xl">
+                                <div className="p-2 bg-indigo-500/10 rounded-xl mr-1">
+                                    <MapPin size={14} className="text-indigo-400" />
+                                </div>
+                                <select
+                                    value={selectedCondoId}
+                                    onChange={(e) => setSelectedCondoId(e.target.value)}
+                                    className="bg-transparent text-white text-[11px] font-black uppercase tracking-widest py-2 pl-2 pr-8 focus:outline-none cursor-pointer appearance-none min-w-[180px]"
+                                >
+                                    <option value="" className="bg-zinc-900 text-white">Todas las propiedades</option>
+                                    {availableCondos.map((condo) => (
+                                        <option key={condo.id} value={condo.id} className="bg-zinc-900 text-white">
+                                            {condo.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronRight size={12} className="text-zinc-500 absolute right-4 rotate-90 pointer-events-none" />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-3">
+                        <motion.button 
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                                setToastMessage('📊 Abriendo panel de control de lectura...');
+                                setTimeout(() => {
+                                    setToastMessage(null);
+                                    router.push('/dashboard/control-lectura');
+                                }, 1000);
+                            }}
+                            className="h-12 px-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-zinc-300 hover:text-white font-bold rounded-2xl transition-all flex items-center gap-2 group relative overflow-hidden shadow-lg"
+                        >
+                            <ShieldCheck size={18} className="text-indigo-400 group-hover:scale-110 transition-transform" />
+                            <span className="text-sm">Control de lectura</span>
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                        </motion.button>
+                        <motion.button 
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                                setEditingId(null);
+                                setNewTitle('');
+                                setNewDescription('');
+                                setNewCategory('📢 Informativo');
+                                setNewEventDate('');
+                                setNewStartTime('');
+                                setNewEndTime('');
+                                setNewLocation('');
+                                setNewPriority('Normal');
+                                setNewVisibility(selectedCondoName || 'Todos'); // Default to selected condo
+                                setNewTargetUnit('');
+                                setSelectedFile(null);
+                                setShowNewModal(true);
+                            }}
+                            className="h-12 px-8 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-orange-900/20 transition-all flex items-center gap-3 group relative overflow-hidden"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] transition-transform" />
+                            <Bell size={20} className="group-hover:rotate-12 transition-transform duration-300" /> 
+                            <span>Crear Anuncio</span>
+                        </motion.button>
+                    </div>
                 </div>
             </div>
 
@@ -718,7 +806,7 @@ export function AvisosClient({
                 >
                     {activeTab === 'announcements' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {announcements.map((ann, i) => (
+                            {filteredAnnouncements.map((ann, i) => (
                                 <motion.div 
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -847,7 +935,7 @@ export function AvisosClient({
                                 <div className="pr-4">
                                     <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Atención Requerida</p>
                                     <p className="text-xl font-bold text-white leading-tight">
-                                        {amenityReservations.filter(r => r.status === 'pending').length} <span className="text-sm font-medium text-zinc-500">pendientes</span>
+                                        {filteredReservationsList.filter(r => r.status === 'pending').length} <span className="text-sm font-medium text-zinc-500">pendientes</span>
                                     </p>
                                 </div>
                             </div>
@@ -857,12 +945,12 @@ export function AvisosClient({
                                     <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-10 text-zinc-500 font-bold animate-pulse">
                                         Cargando reservas...
                                     </div>
-                                ) : amenityReservations.length === 0 ? (
+                                ) : filteredReservationsList.length === 0 ? (
                                     <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-20 flex flex-col items-center">
                                         <Calendar size={48} className="text-zinc-800 mb-4" />
                                         <p className="text-zinc-500 font-bold">No hay reservas registradas en este condominio.</p>
                                     </div>
-                                ) : amenityReservations.map((res, index) => {
+                                ) : filteredReservationsList.map((res, index) => {
                                 const amenityName = res.amenities?.name || 'Amenidad'
                                 const residentName = res.residentInfo?.first_name 
                                     ? `${res.residentInfo.first_name} ${res.residentInfo.last_name || ''}`.trim() 
@@ -1015,11 +1103,11 @@ export function AvisosClient({
                     )}
 
                     {activeTab === 'packages' && !isPropiedades && (
-                        <PackageAlertsAdmin admin={admin} initialAlerts={packageAlerts} />
+                        <PackageAlertsAdmin admin={admin} initialAlerts={filteredAlertsList} />
                     )}
 
                     {activeTab === 'access' && !isPropiedades && (
-                        <VisitorPassesAdmin admin={admin} initialPasses={visitorPasses} />
+                        <VisitorPassesAdmin admin={admin} initialPasses={filteredPassesList} />
                     )}
 
                     {activeTab === 'contracts' && isPropiedades && (

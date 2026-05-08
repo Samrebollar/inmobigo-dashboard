@@ -27,6 +27,7 @@ import { createClient } from '@/utils/supabase/client'
 import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { QRScannerModal } from '@/components/seguridad/modals/qr-scanner-modal'
 import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-modal'
+import { PlanExpirationBanner } from '@/components/seguridad/PlanExpirationBanner'
 
 interface SecurityDashboardClientProps {
     userEmail?: string
@@ -39,7 +40,11 @@ interface SecurityDashboardClientProps {
     condoName?: string
     organizationId?: string
     availableCondos?: any[]
+    daysRemaining?: number
+    nextPaymentDate?: string
 }
+
+import { getSecurityInitialDataAction } from '@/app/actions/service-actions'
 
 export default function SecurityDashboardAdminClient({ 
     userEmail, 
@@ -48,11 +53,14 @@ export default function SecurityDashboardAdminClient({
     recentActivity = [],
     condoName,
     organizationId,
-    availableCondos = []
+    availableCondos = [],
+    daysRemaining = 999,
+    nextPaymentDate
 }: SecurityDashboardClientProps) {
     const router = useRouter()
     const supabase = createClient()
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
+    const [selectedCondoName, setSelectedCondoName] = useState<string>('')
     const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria' | 'alertas'>('visitas')
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false)
     const [isManualVisitOpen, setIsManualVisitOpen] = useState(false)
@@ -60,53 +68,79 @@ export default function SecurityDashboardAdminClient({
     // Estados de datos reales
     const [visitorPasses, setVisitorPasses] = useState<any[]>([])
     const [packageAlerts, setPackageAlerts] = useState<any[]>([])
+    const [unitToCondoMap, setUnitToCondoMap] = useState<Record<string, string>>({}) // Map unit_id -> condominium_id
     const [loading, setLoading] = useState(true)
 
-    // Suscripción Realtime y Carga Inicial
+    // Sync condo name when selection changes
+    useEffect(() => {
+        if (selectedCondoId) {
+            const condo = availableCondos.find(c => c.id === selectedCondoId)
+            setSelectedCondoName(condo?.name || '')
+        } else {
+            setSelectedCondoName('')
+        }
+    }, [selectedCondoId, availableCondos])
+
+    // Carga Inicial (Solo depende de organizationId)
     useEffect(() => {
         if (!organizationId) return
 
         const fetchInitialData = async () => {
             setLoading(true)
             try {
-                // Fetch Visitas
-                const { data: passes } = await supabase
-                    .from('visitor_passes')
-                    .select('*')
-                    .eq('organization_id', organizationId)
-                    .order('created_at', { ascending: false })
+                // Use Server Action to bypass RLS issues for initial load
+                const result = await getSecurityInitialDataAction(organizationId)
                 
-                // Fetch Paquetes
-                const { data: packages } = await supabase
-                    .from('package_alerts')
-                    .select('*')
-                    .eq('organization_id', organizationId)
-                    .order('created_at', { ascending: false })
+                if (result.success && result.data) {
+                    const { unitMap, passes, packages } = result.data
+                    setUnitToCondoMap(unitMap)
 
-                setVisitorPasses(passes || [])
-                setPackageAlerts(packages || [])
+                    // Enrich initial data with condominium_id from our map if missing
+                    const enrichedPasses = (passes || []).map((p: any) => ({
+                        ...p,
+                        condominium_id: p.condominium_id || unitMap[p.unit_id]
+                    }))
+                    
+                    const enrichedPackages = (packages || []).map((pkg: any) => ({
+                        ...pkg,
+                        condominium_id: pkg.condominium_id || unitMap[pkg.unit_id]
+                    }))
+
+                    setVisitorPasses(enrichedPasses)
+                    setPackageAlerts(enrichedPackages)
+                }
             } catch (error) {
-                console.error('Error fetching dashboard data:', error)
+                console.error('Error fetching security dashboard data:', error)
             } finally {
                 setLoading(false)
             }
         }
 
         fetchInitialData()
+    }, [organizationId])
+
+    // Suscripción Realtime (Depende del mapa para enriquecer registros)
+    useEffect(() => {
+        if (!organizationId) return
 
         // Canal de Realtime
         const channel = supabase
-            .channel(`security-dashboard-${organizationId}`)
+            .channel(`security-dashboard-live-${organizationId}`)
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'visitor_passes', filter: `organization_id=eq.${organizationId}` },
                 (payload) => {
-                    if (payload.eventType === 'INSERT') {
-                        setVisitorPasses(prev => [payload.new, ...prev])
-                    } else if (payload.eventType === 'UPDATE') {
-                        setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+                    const enriched = payload.new ? {
+                        ...payload.new as any,
+                        condominium_id: (payload.new as any).condominium_id || unitToCondoMap[(payload.new as any).unit_id]
+                    } : null
+
+                    if (payload.eventType === 'INSERT' && enriched) {
+                        setVisitorPasses(prev => [enriched, ...prev])
+                    } else if (payload.eventType === 'UPDATE' && enriched) {
+                        setVisitorPasses(prev => prev.map(p => p.id === enriched.id ? enriched : p))
                     } else if (payload.eventType === 'DELETE') {
-                        setVisitorPasses(prev => prev.filter(p => p.id !== payload.old.id))
+                        setVisitorPasses(prev => prev.filter(p => p.id !== (payload.old as any).id))
                     }
                 }
             )
@@ -114,12 +148,17 @@ export default function SecurityDashboardAdminClient({
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'package_alerts', filter: `organization_id=eq.${organizationId}` },
                 (payload) => {
-                    if (payload.eventType === 'INSERT') {
-                        setPackageAlerts(prev => [payload.new, ...prev])
-                    } else if (payload.eventType === 'UPDATE') {
-                        setPackageAlerts(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+                    const enriched = payload.new ? {
+                        ...payload.new as any,
+                        condominium_id: (payload.new as any).condominium_id || unitToCondoMap[(payload.new as any).unit_id]
+                    } : null
+
+                    if (payload.eventType === 'INSERT' && enriched) {
+                        setPackageAlerts(prev => [enriched, ...prev])
+                    } else if (payload.eventType === 'UPDATE' && enriched) {
+                        setPackageAlerts(prev => prev.map(p => p.id === enriched.id ? enriched : p))
                     } else if (payload.eventType === 'DELETE') {
-                        setPackageAlerts(prev => prev.filter(p => p.id !== payload.old.id))
+                        setPackageAlerts(prev => prev.filter(p => p.id !== (payload.old as any).id))
                     }
                 }
             )
@@ -128,16 +167,28 @@ export default function SecurityDashboardAdminClient({
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [organizationId])
+    }, [organizationId, unitToCondoMap])
 
-    // Filtrar datos por condominio seleccionado
-    const filteredPasses = selectedCondoId 
-        ? visitorPasses.filter(p => p.condominium_id === selectedCondoId)
-        : visitorPasses
+    // Robust Filtering Logic
+    const filteredPasses = visitorPasses.filter(p => {
+        if (!selectedCondoId) return true
+        
+        // Match by ID OR by Name (organization_name field often stores condo name)
+        const matchesId = p.condominium_id === selectedCondoId
+        const matchesName = p.organization_name?.toLowerCase() === selectedCondoName?.toLowerCase()
+        
+        return matchesId || matchesName
+    })
 
-    const filteredPackages = selectedCondoId
-        ? packageAlerts.filter(p => p.condominium_id === selectedCondoId)
-        : packageAlerts
+    const filteredPackages = packageAlerts.filter(p => {
+        if (!selectedCondoId) return true
+        
+        const matchesId = p.condominium_id === selectedCondoId
+        const matchesName = p.organization_name?.toLowerCase() === selectedCondoName?.toLowerCase()
+        
+        return matchesId || matchesName
+    })
+
     
     // Mocks para KPIs operativos en tiempo real
     // KPIs operativos calculados en tiempo real
@@ -157,7 +208,7 @@ export default function SecurityDashboardAdminClient({
             id: p.id,
             type: 'qr',
             title: p.status === 'registrado' ? 'Acceso Registrado' : 'Pase Generado',
-            house: p.unit_number || 'S/N',
+            house: p.unit_name || 'S/N',
             details: `Visitante: ${p.visitor_name}`,
             time: p.created_at ? new Date(p.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
             status: p.status === 'registrado' ? 'success' : 'pending'
@@ -166,7 +217,7 @@ export default function SecurityDashboardAdminClient({
             id: pkg.id,
             type: 'package',
             title: 'Paquete Recibido',
-            house: pkg.unit_number || 'S/N',
+            house: pkg.unit_name || 'S/N',
             details: `${pkg.carrier || 'Amazon'} - ${pkg.resident_name}`,
             time: pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
             status: pkg.status === 'delivered' ? 'success' : 'pending'
@@ -195,6 +246,11 @@ export default function SecurityDashboardAdminClient({
                 availableCondos={availableCondos}
                 selectedCondo={selectedCondoId}
                 onCondoChange={setSelectedCondoId}
+            />
+
+            <PlanExpirationBanner 
+                daysRemaining={daysRemaining} 
+                nextPaymentDate={nextPaymentDate} 
             />
 
             <motion.div
@@ -280,6 +336,33 @@ export default function SecurityDashboardAdminClient({
 
                     {/* 3. Panel de Control & Tabla */}
                     <div className="lg:col-span-8 space-y-8">
+                        {/* Property Selector for Quick Access */}
+                        <div className="flex justify-end">
+                            {availableCondos.length > 0 && (
+                                <div className="relative group">
+                                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+                                    <div className="relative flex items-center bg-zinc-950 border border-zinc-800 rounded-2xl p-1 shadow-2xl">
+                                        <div className="p-2 bg-indigo-500/10 rounded-xl mr-1">
+                                            <MapPin size={14} className="text-indigo-400" />
+                                        </div>
+                                        <select
+                                            value={selectedCondoId}
+                                            onChange={(e) => setSelectedCondoId(e.target.value)}
+                                            className="bg-transparent text-white text-[11px] font-black uppercase tracking-widest py-2 pl-2 pr-8 focus:outline-none cursor-pointer appearance-none min-w-[200px]"
+                                        >
+                                            <option value="" className="bg-zinc-900 text-white">Todas las propiedades</option>
+                                            {availableCondos.map((condo) => (
+                                                <option key={condo.id} value={condo.id} className="bg-zinc-900 text-white">
+                                                    {condo.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronRight size={12} className="text-zinc-500 absolute right-4 rotate-90 pointer-events-none" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {/* Acciones Rápidas */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {[
@@ -364,7 +447,7 @@ export default function SecurityDashboardAdminClient({
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-sm font-medium text-zinc-400">
-                                                        {pass.unit_number || 'S/N'}
+                                                        {pass.unit_name || 'S/N'}
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <span className={cn(
@@ -401,7 +484,7 @@ export default function SecurityDashboardAdminClient({
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-sm font-medium text-zinc-400">
-                                                        {pkg.unit_number || 'S/N'}
+                                                        {pkg.unit_name || 'S/N'}
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <span className={cn(

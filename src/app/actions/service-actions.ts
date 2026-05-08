@@ -313,3 +313,86 @@ export async function deleteAmenityReservationAction(reservationId: string) {
         return { success: false, error: error.message || 'Error al borrar la reserva' }
     }
 }
+
+/**
+ * Crea un pase de visitante (Bypass RLS)
+ */
+export async function createVisitorPassAction(data: any) {
+    if (!data.organization_id || !data.visitor_name) {
+        return { success: false, error: 'Datos incompletos para crear el pase' }
+    }
+
+    try {
+        const adminClient = createAdminClient()
+        
+        const { data: newPass, error } = await adminClient
+            .from('visitor_passes')
+            .insert({
+                ...data,
+                created_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+        if (error) throw error
+
+        revalidatePath('/dashboard/avisos')
+        revalidatePath('/dashboard/servicios')
+        revalidatePath('/seguridad')
+
+        return { success: true, data: newPass }
+    } catch (error: any) {
+        console.error('Error in createVisitorPassAction:', error)
+        return { success: false, error: error.message || 'Error al crear el pase' }
+    }
+}
+
+/**
+ * Obtiene datos iniciales para el dashboard de seguridad (Bypass RLS)
+ */
+export async function getSecurityInitialDataAction(organizationId: string) {
+    if (!organizationId) return { success: false, error: 'ID de organización requerido' }
+
+    try {
+        const adminClient = createAdminClient()
+        
+        // 1. Mapa de Unidades -> Condominios
+        const { data: units } = await adminClient
+            .from('units')
+            .select('id, condominium_id')
+            .eq('organization_id', organizationId)
+        
+        const unitMap: Record<string, string> = {}
+        if (units) {
+            units.forEach(u => {
+                if (u.condominium_id) unitMap[u.id] = u.condominium_id
+            })
+        }
+
+        // 2. Visitas
+        const { data: passes } = await adminClient
+            .from('visitor_passes')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .order('created_at', { ascending: false })
+
+        // 3. Paquetes
+        const { data: packages } = await adminClient
+            .from('package_alerts')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .order('created_at', { ascending: false })
+
+        return { 
+            success: true, 
+            data: {
+                unitMap,
+                passes: passes || [],
+                packages: packages || []
+            }
+        }
+    } catch (error: any) {
+        console.error('Error in getSecurityInitialDataAction:', error)
+        return { success: false, error: error.message }
+    }
+}

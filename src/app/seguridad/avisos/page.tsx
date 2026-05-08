@@ -93,6 +93,13 @@ export default async function AvisosPage() {
         serverAnnCount: initialAnnouncements?.length || 0
       }
 
+      // 4. Fetch all available condominiums for this context
+      const { data: availableCondos } = await adminSupabase
+        .from('condominiums')
+        .select('id, name')
+        .eq('organization_id', safeOrgId)
+        .eq('status', 'active')
+
       return (
         <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">
           <AvisosClient 
@@ -100,6 +107,7 @@ export default async function AvisosPage() {
             initialPasses={initialPasses || []} 
             initialAlerts={initialAlerts || []} 
             initialAnnouncements={initialAnnouncements || []}
+            availableCondos={availableCondos || []}
           />
         </div>
       )

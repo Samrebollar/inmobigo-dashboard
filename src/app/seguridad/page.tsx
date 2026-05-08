@@ -95,7 +95,22 @@ export default async function SecurityDashboardPage() {
       console.error('Error fetching tickets count:', e)
     }
 
-    // 4. Fetch all available condominiums for this context
+    // 4. Fetch Subscription Status for Banner
+    const { data: subscription } = await adminSupabase
+      .from('subscriptions')
+      .select('next_payment_date, subscription_status')
+      .eq('organization_id', safeOrgId)
+      .maybeSingle()
+
+    let daysRemaining = 999
+    if (subscription?.next_payment_date) {
+      const nextPayment = new Date(subscription.next_payment_date)
+      const now = new Date()
+      const diffTime = nextPayment.getTime() - now.getTime()
+      daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    }
+
+    // 5. Fetch all available condominiums for this context
     const { data: availableCondos } = await adminSupabase
       .from('condominiums')
       .select('id, name')
@@ -109,6 +124,8 @@ export default async function SecurityDashboardPage() {
         condoName={condoName || 'InmobiGo Control'}
         organizationId={safeOrgId}
         availableCondos={availableCondos || []}
+        daysRemaining={daysRemaining}
+        nextPaymentDate={subscription?.next_payment_date}
         stats={{
           incidenciasPendientes: pendingTicketsCount,
           anuncios: 0

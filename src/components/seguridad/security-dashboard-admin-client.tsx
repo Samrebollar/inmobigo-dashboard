@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { getSecurityInitialDataAction } from '@/app/actions/service-actions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { 
     Users, 
@@ -17,8 +18,13 @@ import {
     Filter,
     Bell,
     CheckCircle2,
-    XCircle,
-    Clock
+    MessageSquare,
+    Shield,
+    MapPin,
+    Phone,
+    User,
+    Clock,
+    XCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -28,6 +34,17 @@ import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { QRScannerModal } from '@/components/seguridad/modals/qr-scanner-modal'
 import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-modal'
 import { PlanExpirationBanner } from '@/components/seguridad/PlanExpirationBanner'
+
+const WhatsAppIcon = ({ className }: { className?: string }) => (
+    <svg 
+        viewBox="0 0 24 24" 
+        fill="currentColor" 
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 .018 5.396.015 12.03c0 2.12.54 4.19 1.563 6.04L0 24l6.15-1.612a11.77 11.77 0 005.9 1.532h.005c6.634 0 12.032-5.396 12.035-12.03a11.85 11.85 0 00-3.527-8.508z"/>
+    </svg>
+)
 
 interface SecurityDashboardClientProps {
     userEmail?: string
@@ -44,7 +61,6 @@ interface SecurityDashboardClientProps {
     nextPaymentDate?: string
 }
 
-import { getSecurityInitialDataAction } from '@/app/actions/service-actions'
 
 export default function SecurityDashboardAdminClient({ 
     userEmail, 
@@ -61,7 +77,7 @@ export default function SecurityDashboardAdminClient({
     const supabase = createClient()
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
     const [selectedCondoName, setSelectedCondoName] = useState<string>('')
-    const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria' | 'alertas'>('visitas')
+    const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria'>('visitas')
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false)
     const [isManualVisitOpen, setIsManualVisitOpen] = useState(false)
     
@@ -200,11 +216,12 @@ export default function SecurityDashboardAdminClient({
     const operationalStats = [
         { label: 'Accesos Hoy', value: filteredPasses.filter(p => {
             const today = new Date().toDateString();
-            return new Date(p.created_at).toDateString() === today;
+            const isToday = new Date(p.created_at).toDateString() === today;
+            return isToday && p.status === 'registrado';
         }).length.toString().padStart(2, '0'), icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'hover:border-emerald-500/50' },
-        { label: 'Visitas Activas', value: filteredPasses.filter(p => p.status === 'pendiente').length.toString().padStart(2, '0'), icon: UserPlus, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'hover:border-indigo-500/50' },
-        { label: 'Paquetes Pendientes', value: filteredPackages.filter(p => p.status === 'pending').length.toString().padStart(2, '0'), icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'hover:border-amber-500/50' },
-        { label: 'Incidencias', value: stats.incidenciasPendientes.toString().padStart(2, '0'), icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
+        { label: 'Visitas Activas', value: filteredPasses.filter(p => p.status === 'pendiente' || p.status === 'pending').length.toString().padStart(2, '0'), icon: UserPlus, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'hover:border-indigo-500/50' },
+        { label: 'Paquetes Pendientes', value: filteredPackages.filter(p => p.status === 'pending' || p.status === 'delivered_pending').length.toString().padStart(2, '0'), icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'hover:border-amber-500/50' },
+        { label: 'Incidencias', value: '00', icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
     ]
 
     // Feed de Actividad dinámico basado en datos reales
@@ -380,7 +397,7 @@ export default function SecurityDashboardAdminClient({
                             <CardHeader className="border-b border-zinc-900 pb-0">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex gap-1 bg-zinc-900 p-1 rounded-xl">
-                                        {(['visitas', 'paqueteria', 'alertas'] as const).map((tab) => (
+                                        {(['visitas', 'paqueteria'] as const).map((tab) => (
                                             <button
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
@@ -410,31 +427,31 @@ export default function SecurityDashboardAdminClient({
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b border-zinc-900 bg-zinc-900/20">
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Nombre</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Casa</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Estado</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hora</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-right">Acción</th>
+                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Nombre</th>
+                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Casa</th>
+                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Estado</th>
+                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Hora de Acceso</th>
+                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Acción</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-zinc-900/50">
                                             {activeTab === 'visitas' && filteredPasses.map((pass, i) => (
                                                 <tr key={pass.id} className="hover:bg-zinc-900/30 transition-colors group">
                                                     <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-indigo-400 font-bold text-xs">
-                                                                {pass.visitor_name?.charAt(0) || 'V'}
-                                                            </div>
-                                                            <div>
+                                                        <div className="flex flex-col items-center justify-center text-center">
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-indigo-400 font-bold text-xs">
+                                                                    {pass.visitor_name?.charAt(0) || 'V'}
+                                                                </div>
                                                                 <p className="text-sm font-bold text-zinc-200">{pass.visitor_name}</p>
-                                                                <p className="text-[10px] text-zinc-600">ID: {pass.id.substring(0, 8)}</p>
                                                             </div>
+                                                            <p className="text-[10px] text-zinc-600">ID: {pass.id.substring(0, 8)}</p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400">
+                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400 text-center">
                                                         {pass.unit_name || 'S/N'}
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-6 py-4 text-center">
                                                         <span className={cn(
                                                             "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
                                                             pass.status === 'registrado' ? "bg-emerald-500/10 text-emerald-500" :
@@ -446,13 +463,29 @@ export default function SecurityDashboardAdminClient({
                                                              pass.status === 'expirado' ? 'Expirado' : pass.status}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500">
-                                                        {pass.created_at ? new Date(pass.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
+                                                        {pass.status === 'registrado' ? (
+                                                            pass.updated_at ? new Date(pass.updated_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
+                                                        ) : '--:--'}
                                                     </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500/10 hover:text-indigo-400">
-                                                            <ChevronRight className="h-4 w-4" />
-                                                        </Button>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(79, 70, 229, 0.2)' }}
+                                                                whileTap={{ scale: 0.9 }}
+                                                                onClick={() => setIsQRScannerOpen(true)}
+                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 transition-colors"
+                                                            >
+                                                                <QrCode className="h-4 w-4" />
+                                                            </motion.button>
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(34, 197, 94, 0.2)' }}
+                                                                whileTap={{ scale: 0.9 }}
+                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 transition-colors"
+                                                            >
+                                                                <WhatsAppIcon className="h-5 w-5" />
+                                                            </motion.button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -460,20 +493,20 @@ export default function SecurityDashboardAdminClient({
                                             {activeTab === 'paqueteria' && filteredPackages.map((pkg, i) => (
                                                 <tr key={pkg.id} className="hover:bg-zinc-900/30 transition-colors group">
                                                     <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-400 font-bold text-xs">
-                                                                <Package size={14} />
-                                                            </div>
-                                                            <div>
+                                                        <div className="flex flex-col items-center justify-center text-center">
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-400 font-bold text-xs">
+                                                                    <Package size={14} />
+                                                                </div>
                                                                 <p className="text-sm font-bold text-zinc-200">{pkg.carrier || 'Paquetería'}</p>
-                                                                <p className="text-[10px] text-zinc-600">Residente: {pkg.resident_name}</p>
                                                             </div>
+                                                            <p className="text-[10px] text-zinc-600">Residente: {pkg.resident_name}</p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400">
+                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400 text-center">
                                                         {pkg.unit_name || 'S/N'}
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-6 py-4 text-center">
                                                         <span className={cn(
                                                             "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
                                                             pkg.status === 'delivered' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
@@ -482,13 +515,21 @@ export default function SecurityDashboardAdminClient({
                                                             {pkg.status === 'delivered' ? 'Entregado' : 'Pendiente'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500">
-                                                        {pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
+                                                        {pkg.status === 'delivered' ? (
+                                                            pkg.updated_at ? new Date(pkg.updated_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
+                                                        ) : '--:--'}
                                                     </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500/10 hover:text-indigo-400">
-                                                            <ChevronRight className="h-4 w-4" />
-                                                        </Button>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <div className="flex items-center justify-center">
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(34, 197, 94, 0.2)' }}
+                                                                whileTap={{ scale: 0.9 }}
+                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 transition-colors"
+                                                            >
+                                                                <WhatsAppIcon className="h-5 w-5" />
+                                                            </motion.button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -536,4 +577,3 @@ export default function SecurityDashboardAdminClient({
         </div>
     )
 }
-

@@ -70,6 +70,11 @@ export default function SecurityDashboardAdminClient({
     const [packageAlerts, setPackageAlerts] = useState<any[]>([])
     const [unitToCondoMap, setUnitToCondoMap] = useState<Record<string, string>>({}) // Map unit_id -> condominium_id
     const [loading, setLoading] = useState(true)
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     // Sync condo name when selection changes
     useEffect(() => {
@@ -222,7 +227,11 @@ export default function SecurityDashboardAdminClient({
             time: pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
             status: pkg.status === 'delivered' ? 'success' : 'pending'
         }))
-    ].sort((a, b) => b.id.localeCompare(a.id)).slice(0, 5) // Simple sort by ID/string as proxy for time for now
+    ].sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
+        return dateB - dateA
+    }).slice(0, 5)
 
     const container = {
         hidden: { opacity: 0 },
@@ -236,6 +245,8 @@ export default function SecurityDashboardAdminClient({
         hidden: { opacity: 0, y: 20 },
         show: { opacity: 1, y: 0 }
     }
+
+    if (!mounted) return null
 
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8 bg-black min-h-screen">
@@ -336,32 +347,6 @@ export default function SecurityDashboardAdminClient({
 
                     {/* 3. Panel de Control & Tabla */}
                     <div className="lg:col-span-8 space-y-8">
-                        {/* Property Selector for Quick Access */}
-                        <div className="flex justify-end">
-                            {availableCondos.length > 0 && (
-                                <div className="relative group">
-                                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-                                    <div className="relative flex items-center bg-zinc-950 border border-zinc-800 rounded-2xl p-1 shadow-2xl">
-                                        <div className="p-2 bg-indigo-500/10 rounded-xl mr-1">
-                                            <MapPin size={14} className="text-indigo-400" />
-                                        </div>
-                                        <select
-                                            value={selectedCondoId}
-                                            onChange={(e) => setSelectedCondoId(e.target.value)}
-                                            className="bg-transparent text-white text-[11px] font-black uppercase tracking-widest py-2 pl-2 pr-8 focus:outline-none cursor-pointer appearance-none min-w-[200px]"
-                                        >
-                                            <option value="" className="bg-zinc-900 text-white">Todas las propiedades</option>
-                                            {availableCondos.map((condo) => (
-                                                <option key={condo.id} value={condo.id} className="bg-zinc-900 text-white">
-                                                    {condo.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronRight size={12} className="text-zinc-500 absolute right-4 rotate-90 pointer-events-none" />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
 
                         {/* Acciones Rápidas */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

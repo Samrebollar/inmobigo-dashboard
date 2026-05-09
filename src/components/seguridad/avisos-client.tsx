@@ -101,6 +101,11 @@ export function AvisosClient({
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null)
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const toggleExpand = (id: string) => {
         setExpandedIds(prev => {
@@ -657,6 +662,8 @@ export function AvisosClient({
     ]
 
     const tabs = isPropiedades ? propTabs : condoTabs
+
+    if (!mounted) return null
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">

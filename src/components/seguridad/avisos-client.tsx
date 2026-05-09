@@ -226,7 +226,6 @@ export function AvisosClient({
         
         return resCondoId === selectedCondoId || resCondoName?.toLowerCase() === selectedCondoName?.toLowerCase()
     })
-    const [loadingAmenities, setLoadingAmenities] = useState(false)
 
     useEffect(() => {
         if (!admin?.organization_id) return

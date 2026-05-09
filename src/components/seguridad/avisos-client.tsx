@@ -145,6 +145,10 @@ export function AvisosClient({
             imageUrl: ann.image_url
         }
     }
+
+    const [announcements, setAnnouncements] = useState<Announcement[]>(
+        initialAnnouncements.map(ann => mapDbToUI(ann))
+    )
     const [activeTab, setActiveTab] = useState<TabType>('packages')
     const [showNewModal, setShowNewModal] = useState(false)
     const [showQRModal, setShowQRModal] = useState<string | null>(null)
@@ -153,11 +157,27 @@ export function AvisosClient({
     const [toastMessage, setToastMessage] = useState<string | null>(null)
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
     const [selectedCondoName, setSelectedCondoName] = useState<string>('')
-    const fileInputRef = useRef<HTMLInputElement>(null)
-
     const [amenityReservations, setAmenityReservations] = useState<any[]>([])
     const [packageAlerts, setPackageAlerts] = useState<any[]>(initialAlerts)
     const [visitorPasses, setVisitorPasses] = useState<any[]>(initialPasses)
+    
+    // Form States
+    const [newTitle, setNewTitle] = useState('')
+    const [newCategory, setNewCategory] = useState('📢 Informativo')
+    const [newDescription, setNewDescription] = useState('')
+    const [newEventDate, setNewEventDate] = useState('')
+    const [newStartTime, setNewStartTime] = useState('')
+    const [newEndTime, setNewEndTime] = useState('')
+    const [newLocation, setNewLocation] = useState('')
+    const [newPriority, setNewPriority] = useState<'Normal' | 'Alta' | 'Urgente'>('Normal')
+    const [newVisibility, setNewVisibility] = useState<string>('Todos')
+    const [newTargetUnit, setNewTargetUnit] = useState('')
+    const [isPublishing, setIsPublishing] = useState(false)
+    const [loadingAmenities, setLoadingAmenities] = useState(false)
+
+    const [managedCondos, setManagedCondos] = useState<string[]>([])
+    const { isDemo } = useDemoMode()
+    const { isPropiedades } = useUserRole()
 
     // Update selectedCondoName when ID changes
     useEffect(() => {
@@ -329,9 +349,6 @@ export function AvisosClient({
         }
     }
 
-    const [managedCondos, setManagedCondos] = useState<string[]>([])
-    const { isDemo } = useDemoMode()
-    const { isPropiedades } = useUserRole()
 
     useEffect(() => {
         const fetchCondos = async () => {
@@ -436,26 +453,6 @@ export function AvisosClient({
             console.error('Error updating reservation:', error)
             alert('Error al actualizar reserva')
         }
-    }
-
-    // Form States
-    const [newTitle, setNewTitle] = useState('')
-    const [newCategory, setNewCategory] = useState('📢 Informativo')
-    const [newDescription, setNewDescription] = useState('')
-    const [newEventDate, setNewEventDate] = useState('')
-    const [newStartTime, setNewStartTime] = useState('')
-    const [newEndTime, setNewEndTime] = useState('')
-    const [newLocation, setNewLocation] = useState('')
-    const [newPriority, setNewPriority] = useState<'Normal' | 'Alta' | 'Urgente'>('Normal')
-    const [newVisibility, setNewVisibility] = useState<string>('Todos')
-    const [newTargetUnit, setNewTargetUnit] = useState('')
-    const [isPublishing, setIsPublishing] = useState(false)
-
-    // Announcements State
-    const [announcements, setAnnouncements] = useState<Announcement[]>(
-        initialAnnouncements.map(ann => mapDbToUI(ann))
-    )
-
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0])

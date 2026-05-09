@@ -65,6 +65,11 @@ export default function AdminDashboardCondominioClient({
 
     const [condominiums, setCondominiums] = useState<Array<{ id: string, name: string }>>([])
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     useEffect(() => {
         let isMounted = true
@@ -153,9 +158,16 @@ export default function AdminDashboardCondominioClient({
         show: { opacity: 1, y: 0 }
     }
 
+    if (!mounted) return null
+
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
+
+            <PlanExpirationBanner 
+                nextPaymentDate={nextPaymentDate} 
+                dias={daysRemaining || 0} 
+            />
 
             <motion.div
                 variants={container}
@@ -163,10 +175,6 @@ export default function AdminDashboardCondominioClient({
                 animate="show"
                 className="space-y-8"
             >
-                <PlanExpirationBanner 
-                    nextPaymentDate={nextPaymentDate} 
-                    dias={daysRemaining || 0} 
-                />
 
                 {/* Stats Grid */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -396,7 +404,7 @@ export default function AdminDashboardCondominioClient({
                                                         </div>
                                                     )}
                                                     <div className="text-[10px] text-zinc-600">
-                                                        {new Date(activity.date).toLocaleDateString()}
+                                                        {activity.date ? new Date(activity.date).toLocaleDateString() : 'Hoy'}
                                                     </div>
                                                 </div>
                                             </motion.div>

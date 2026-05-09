@@ -438,10 +438,12 @@ export default function SecurityDashboardAdminClient({
                                                         <span className={cn(
                                                             "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
                                                             pass.status === 'registrado' ? "bg-emerald-500/10 text-emerald-500" :
-                                                            pass.status === 'pendiente' ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
+                                                            pass.status === 'pendiente' || pass.status === 'pending' ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
                                                         )}>
                                                             <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                                            {pass.status}
+                                                            {pass.status === 'registrado' ? 'Registrado' : 
+                                                             (pass.status === 'pendiente' || pass.status === 'pending') ? 'Pendiente' : 
+                                                             pass.status === 'expirado' ? 'Expirado' : pass.status}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-xs font-mono text-zinc-500">

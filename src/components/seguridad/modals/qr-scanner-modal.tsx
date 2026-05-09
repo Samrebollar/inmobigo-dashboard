@@ -177,10 +177,23 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                             <div 
                                 id={containerId} 
                                 className={cn(
-                                    "absolute inset-0 w-full h-full object-cover",
-                                    !isScanning && "hidden"
+                                    "absolute inset-0 w-full h-full bg-zinc-900",
+                                    (!isScanning && !isInitializing) && "hidden"
                                 )}
                             />
+                            
+                            <style dangerouslySetInnerHTML={{ __html: `
+                                #${containerId} video {
+                                    width: 100% !important;
+                                    height: 100% !important;
+                                    object-fit: cover !important;
+                                    border-radius: 2rem !important;
+                                }
+                                #${containerId} {
+                                    border-radius: 2rem !important;
+                                    overflow: hidden !important;
+                                }
+                            `}} />
 
                             {isInitializing && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/50 z-20">

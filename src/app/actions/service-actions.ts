@@ -383,12 +383,21 @@ export async function getSecurityInitialDataAction(organizationId: string) {
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
 
+        // 4. Incidencias
+        const { data: incidents } = await adminClient
+            .from('tickets')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .eq('category', 'security')
+            .order('created_at', { ascending: false })
+
         return { 
             success: true, 
             data: {
                 unitMap,
                 passes: passes || [],
-                packages: packages || []
+                packages: packages || [],
+                incidents: incidents || []
             }
         }
     } catch (error: any) {

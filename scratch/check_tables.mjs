@@ -1,29 +1,47 @@
+
 import { createClient } from '@supabase/supabase-js'
-import dotenv from 'dotenv'
 
-dotenv.config({ path: '.env.local' })
+const supabaseUrl = 'https://djxllvplxdigosbhhicn.supabase.co'
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqeGxsdnBseGRpZ29zYmhoaWNuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDIzODMwMywiZXhwIjoyMDg1ODE0MzAzfQ.W8sB7_M_2smipPtbXcADjArL1s_tCigha09h3S8Xrzg'
+const supabase = createClient(supabaseUrl, supabaseKey)
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+async function listTables() {
+    console.log("--- Listing Tables ---")
+    
+    const tables = [
+        'residents',
+        'announcements',
+        'announcement_views',
+        'organization_users',
+        'organizations',
+        'profiles',
+        'units',
+        'invoices',
+        'payments',
+        'tickets',
+        'amenities',
+        'amenity_reservations',
+        'package_alerts',
+        'visitor_passes',
+        'security_incidents',
+        'incidencias',
+        'incidents'
+    ]
 
-async function check() {
-  const tables = ['profiles', 'organization_users', 'organizations']
-  for (const table of tables) {
-    console.log(`\n--- TABLE: ${table} ---`)
-    const { data, error } = await supabase.from(table).select('*').limit(1)
-    if (error) {
-      console.error(`Error fetching ${table}:`, error.message)
-      continue
+    for (const table of tables) {
+        try {
+            const { error } = await supabase.from(table).select('count').limit(1)
+            if (!error) {
+                console.log(`✅ Table exists: ${table}`)
+            } else if (error.code === '42P01') {
+                console.log(`❌ Table does NOT exist: ${table}`)
+            } else {
+                console.log(`⚠️ Table ${table} returned error: ${error.code} - ${error.message}`)
+            }
+        } catch (e) {
+            console.log(`🔥 Fatal error checking table ${table}`)
+        }
     }
-    if (data && data.length > 0) {
-      console.log('Columns:', Object.keys(data[0]))
-    } else {
-      console.log('No data found to determine columns.')
-      // Fallback: use RPC if available or just assume it's empty
-    }
-  }
 }
 
-check()
+listTables()

@@ -96,11 +96,11 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
                 authorized_by_name: resident?.fullName || 'Residente',
                 unit_name: unitNumber,
                 organization_name: condo?.name || 'InmobiGo',
-                status: 'used', // Manual registration at gate means they entered
+                status: 'used', // Manual registration means they are inside
                 visit_date: new Date().toISOString().split('T')[0],
                 start_time: entryTime,
                 access_type: 'guest',
-                qr_token: `manual-${crypto.randomUUID()}`
+                qr_token: crypto.randomUUID()
             })
 
             if (result.success) {

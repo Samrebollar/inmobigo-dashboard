@@ -59,6 +59,7 @@ interface SecurityDashboardClientProps {
     availableCondos?: any[]
     daysRemaining?: number
     nextPaymentDate?: string
+    initialIncidents?: any[]
 }
 
 
@@ -71,7 +72,8 @@ export default function SecurityDashboardAdminClient({
     organizationId,
     availableCondos = [],
     daysRemaining = 999,
-    nextPaymentDate
+    nextPaymentDate,
+    initialIncidents = []
 }: SecurityDashboardClientProps) {
     const router = useRouter()
     const supabase = createClient()
@@ -84,6 +86,7 @@ export default function SecurityDashboardAdminClient({
     // Estados de datos reales
     const [visitorPasses, setVisitorPasses] = useState<any[]>([])
     const [packageAlerts, setPackageAlerts] = useState<any[]>([])
+    const [securityIncidents, setSecurityIncidents] = useState<any[]>(initialIncidents)
     const [unitToCondoMap, setUnitToCondoMap] = useState<Record<string, string>>({}) // Map unit_id -> condominium_id
     const [loading, setLoading] = useState(true)
     const [mounted, setMounted] = useState(false)
@@ -113,7 +116,7 @@ export default function SecurityDashboardAdminClient({
                 const result = await getSecurityInitialDataAction(organizationId)
                 
                 if (result.success && result.data) {
-                    const { unitMap, passes, packages } = result.data
+                    const { passes, packages, unitMap, incidents } = result.data
                     setUnitToCondoMap(unitMap)
 
                     // Enrich initial data with condominium_id from our map if missing
@@ -129,6 +132,7 @@ export default function SecurityDashboardAdminClient({
 
                     setVisitorPasses(enrichedPasses)
                     setPackageAlerts(enrichedPackages)
+                    setSecurityIncidents(incidents || [])
                 }
             } catch (error) {
                 console.error('Error fetching security dashboard data:', error)
@@ -183,6 +187,21 @@ export default function SecurityDashboardAdminClient({
                     }
                 }
             )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'tickets', filter: `organization_id=eq.${organizationId}` },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        if ((payload.new as any).category === 'security') {
+                            setSecurityIncidents(prev => [payload.new, ...prev])
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        setSecurityIncidents(prev => prev.map(i => i.id === payload.new.id ? payload.new : i))
+                    } else if (payload.eventType === 'DELETE') {
+                        setSecurityIncidents(prev => prev.filter(i => i.id !== payload.old.id))
+                    }
+                }
+            )
             .subscribe()
 
         return () => {
@@ -210,6 +229,11 @@ export default function SecurityDashboardAdminClient({
         return matchesId || matchesName
     })
 
+    const filteredIncidents = securityIncidents.filter(i => {
+        if (!selectedCondoId) return true
+        return i.condominium_id === selectedCondoId
+    })
+
     
     // Mocks para KPIs operativos en tiempo real
     // KPIs operativos calculados en tiempo real
@@ -217,11 +241,11 @@ export default function SecurityDashboardAdminClient({
         { label: 'Accesos Hoy', value: filteredPasses.filter(p => {
             const today = new Date().toDateString();
             const isToday = new Date(p.created_at).toDateString() === today;
-            return isToday && p.status === 'registrado';
+            return isToday && (p.status === 'registrado' || p.status === 'used');
         }).length.toString().padStart(2, '0'), icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'hover:border-emerald-500/50' },
         { label: 'Visitas Activas', value: filteredPasses.filter(p => p.status === 'pendiente' || p.status === 'pending').length.toString().padStart(2, '0'), icon: UserPlus, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'hover:border-indigo-500/50' },
         { label: 'Paquetes Pendientes', value: filteredPackages.filter(p => p.status === 'pending' || p.status === 'delivered_pending').length.toString().padStart(2, '0'), icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'hover:border-amber-500/50' },
-        { label: 'Incidencias', value: '00', icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
+        { label: 'Incidencias', value: filteredIncidents.filter(i => i.status !== 'closed' && i.status !== 'resolved').length.toString().padStart(2, '0'), icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
     ]
 
     // Feed de Actividad dinámico basado en datos reales
@@ -229,11 +253,11 @@ export default function SecurityDashboardAdminClient({
         ...filteredPasses.slice(0, 3).map(p => ({
             id: p.id,
             type: 'qr',
-            title: p.status === 'registrado' ? 'Acceso Registrado' : 'Pase Generado',
+            title: (p.status === 'registrado' || p.status === 'used') ? 'Acceso Registrado' : 'Pase Generado',
             house: p.unit_name || 'S/N',
             details: `Visitante: ${p.visitor_name}`,
             time: p.created_at ? new Date(p.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: p.status === 'registrado' ? 'success' : 'pending'
+            status: (p.status === 'registrado' || p.status === 'used') ? 'success' : 'pending'
         })),
         ...filteredPackages.slice(0, 2).map(pkg => ({
             id: pkg.id,
@@ -242,7 +266,18 @@ export default function SecurityDashboardAdminClient({
             house: pkg.unit_name || 'S/N',
             details: `${pkg.carrier || 'Amazon'} - ${pkg.resident_name}`,
             time: pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: pkg.status === 'delivered' ? 'success' : 'pending'
+            status: pkg.status === 'delivered' ? 'success' : 'pending',
+            created_at: pkg.created_at
+        })),
+        ...filteredIncidents.slice(0, 3).map(inc => ({
+            id: inc.id,
+            type: 'incident',
+            title: 'Incidencia Reportada',
+            house: 'Seguridad',
+            details: inc.title,
+            time: inc.created_at ? new Date(inc.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
+            status: inc.priority === 'urgent' ? 'alert' : 'pending',
+            created_at: inc.created_at
         }))
     ].sort((a, b) => {
         const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
@@ -371,7 +406,7 @@ export default function SecurityDashboardAdminClient({
                                 { label: 'Escanear QR', icon: QrCode, color: 'bg-indigo-600 hover:bg-indigo-500', desc: 'Acceso rápido', onClick: () => setIsQRScannerOpen(true) },
                                 { label: 'Visita', icon: UserPlus, color: 'bg-emerald-600 hover:bg-emerald-500', desc: 'Registro manual', onClick: () => setIsManualVisitOpen(true) },
                                 { label: 'Paquete', icon: Package, color: 'bg-amber-600 hover:bg-amber-500', desc: 'Recepción', onClick: () => router.push('/seguridad/avisos') },
-                                { label: 'Incidente', icon: AlertTriangle, color: 'bg-rose-600 hover:bg-rose-500', desc: 'Reportar falla', onClick: () => {} },
+                                { label: 'Incidente', icon: AlertTriangle, color: 'bg-rose-600 hover:bg-rose-500', desc: 'Reportar falla', onClick: () => router.push('/seguridad/incidencias') },
                             ].map((action, i) => (
                                 <motion.button
                                     key={i}
@@ -454,17 +489,17 @@ export default function SecurityDashboardAdminClient({
                                                     <td className="px-6 py-4 text-center">
                                                         <span className={cn(
                                                             "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
-                                                            pass.status === 'registrado' ? "bg-emerald-500/10 text-emerald-500" :
-                                                            pass.status === 'pendiente' || pass.status === 'pending' ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
+                                                            (pass.status === 'registrado' || pass.status === 'used') ? "bg-emerald-500/10 text-emerald-500" :
+                                                            (pass.status === 'pendiente' || pass.status === 'pending') ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
                                                         )}>
                                                             <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                                            {pass.status === 'registrado' ? 'Registrado' : 
+                                                            {(pass.status === 'registrado' || pass.status === 'used') ? 'Registrado' : 
                                                              (pass.status === 'pendiente' || pass.status === 'pending') ? 'Pendiente' : 
                                                              pass.status === 'expirado' ? 'Expirado' : pass.status}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
-                                                        {pass.status === 'registrado' ? (
+                                                        {(pass.status === 'registrado' || pass.status === 'used') ? (
                                                             pass.updated_at ? new Date(pass.updated_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
                                                         ) : '--:--'}
                                                     </td>

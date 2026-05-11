@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
@@ -128,25 +128,43 @@ export function UnitsTab() {
     return (
         <div className="space-y-6">
             {/* Actions Bar */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative max-w-sm">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                    <Input
-                        placeholder="Buscar unidad..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="pl-9 bg-zinc-900 border-zinc-800 focus:border-indigo-500"
-                    />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800/50 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                        <Input
+                            placeholder="Buscar unidad..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9 bg-zinc-950 border-zinc-800 focus:border-indigo-500 rounded-xl"
+                        />
+                    </div>
+                    
+                    <div className="h-8 w-px bg-zinc-800 hidden sm:block" />
+
+                    <motion.div 
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center gap-3"
+                    >
+                        <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-inner">
+                            <TrendingUp className="h-5 w-5" />
+                        </div>
+                        <div className="flex flex-col">
+                            <p className="text-xl font-black text-white tracking-tight leading-none">
+                                ${units.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-zinc-500 mt-1">Ingreso mensual esperado</p>
+                        </div>
+                    </motion.div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
-                        <Filter className="mr-2 h-4 w-4" /> Filtros
+
+                <div className="flex items-center gap-2">
+                    <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 rounded-xl px-5 py-6">
+                        <Trash2 className="mr-2 h-5 w-5" /> Borrar Todo
                     </Button>
-                    <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300">
-                        <Trash2 className="mr-2 h-4 w-4" /> Borrar Todo
-                    </Button>
-                    <Button onClick={() => { setUnitToEdit(null); setIsCreateOpen(true) }} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">
-                        <Plus className="mr-2 h-4 w-4" /> Nueva Unidad
+                    <Button onClick={() => { setUnitToEdit(null); setIsCreateOpen(true) }} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 rounded-xl px-5 py-6">
+                        <Plus className="mr-2 h-5 w-5" /> Nueva Unidad
                     </Button>
                 </div>
             </div>
@@ -160,9 +178,11 @@ export function UnitsTab() {
                                 <th className="px-6 py-4 font-medium">Unidad</th>
                                 <th className="px-6 py-4 font-medium">Piso / Nivel</th>
                                 <th className="px-6 py-4 font-medium">Tipo</th>
-                                <th className="px-6 py-4 font-medium">Monto / Cuota</th>
-                                <th className="px-6 py-4 font-medium">Día Cobro</th>
-                                <th className="px-6 py-4 font-medium">Estado</th>
+                                <th className="px-6 py-4 font-medium">Cuota</th>
+                                <th className="px-6 py-4 font-medium">Inicio de cobro</th>
+                                <th className="px-6 py-4 font-medium">Fecha limite</th>
+                                <th className="px-6 py-4 font-medium">Estado de Ocupación</th>
+                                <th className="px-6 py-4 font-medium">Estado cobranza</th>
                                 <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -196,9 +216,17 @@ export function UnitsTab() {
                                         <td className="px-6 py-4 text-zinc-300">
                                             {unit.billing_day ? `Día ${unit.billing_day}` : '-'}
                                         </td>
+                                        <td className="px-6 py-4 text-zinc-300">
+                                            {unit.payment_deadline ? `Día ${unit.payment_deadline}` : '-'}
+                                        </td>
                                         <td className="px-6 py-4">
                                             <Badge variant={unit.status === 'occupied' ? 'default' : 'warning'}>
-                                                {unit.status === 'occupied' ? 'Habitada' : 'Vacía'}
+                                                {unit.status === 'occupied' ? 'Ocupada' : 'Vacía'}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <Badge variant={unit.billing_status === 'suspended' ? 'destructive' : 'success'}>
+                                                {unit.billing_status === 'suspended' ? 'Suspendida' : 'Activa'}
                                             </Badge>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -223,7 +251,7 @@ export function UnitsTab() {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron unidades.
                                     </td>
                                 </tr>

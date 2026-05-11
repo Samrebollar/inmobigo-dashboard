@@ -1,4 +1,5 @@
 export type UnitStatus = 'occupied' | 'vacant' | 'maintenance'
+export type BillingStatus = 'active' | 'suspended'
 
 export interface Unit {
     id: string
@@ -10,6 +11,8 @@ export interface Unit {
     size_m2?: number
     monto_mensual?: number
     billing_day?: number
+    payment_deadline?: number
+    billing_status?: BillingStatus
     created_at?: string
 }
 
@@ -22,6 +25,8 @@ export interface CreateUnitDTO {
     size_m2?: number
     monto_mensual?: number
     billing_day?: number
+    payment_deadline?: number
+    billing_status?: BillingStatus
 }
 
 export interface UpdateUnitDTO extends Partial<CreateUnitDTO> { }

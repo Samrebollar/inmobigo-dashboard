@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,15 +38,25 @@ export function FinanceTab() {
         morosos: 0
     })
 
-    // Menú de Exportación
+    // Menú de Exportación y Periodo
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+    const [isPeriodMenuOpen, setIsPeriodMenuOpen] = useState(false)
+    const [selectedPeriod, setSelectedPeriod] = useState({ 
+        month: new Date().getMonth(), 
+        year: new Date().getFullYear(),
+        label: 'Este Mes'
+    })
     const exportMenuRef = useRef<HTMLDivElement>(null)
+    const periodMenuRef = useRef<HTMLDivElement>(null)
 
     // Cierra el menú al hacer clic fuera
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
                 setIsExportMenuOpen(false)
+            }
+            if (periodMenuRef.current && !periodMenuRef.current.contains(event.target as Node)) {
+                setIsPeriodMenuOpen(false)
             }
         }
         document.addEventListener('mousedown', handleClickOutside)
@@ -76,7 +87,7 @@ export function FinanceTab() {
         
         const link = document.createElement('a')
         link.href = url
-        link.setAttribute('download', `Facturas_InmobiGo_${new Date().toISOString().split('T')[0]}.csv`)
+        link.setAttribute('download', `Movimientos_InmobiGo_${new Date().toISOString().split('T')[0]}.csv`)
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -96,7 +107,7 @@ export function FinanceTab() {
         // Cabecera Reporte
         doc.setFontSize(18)
         doc.setTextColor(40, 40, 40)
-        doc.text('Reporte de Facturación y Cobranza', 14, 22)
+        doc.text('Reporte de Gestión de Cobranza', 14, 22)
         
         doc.setFontSize(10)
         doc.setTextColor(100, 100, 100)
@@ -106,8 +117,8 @@ export function FinanceTab() {
         doc.setFontSize(11)
         doc.setTextColor(60, 60, 60)
         doc.text(`Total Recaudado: $${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 40)
-        doc.text(`Por Cobrar: $${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 46)
-        doc.text(`Vencido: $${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 52)
+        doc.text(`Pendiente: $${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 46)
+        doc.text(`Morosidad: $${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 52)
 
         const tableColumn = ["Folio", "Unidad", "Concepto", "Monto", "Estado", "Atraso", "Vence"]
         const tableRows: any[] = []
@@ -135,7 +146,7 @@ export function FinanceTab() {
             alternateRowStyles: { fillColor: [245, 245, 245] },
         })
 
-        doc.save(`Facturas_InmobiGo_${new Date().toISOString().split('T')[0]}.pdf`)
+        doc.save(`Movimientos_InmobiGo_${new Date().toISOString().split('T')[0]}.pdf`)
         showToast('Reporte PDF descargado')
     }
 
@@ -144,27 +155,115 @@ export function FinanceTab() {
         setTimeout(() => setToastMessage(null), 3500)
     }
 
+    const periods = [
+        { label: 'Este Mes', month: new Date().getMonth(), year: new Date().getFullYear() },
+        { label: 'Mes Pasado', month: new Date().getMonth() - 1 < 0 ? 11 : new Date().getMonth() - 1, year: new Date().getMonth() - 1 < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear() },
+        { label: 'Hace 2 Meses', month: new Date().getMonth() - 2 < 0 ? (new Date().getMonth() - 2 + 12) : new Date().getMonth() - 2, year: new Date().getMonth() - 2 < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear() },
+        { label: 'Hace 3 Meses', month: new Date().getMonth() - 3 < 0 ? (new Date().getMonth() - 3 + 12) : new Date().getMonth() - 3, year: new Date().getMonth() - 3 < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear() },
+    ]
+
     const fetchBillingData = async () => {
         try {
             if (condoId.startsWith('demo-')) {
-                setMetrics({ facturado: 124500, recaudado: 98200, porCobrar: 26300, vencido: 4500, morosos: 3 })
+                // In demo mode, we can still calculate it if we have demo units
+                const demoUnits = demoDb.getUnits(condoId)
+                const demoSum = demoUnits.reduce((acc, u) => acc + (u.monto_mensual || 0), 0)
+                
+                const currentDay = new Date().getDate()
+                const demoRecaudado = 98200
+                const unpaid = Math.max(0, demoSum - demoRecaudado)
+                
+                setMetrics({
+                    facturado: demoSum || 124500,
+                    recaudado: demoRecaudado,
+                    porCobrar: currentDay <= 10 ? unpaid : 0,
+                    vencido: currentDay > 10 ? unpaid : 0,
+                    morosos: 3
+                })
                 return
             }
 
-            const { data, error } = await supabase.rpc('get_billing_summary', { p_condominium_id: condoId })
+            // 1. Calculate Expected Total (Sum of all units' monthly fees)
+            const { data: unitsData } = await supabase
+                .from('units')
+                .select('monto_mensual')
+                .eq('condominium_id', condoId)
             
-            if (error) {
-                console.error('Error cargando métricas de facturación:', error)
-            } else if (data && data.length > 0) {
-                const summary = data[0]
-                setMetrics({
-                    facturado: Number(summary.total_facturado) || 0,
-                    recaudado: Number(summary.total_recaudado) || 0,
-                    porCobrar: Number(summary.total_por_cobrar) || 0,
-                    vencido: Number(summary.total_vencido) || 0,
-                    morosos: Number(summary.residentes_en_mora) || 0
-                })
+            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
+
+            // 2. Fetch real payments for the SELECTED period
+            const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
+            const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
+            
+            const { data: periodInvoices } = await supabase
+                .from('invoices')
+                .select('paid_amount, balance_due, amount, status')
+                .eq('condominium_id', condoId)
+                .gte('created_at', startOfPeriod)
+                .lte('created_at', endOfPeriod)
+
+            const totalRecaudado = periodInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
+            
+            // 3. Logic for Pendiente vs Morosidad (Day 10 cutoff only applies to current month)
+            const now = new Date()
+            const isCurrentMonth = now.getMonth() === selectedPeriod.month && now.getFullYear() === selectedPeriod.year
+            const currentDay = now.getDate()
+            const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
+            
+            let pendiente = 0
+            let morosidad = 0
+            
+            if (isCurrentMonth) {
+                if (currentDay <= 10) {
+                    pendiente = unpaidBalance
+                    morosidad = 0
+                } else {
+                    pendiente = 0
+                    morosidad = unpaidBalance
+                }
+            } else {
+                // For past months, if not paid, it's definitely Morosidad
+                pendiente = 0
+                morosidad = unpaidBalance
             }
+
+            // 4. Calculate count of residents/units with debt in this period
+            // We sum all payments PER UNIT and compare against their monthly fee
+            let morososCount = 0
+            if (unitsData && periodInvoices) {
+                // Map to store total paid per unit
+                const paymentsPerUnit: Record<string, number> = {}
+                
+                periodInvoices.forEach(inv => {
+                    const id = inv.unit_id || inv.resident_id
+                    if (id) {
+                        paymentsPerUnit[id] = (paymentsPerUnit[id] || 0) + (Number(inv.paid_amount) || 0)
+                    }
+                })
+
+                // Compare each unit's total paid vs its expected fee
+                unitsData.forEach(unit => {
+                    const paid = paymentsPerUnit[unit.id] || 0
+                    if (paid < Number(unit.monto_mensual)) {
+                        morososCount++
+                    }
+                })
+            } else if (unpaidBalance > 0) {
+                const { data: residentsInDebt } = await supabase.rpc('get_residents_with_debt', { p_condominium_id: condoId })
+                morososCount = residentsInDebt?.length || 0
+            }
+
+            // If we are in the middle of the month (<= day 10), and it's current month,
+            // the user might not consider them "morosos" yet in the card, but "en atraso" is what they asked.
+            // Wait, the user said "serian 2 residnetes en atraso".
+            
+            setMetrics({
+                facturado: expectedTotal,
+                recaudado: totalRecaudado,
+                porCobrar: pendiente,
+                vencido: morosidad,
+                morosos: morososCount
+            })
         } catch (err) {
             console.error('Fetch billing error:', err)
         }
@@ -183,7 +282,14 @@ export function FinanceTab() {
                 return
             }
 
-            const { data: invoicesData, error: invoiceError } = await supabase.from('invoices').select('*').eq('condominium_id', condoId).order('created_at', { ascending: false }).limit(10)
+            const { data: invoicesData, error: invoiceError } = await supabase
+                .from('invoices')
+                .select('*')
+                .eq('condominium_id', condoId)
+                .gte('created_at', new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString())
+                .lte('created_at', new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString())
+                .order('created_at', { ascending: false })
+                .limit(50)
 
             if (invoiceError) {
                 console.error('Error fetching recent invoices details:', JSON.stringify(invoiceError, null, 2))
@@ -232,7 +338,8 @@ export function FinanceTab() {
                         telefono: phone,
                         atraso: delayDays,
                         reminder_sent: inv.reminder_sent,
-                        due_date: dueDate.toISOString()
+                        due_date: dueDate.toISOString(),
+                        fecha: inv.created_at
                     }
                 })
                 
@@ -247,17 +354,48 @@ export function FinanceTab() {
 
     useEffect(() => {
         if (!condoId) return
+        setLoading(true)
         fetchBillingData().then(() => fetchInvoices())
-    }, [condoId])
+    }, [condoId, selectedPeriod])
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="text-lg font-medium text-white">Facturación y Cobranza</h3>
+                <h3 className="text-lg font-medium text-white">Gestión de Cobranza</h3>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
-                        <Filter className="mr-2 h-4 w-4" /> Periodo: Este Mes
-                    </Button>
+                    <div className="relative" ref={periodMenuRef}>
+                        <Button 
+                            variant="outline" 
+                            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                            onClick={() => setIsPeriodMenuOpen(!isPeriodMenuOpen)}
+                        >
+                            <Filter className="mr-2 h-4 w-4" /> Periodo: {selectedPeriod.label}
+                        </Button>
+                        <AnimatePresence>
+                            {isPeriodMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute left-0 mt-2 w-48 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-2xl z-50 ring-1 ring-white/5"
+                                >
+                                    {periods.map((p) => (
+                                        <button 
+                                            key={p.label}
+                                            onClick={() => {
+                                                setSelectedPeriod(p)
+                                                setIsPeriodMenuOpen(false)
+                                            }}
+                                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-zinc-900 hover:text-white ${selectedPeriod.label === p.label ? 'bg-zinc-900 text-white' : 'text-zinc-300'}`}
+                                        >
+                                            {p.label}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <div className="relative" ref={exportMenuRef}>
                         <Button 
                             variant="outline" 
@@ -299,7 +437,7 @@ export function FinanceTab() {
             <div className="grid gap-4 md:grid-cols-4">
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Total por Cobrar del Periodo</CardTitle>
+                        <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
@@ -325,7 +463,7 @@ export function FinanceTab() {
                                     ${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
                                 <p className="text-xs text-zinc-500 mt-1">
-                                    {metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}% del total
+                                    Pagada ({metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}%)
                                 </p>
                             </>
                         )}
@@ -333,7 +471,7 @@ export function FinanceTab() {
                 </Card>
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Por Cobrar</CardTitle>
+                        <CardTitle className="text-sm font-medium text-zinc-400">Pendiente</CardTitle>
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
@@ -348,7 +486,7 @@ export function FinanceTab() {
                 </Card>
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Vencido (Morosidad)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-zinc-400">Morosidad</CardTitle>
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
@@ -357,7 +495,7 @@ export function FinanceTab() {
                                     ${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-rose-500 mt-1">
-                                    <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en mora' : 'residentes en mora'}
+                                    <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso'}
                                 </div>
                             </>
                         )}
@@ -368,7 +506,7 @@ export function FinanceTab() {
             {/* Invoices Table */}
             <Card className="bg-zinc-900/50 border-zinc-800">
                 <CardHeader>
-                    <CardTitle>Facturas Recientes</CardTitle>
+                    <CardTitle>Movimientos recientes</CardTitle>
                     <CardDescription>Últimos movimientos registrados en el condominio.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -378,6 +516,7 @@ export function FinanceTab() {
                                 <tr>
                                     <th className="px-4 py-3 font-medium">Folio</th>
                                     <th className="px-4 py-3 font-medium">Unidad</th>
+                                    <th className="px-4 py-3 font-medium">Fecha</th>
                                     <th className="px-4 py-3 font-medium">Concepto</th>
                                     <th className="px-4 py-3 font-medium">Monto</th>
                                     <th className="px-4 py-3 font-medium">Atraso</th>
@@ -400,6 +539,9 @@ export function FinanceTab() {
                                                 {inv.folio?.length > 15 ? inv.folio.substring(0, 8) : inv.folio}
                                             </td>
                                             <td className="px-4 py-3 text-zinc-300 font-medium">{inv.unidad}</td>
+                                            <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
+                                                {new Date(inv.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                            </td>
                                             <td className="px-4 py-3 text-zinc-400">{inv.concepto}</td>
                                             <td className="px-4 py-3 text-white font-bold">
                                                 ${Number(inv.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -553,7 +695,7 @@ export function FinanceTab() {
                             <X className="h-4 w-4" />
                             <span className="sr-only">Cerrar</span>
                         </Button>
-                        <h3 className="text-xl font-semibold text-white mb-6">Detalle de Factura</h3>
+                        <h3 className="text-xl font-semibold text-white mb-6">Detalle de Movimiento</h3>
                         <div className="space-y-4">
                             <div>
                                 <p className="text-xs text-zinc-500">Folio / ID</p>

@@ -115,7 +115,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         doc.setTextColor(100, 113, 129)
         doc.text('TOTAL COBRADO (MXN)', 20, 74)
         doc.text('TOTAL PENDIENTE (MXN)', 80, 74)
-        doc.text('RESUMEN DE FACTURAS', 140, 74)
+        doc.text('RESUMEN DE MOVIMIENTOS', 140, 74)
 
         doc.setFontSize(16)
         doc.setTextColor(16, 185, 129) // Emerald 500
@@ -125,10 +125,10 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
         doc.setFontSize(10)
         doc.setTextColor(15, 23, 42)
-        doc.text(`${summary.numInvoices} Emitidas`, 140, 81)
+        doc.text(`${summary.numInvoices} Generados`, 140, 81)
         doc.setFontSize(9)
         doc.setTextColor(100, 113, 129)
-        doc.text(`${summary.numPaid} Pagadas • ${summary.numOverdue} Vencidas`, 140, 87)
+        doc.text(`${summary.numPaid} Pagados • ${summary.numOverdue} Vencidos`, 140, 87)
 
         const tableData = invoices.map(i => [
             i.folio || String(i.id).substring(0, 8),
@@ -163,7 +163,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             }
         })
 
-        doc.save(`Reporte_Financiero_${format(new Date(), 'yyyyMMdd')}.pdf`)
+        doc.save(`Movimientos_InmobiGo_${format(new Date(), 'yyyy-MM-dd')}.pdf`)
     }
 
     const generateExecutiveExcel = async (invoices: any[], summary: any) => {
@@ -178,9 +178,9 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             ["MÉTRICA", "VALOR"],
             ["Total Cobrado (MXN)", formatCurrency(summary.totalPaid)],
             ["Total Pendiente (MXN)", formatCurrency(summary.totalPending)],
-            ["Facturas Emitidas", summary.numInvoices],
-            ["Facturas Pagadas", summary.numPaid],
-            ["Facturas Vencidas", summary.numOverdue],
+            ["Movimientos Generados", summary.numInvoices],
+            ["Movimientos Pagados", summary.numPaid],
+            ["Movimientos Vencidos", summary.numOverdue],
         ]
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
         XLSX.utils.book_append_sheet(wb, ws1, "Resumen")
@@ -199,8 +199,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             "Adeudo": Number(i.balance_due !== undefined ? i.balance_due : Math.max(0, i.amount - (i.paid_amount || 0)))
         }))
         const ws2 = XLSX.utils.json_to_sheet(detailsData)
-        XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Facturas")
-        XLSX.writeFile(wb, `Reporte_Financiero_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+        XLSX.writeFile(wb, `Movimientos_InmobiGo_${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
     }
 
     // ------------------------------------------------------------------------------------------------ //
@@ -280,7 +279,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             }
         })
 
-        doc.save(`Reporte_Morosidad_${format(new Date(), 'yyyyMMdd')}.pdf`)
+        doc.save(`Movimientos_InmobiGo_Morosidad_${format(new Date(), 'yyyy-MM-dd')}.pdf`)
     }
 
     const generateDelinquencyExcel = async (invoices: any[], summary: any) => {
@@ -311,8 +310,8 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             "Adeudo Pendiente (MXN)": i.calculated_balance
         }))
         const ws2 = XLSX.utils.json_to_sheet(detailsData)
-        XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Morosos")
-        XLSX.writeFile(wb, `Reporte_Morosidad_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+        XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Movimientos")
+        XLSX.writeFile(wb, `Movimientos_InmobiGo_Morosidad_${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
     }
 
     // ------------------------------------------------------------------------------------------------ //

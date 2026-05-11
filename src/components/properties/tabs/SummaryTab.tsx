@@ -15,23 +15,10 @@ interface SummaryTabProps {
     revenueData?: any[]
 }
 
-// Mock Data for Charts
-
-
-const revenueData = [
-    { name: 'Ene', value: 12000 },
-    { name: 'Feb', value: 15000 },
-    { name: 'Mar', value: 18000 },
-    { name: 'Abr', value: 16000 },
-    { name: 'May', value: 21000 },
-    { name: 'Jun', value: 25000 },
-]
-
 export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
     const { isPropiedades } = useUserRole()
     const isDemo = condo.id.startsWith('demo-')
     
-    // Real State for Metrics
     const [metrics, setMetrics] = useState({
         recaudado: 0,
         porCobrar: 0,
@@ -45,49 +32,61 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         const fetchMetrics = async () => {
             const supabase = createClient()
             
-            // 1. Fetch Invoices
-            const { data: invoices } = await supabase
-                .from('invoices')
-                .select('amount, paid_amount, balance_due, resident_id, status')
+            const { data: unitsData } = await supabase
+                .from('units')
+                .select('id, monto_mensual')
                 .eq('condominium_id', condo.id)
-
-            // 2. Fetch Residents
-            const { data: residents } = await supabase
-                .from('residents')
-                .select('id, debt_amount')
-                .eq('condominium_id', condo.id)
-
-            const totalRecaudado = invoices?.reduce((acc, curr) => acc + Number(curr.paid_amount || 0), 0) || 0;
             
-            const invoicesDebtSum = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due || 0) > 0)
-                .reduce((acc, curr) => acc + (curr.balance_due && curr.balance_due > 0 ? curr.balance_due : (curr.amount || 0)), 0) || 0;
-            const residentsDebtSum = residents?.reduce((acc, curr) => acc + Number(curr.debt_amount || 0), 0) || 0;
-            const totalVencido = invoicesDebtSum + residentsDebtSum;
+            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
 
-            const overdueInvoices = invoices?.filter(i => i.status === 'pending' || i.status === 'overdue' || (i.balance_due && i.balance_due > 0)) || []
-            const uniqueMorosos = new Set(overdueInvoices.map(item => item.resident_id).filter(Boolean))
-            residents?.forEach(r => {
-                if (Number(r.debt_amount || 0) > 0) {
-                    uniqueMorosos.add(r.id)
-                }
-            })
+            const now = new Date()
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+            const currentDay = now.getDate()
+            
+            const { data: currentMonthInvoices } = await supabase
+                .from('invoices')
+                .select('unit_id, resident_id, paid_amount, status')
+                .eq('condominium_id', condo.id)
+                .gte('created_at', startOfMonth)
+
+            const totalRecaudado = currentMonthInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
+            
+            const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
+            
+            // Deterministic logic: only "vencido" after day 10
+            let morosidad = 0
+            if (currentDay > 10) {
+                morosidad = unpaidBalance
+            }
+
+            let morososCount = 0
+            if (unitsData && currentMonthInvoices) {
+                const paymentsPerUnit: Record<string, number> = {}
+                currentMonthInvoices.forEach(inv => {
+                    const id = inv.unit_id || inv.resident_id
+                    if (id) paymentsPerUnit[id] = (paymentsPerUnit[id] || 0) + (Number(inv.paid_amount) || 0)
+                })
+
+                unitsData.forEach(unit => {
+                    const paid = paymentsPerUnit[unit.id] || 0
+                    if (paid < Number(unit.monto_mensual)) morososCount++
+                })
+            }
 
             setMetrics({
                 recaudado: totalRecaudado,
-                porCobrar: totalVencido,
-                vencido: totalVencido,
-                morosos: uniqueMorosos.size
+                porCobrar: currentDay > 10 ? 0 : unpaidBalance,
+                vencido: morosidad,
+                morosos: currentDay > 10 ? morososCount : 0
             })
         }
         
         fetchMetrics()
     }, [condo.id, isDemo])
     
-    // Calculate Occupancy
     const residentsCount = isDemo ? demoDb.getResidents(condo.id).length : ((condo as any).residents_count || 0)
     const occRate = condo.units_total > 0 ? Math.min(100, Math.round((residentsCount / condo.units_total) * 100)) : 0
 
-    // Metrics Values
     const ingresos = isDemo 
         ? "$45,231.89" 
         : `$${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -98,13 +97,12 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         : `$${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
     const morosidadSubtext = isDemo 
         ? `${isPropiedades ? '3 inquilinos con deuda' : '3 residentes con deuda'}` 
-        : `${metrics.morosos} ${isPropiedades ? (metrics.morosos === 1 ? 'inquilino con deuda' : 'inquilinos con deuda') : (metrics.morosos === 1 ? 'residente con deuda' : 'residentes con deuda')}`
+        : `${metrics.morosos} ${isPropiedades ? (metrics.morosos === 1 ? 'inquilino en atraso' : 'inquilinos en atraso') : (metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso')}`
     
     const occChange = isDemo ? "+2% vs mes anterior" : "Actualizado"
 
     return (
         <div className="space-y-6">
-            {/* KPI Grid */}
             <div className="grid gap-4 md:grid-cols-3">
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
                     <Card className="bg-zinc-900 border-zinc-800 transition-all duration-300 hover:border-indigo-500/50 hover:shadow-[0_0_15px_rgba(99,102,241,0.1)] relative overflow-hidden group">
@@ -139,24 +137,23 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
-                    <Card className="bg-zinc-900 border-zinc-800 transition-all duration-300 hover:border-amber-500/50 hover:shadow-[0_0_15px_rgba(245,158,11,0.1)] relative overflow-hidden group">
-                        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    <Card className="bg-zinc-900 border-zinc-800 transition-all duration-300 hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.1)] relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
                             <CardTitle className="text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition-colors">Morosidad Pendiente</CardTitle>
-                            <div className="p-2 bg-amber-500/10 rounded-lg group-hover:bg-amber-500/20 transition-colors">
-                                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                            <div className="p-2 bg-rose-500/10 rounded-lg group-hover:bg-rose-500/20 transition-colors">
+                                <AlertTriangle className="h-4 w-4 text-rose-400" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
-                            <div className={`text-2xl font-bold ${isDemo ? 'text-white' : 'text-zinc-300'}`}>{morosidad}</div>
-                            <p className={`text-xs mt-1 ${isDemo ? 'text-zinc-500' : 'text-zinc-600'}`}>{morosidadSubtext}</p>
+                            <div className={`text-2xl font-bold ${isDemo ? 'text-white' : 'text-rose-500'}`}>{morosidad}</div>
+                            <p className={`text-xs mt-1 ${isDemo ? 'text-zinc-500' : 'text-zinc-500'}`}>{morosidadSubtext}</p>
                         </CardContent>
                     </Card>
                 </motion.div>
             </div>
 
             <div className="w-full">
-                {/* Revenue Chart */}
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader>
                         <CardTitle className="text-lg font-medium text-white">Histórico de Ingresos</CardTitle>
@@ -167,7 +164,6 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 </Card>
             </div>
 
-            {/* Recent Activity / Alerts */}
             <div className="grid gap-6 md:grid-cols-2">
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader>
@@ -187,11 +183,35 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                                                 <p className="text-xs font-medium text-zinc-500 truncate mt-0.5">{alert.name}</p>
                                             </div>
                                         </div>
-                                        <div className="text-right flex-shrink-0">
-                                            <p className="text-base font-bold text-rose-400">
-                                                ${Number(alert.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            </p>
-                                            <p className="text-xs font-medium text-zinc-500 mt-0.5">{alert.timeText}</p>
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-right flex-shrink-0">
+                                                <p className="text-base font-bold text-rose-400">
+                                                    ${Number(alert.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </p>
+                                                <p className="text-xs font-medium text-zinc-500 mt-0.5">{alert.timeText}</p>
+                                            </div>
+                                            <motion.button
+                                                whileHover={{ scale: 1.15 }}
+                                                whileTap={{ scale: 0.9 }}
+                                                animate={{ 
+                                                    boxShadow: ["0px 0px 0px rgba(37, 211, 102, 0)", "0px 0px 10px rgba(37, 211, 102, 0.5)", "0px 0px 0px rgba(37, 211, 102, 0)"]
+                                                }}
+                                                transition={{ 
+                                                    duration: 2.5, 
+                                                    repeat: Infinity,
+                                                    ease: "easeInOut" 
+                                                }}
+                                                className="flex-shrink-0 h-9 w-9 rounded-full bg-[#25D366]/10 border border-[#25D366]/20 flex items-center justify-center text-[#25D366] hover:bg-[#25D366] hover:text-white transition-all duration-300 shadow-sm"
+                                                title="Enviar recordatorio por WhatsApp"
+                                            >
+                                                <svg 
+                                                    viewBox="0 0 24 24" 
+                                                    className="h-5 w-5 fill-current"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                                </svg>
+                                            </motion.button>
                                         </div>
                                     </div>
                                 ))}

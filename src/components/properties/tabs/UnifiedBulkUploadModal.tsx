@@ -101,27 +101,52 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                         return
                     }
 
-                    // Map Rent
-                    let rent: number | undefined = undefined
-                    const rentRaw = row['Monto / Cuota'] || row['monto']
-                    if (rentRaw) {
-                        const parsed = parseFloat(rentRaw.toString().replace(/[^0-9.-]+/g, ""))
-                        if (!isNaN(parsed)) rent = parsed
-                    }
+                    // Map Unit Type
+                    let unitType: 'house' | 'apartment' | 'commercial' = 'apartment'
+                    const typeRaw = row['Tipo'] || row['tipo']
+                    if (typeRaw?.toLowerCase().includes('casa')) unitType = 'house'
+                    if (typeRaw?.toLowerCase().includes('local') || typeRaw?.toLowerCase().includes('comercial')) unitType = 'commercial'
+
+                    // Map Occupancy Status
+                    let unitStatus: 'occupied' | 'vacant' | undefined = undefined
+                    const occupancyRaw = row['Estado de Ocupacion'] || row['ocupacion']
+                    if (occupancyRaw?.toLowerCase().includes('ocupad')) unitStatus = 'occupied'
+                    if (occupancyRaw?.toLowerCase().includes('vac')) unitStatus = 'vacant'
 
                     // Map Billing Day
                     let billingDay: number | undefined = undefined
-                    const billingDayRaw = row['Día Cobro'] || row['dia cobro']
+                    const billingDayRaw = row['Inicio de cobro'] || row['Día Cobro'] || row['dia cobro']
                     if (billingDayRaw) {
                         const parsed = parseInt(billingDayRaw.toString().replace(/[^0-9]+/g, ""), 10)
                         if (!isNaN(parsed)) billingDay = parsed
                     }
+
+                    // Map Payment Deadline
+                    let paymentDeadline: number | undefined = undefined
+                    const deadlineRaw = row['Fecha limite'] || row['fecha limite']
+                    if (deadlineRaw) {
+                        const parsed = parseInt(deadlineRaw.toString().replace(/[^0-9]+/g, ""), 10)
+                        if (!isNaN(parsed)) paymentDeadline = parsed
+                    }
+
+                    // Map Billing Status
+                    let billingStatus: 'active' | 'suspended' = 'active'
+                    const billingStatusRaw = row['Estado cobranza'] || row['cobranza']
+                    if (billingStatusRaw?.toLowerCase().includes('suspendid')) billingStatus = 'suspended'
 
                     // Map Status
                     let status: 'active' | 'delinquent' | 'inactive' = 'active'
                     const statusRaw = row['Estado Residente'] || row['estado']
                     if (statusRaw?.toLowerCase().includes('moroso')) status = 'delinquent'
                     if (statusRaw?.toLowerCase().includes('inactivo')) status = 'inactive'
+
+                    // Map Rent
+                    let rent: number | undefined = undefined
+                    const rentRaw = row['Cuota'] || row['Monto / Cuota'] || row['monto']
+                    if (rentRaw) {
+                        const parsed = parseFloat(rentRaw.toString().replace(/[^0-9.-]+/g, ""))
+                        if (!isNaN(parsed)) rent = parsed
+                    }
 
                     // Map Debt
                     let debt: number = 0
@@ -142,9 +167,12 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                     unifiedRows.push({
                         unit_number: unitNumber,
                         floor: row['Piso'] || row['piso'],
-                        unit_type: row['Tipo']?.toLowerCase().includes('casa') ? 'house' : 'apartment',
+                        unit_type: unitType,
+                        unit_status: unitStatus,
                         monto_mensual: rent,
                         billing_day: billingDay,
+                        payment_deadline: paymentDeadline,
+                        billing_status: billingStatus,
                         resident_name: row['Nombre'] || row['nombre'],
                         resident_email: row['Email'] || row['email'],
                         resident_phone: row['Telefono'] || row['telefono'],
@@ -187,9 +215,9 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
     }
 
     const downloadTemplate = () => {
-        const headers = "Unidad,Piso,Tipo,Monto / Cuota,Día Cobro,Nombre,Email,Telefono,Placas,Marca,Saldo Pendiente,Saldo a Favor"
-        const row1 = "A-101,1,Departamento,5000,5,Juan Morales,juan@ejemplo.com,5219981234567,ABC-123,Toyota,0,0"
-        const row2 = "B-202,2,Casa,8500,1,Clara Licona,clara@ejemplo.com,5219987654321,XYZ-789,Honda,1500,500"
+        const headers = "Unidad,Piso,Tipo,Cuota,Inicio de cobro,Fecha limite,Estado de Ocupacion,Estado cobranza,Nombre,Email,Telefono,Placas,Marca,Saldo Pendiente,Saldo a Favor"
+        const row1 = "A-101,1,Departamento,5000,5,10,Ocupada,Activa,Juan Morales,juan@ejemplo.com,5219981234567,ABC-123,Toyota,0,0"
+        const row2 = "B-202,2,Casa,8500,1,15,Ocupada,Suspendida,Clara Licona,clara@ejemplo.com,5219987654321,XYZ-789,Honda,1500,500"
         const csvContent = `\uFEFF${headers}\n${row1}\n${row2}`
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

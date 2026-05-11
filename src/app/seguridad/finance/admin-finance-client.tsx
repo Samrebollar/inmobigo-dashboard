@@ -26,7 +26,7 @@ export default function AdminFinanceClient({
             {/* Header */}
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Finanzas & Facturación</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Gestión de Cobranza</h1>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
                         <p className="text-sm text-zinc-400">Visión general del estado financiero de</p>
                         <select

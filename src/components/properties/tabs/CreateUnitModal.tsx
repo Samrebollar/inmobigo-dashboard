@@ -31,7 +31,9 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
         type: 'apartment',
         status: 'vacant',
         monto_mensual: undefined,
-        billing_day: undefined
+        billing_day: undefined,
+        payment_deadline: undefined,
+        billing_status: 'active'
     })
 
     // Reset form when modal opens
@@ -44,7 +46,9 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                     type: unitToEdit.type,
                     status: unitToEdit.status === 'maintenance' ? 'vacant' : unitToEdit.status,
                     monto_mensual: unitToEdit.monto_mensual,
-                    billing_day: unitToEdit.billing_day
+                    billing_day: unitToEdit.billing_day,
+                    payment_deadline: unitToEdit.payment_deadline,
+                    billing_status: unitToEdit.billing_status || 'active'
                 })
             } else {
                 setFormData({
@@ -53,7 +57,9 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                     type: 'apartment',
                     status: 'vacant',
                     monto_mensual: undefined,
-                    billing_day: undefined
+                    billing_day: undefined,
+                    payment_deadline: undefined,
+                    billing_status: 'active'
                 })
             }
         }
@@ -152,7 +158,7 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                             <div className="grid grid-cols-2 gap-4">
                                 <Input
                                     label={isPropiedades ? 'Monto mensual ($ renta)' : 'Monto mensual ($ renta/cuota)'}
                                     type="number"
@@ -171,24 +177,55 @@ export function CreateUnitModal({ isOpen, onClose, onSuccess, condominiumId, uni
                                 />
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-zinc-400">Estado</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {['vacant', 'occupied'].map((status) => (
-                                        <button
-                                            key={status}
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, status: status as any })}
-                                            className={`rounded-lg border p-2.5 text-sm transition-all font-medium ${formData.status === status
-                                                ? 'border-indigo-500 bg-indigo-500/20 text-indigo-400 font-bold shadow-sm'
-                                                : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:bg-zinc-800'
-                                                }`}
-                                        >
-                                            <span>
-                                                {status === 'vacant' ? 'Vacía' : 'Habitada'}
-                                            </span>
-                                        </button>
-                                    ))}
+                            <div className="grid grid-cols-1 gap-4">
+                                <Input
+                                    label="Fecha límite de cobro (Día del mes)"
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    placeholder="Ej. 10"
+                                    value={formData.payment_deadline || ''}
+                                    onChange={(e) => setFormData({ ...formData, payment_deadline: parseInt(e.target.value) || undefined })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-zinc-400">Estado</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['vacant', 'occupied'].map((status) => (
+                                            <button
+                                                key={status}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, status: status as any })}
+                                                className={`rounded-lg border p-2 text-xs transition-all font-medium ${formData.status === status
+                                                    ? 'border-indigo-500 bg-indigo-500/20 text-indigo-400 font-bold shadow-sm'
+                                                    : 'border-zinc-800 bg-zinc-950 text-zinc-500 hover:bg-zinc-800'
+                                                    }`}
+                                            >
+                                                {status === 'vacant' ? 'Vacía' : 'Ocupada'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-zinc-400">Estado de cobranza</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['active', 'suspended'].map((bStatus) => (
+                                            <button
+                                                key={bStatus}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, billing_status: bStatus as any })}
+                                                className={`rounded-lg border p-2 text-xs transition-all font-medium ${formData.billing_status === bStatus
+                                                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400 font-bold shadow-sm'
+                                                    : 'border-zinc-800 bg-zinc-950 text-zinc-500 hover:bg-zinc-800'
+                                                    }`}
+                                            >
+                                                {bStatus === 'active' ? 'Activa' : 'Suspendida'}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 

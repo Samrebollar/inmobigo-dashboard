@@ -14,64 +14,76 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        // 1. Fetch units for expected income (Current Month reference)
+        const { data: units } = await supabase
+            .from('units')
+            .select('monto_mensual')
+            .eq('condominium_id', condominiumId)
+        const monthlyUnitsSum = units?.reduce((acc, u) => acc + (Number(u.monto_mensual) || 0), 0) || 0
+
+        // 2. Fetch Invoices
         let query = supabase.from('invoices').select('amount, status, created_at, paid_at, due_date, balance_due, paid_amount')
-        
         if (condominiumId) {
             query = query.eq('condominium_id', condominiumId)
         } else if (organizationId) {
             query = query.eq('organization_id', organizationId)
         }
-        
         const { data: invoices, error } = await query
-        
         if (error) throw error
 
-        let resQuery = supabase.from('residents').select('debt_amount')
-        if (condominiumId) {
-            resQuery = resQuery.eq('condominium_id', condominiumId)
-        } else if (organizationId) {
-            resQuery = resQuery.eq('organization_id', organizationId)
-        }
-        const { data: residents } = await resQuery
-        const baseDebts = residents?.reduce((acc, curr) => acc + Number(curr.debt_amount || 0), 0) || 0
-
-        const currentYear = new Date().getFullYear()
+        const now = new Date()
+        const currentYear = now.getFullYear()
+        const currentMonthIndex = now.getMonth()
 
         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
         const chartData = meses.map((mes) => ({
             mes,
-            facturado: 0,
-            cobrado: 0,
-            pendiente: 0
+            facturado: 0, // "Pendiente" (Bars) - Total Expected
+            cobrado: 0,   // "Cobrado" (Area) - Paid
+            pendiente: 0  // "Morosidad" (Line) - Balance
         }))
 
+        // Helper to group by month
         invoices?.forEach(inv => {
             const createdAt = new Date(inv.created_at)
-            const paidAt = inv.paid_at ? new Date(inv.paid_at) : null
-            const dueDate = new Date(inv.due_date)
-
-            // 1. facturado: Suma de "amount" agrupado por mes usando "created_at"
             if (createdAt.getFullYear() === currentYear) {
                 const monthIndex = createdAt.getMonth()
+                // Sum actual invoices amount as the "Total Invoiced" for that month
                 chartData[monthIndex].facturado += Number(inv.amount || 0)
             }
 
-            // 2. cobrado: Suma de "paid_amount" donde status = 'paid', agrupado por mes usando "paid_at"
-            if (inv.status === 'paid' && paidAt && paidAt.getFullYear() === currentYear) {
+            const paidAt = inv.paid_at ? new Date(inv.paid_at) : (inv.status === 'paid' ? new Date(inv.created_at) : null)
+            if (paidAt && paidAt.getFullYear() === currentYear) {
                 const monthIndex = paidAt.getMonth()
                 chartData[monthIndex].cobrado += Number(inv.paid_amount ?? inv.amount ?? 0)
             }
-
-            // 3. pendiente: Suma de "balance_due" donde status != 'paid', agrupado por mes usando "due_date"
-            if (inv.status !== 'paid' && dueDate.getFullYear() === currentYear) {
-                const monthIndex = dueDate.getMonth()
-                chartData[monthIndex].pendiente += Number(inv.balance_due ?? inv.amount ?? 0)
-            }
         })
 
-        // Agregar deudas iniciales directas de residentes al mes actual
-        const currentMonthIndex = new Date().getMonth()
-        chartData[currentMonthIndex].pendiente += baseDebts
+        const currentDay = now.getDate()
+
+        // Apply logic for each month up to current
+        chartData.forEach((item, index) => {
+            if (index > currentMonthIndex) return
+
+            // Ensure current month target is based on Units
+            const target = index === currentMonthIndex ? Math.max(item.facturado, monthlyUnitsSum) : item.facturado
+            const balance = Math.max(0, target - item.cobrado)
+            
+            if (index === currentMonthIndex) {
+                // Current Month
+                if (currentDay <= 10) {
+                    item.facturado = balance // Pendiente (Yellow Bars)
+                    item.pendiente = 0       // Morosidad (Red Line)
+                } else {
+                    item.facturado = 0       // Pendiente is 0 after day 10
+                    item.pendiente = balance // Balance moves to Morosidad
+                }
+            } else {
+                // Past Month (Always Morosidad)
+                item.facturado = 0
+                item.pendiente = balance
+            }
+        })
 
         return NextResponse.json(chartData)
     } catch (error: any) {

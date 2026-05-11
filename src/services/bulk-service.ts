@@ -9,6 +9,7 @@ export interface UnifiedBulkRow {
     unit_number: string
     floor?: string
     unit_type?: 'house' | 'apartment' | 'commercial'
+    unit_status?: 'occupied' | 'vacant'
     monto_mensual?: number
     billing_day?: number
     resident_name?: string
@@ -18,7 +19,8 @@ export interface UnifiedBulkRow {
     debt_amount?: number
     credit_amount?: number
     vehicle_plate?: string
-    vehicle_brand?: string
+    billing_status?: 'active' | 'suspended'
+    payment_deadline?: number
 }
 
 export const bulkService = {
@@ -41,9 +43,11 @@ export const bulkService = {
                         unit_number: row.unit_number,
                         floor: row.floor || '1',
                         type: row.unit_type || 'apartment',
-                        status: row.resident_name ? 'occupied' : 'vacant',
+                        status: row.unit_status || (row.resident_name ? 'occupied' : 'vacant'),
                         monto_mensual: row.monto_mensual,
-                        billing_day: row.billing_day
+                        billing_day: row.billing_day,
+                        payment_deadline: row.payment_deadline,
+                        billing_status: row.billing_status || 'active'
                     }
                     const newUnit = await unitsService.create(unitPayload)
                     unitId = newUnit.id

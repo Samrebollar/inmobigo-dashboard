@@ -16,7 +16,6 @@ import { motion } from 'framer-motion'
 import { useState, useEffect, useMemo } from 'react'
 import { Loader2, TrendingUp } from 'lucide-react'
 
-// Fallback skeleton
 const defaultData = [
     { mes: 'Ene', facturado: 0, cobrado: 0, pendiente: 0 },
     { mes: 'Feb', facturado: 0, cobrado: 0, pendiente: 0 },
@@ -52,11 +51,6 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
 
     const filteredData = useMemo(() => {
         if (!chartData) return defaultData
-        
-        // Si el rango es de 1 año (12 meses), devolvemos el set completo (Ene-Dic)
-        if (viewRange === 12) return chartData;
-        
-        // Para 3M y 6M, tomamos desde el mes actual hacia atrás
         const now = new Date()
         const currentMonthIndex = now.getMonth()
         return chartData.slice(0, currentMonthIndex + 1).slice(-viewRange)
@@ -82,6 +76,25 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
             )
         }
         return null
+    }
+
+    const renderCustomLegend = () => {
+        return (
+            <div className="flex justify-end gap-6 text-[10px] font-bold uppercase tracking-widest pb-8">
+                <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#10b981]" />
+                    <span className="text-zinc-400">Cobrado</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
+                    <span className="text-zinc-400">Pendiente</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" />
+                    <span className="text-zinc-400">Morosidad</span>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -130,10 +143,6 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
                                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
                                 <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
                             </linearGradient>
-                            <linearGradient id="colorPen" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.8}/>
-                                <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.1}/>
-                            </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
                         <XAxis
@@ -153,12 +162,11 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
                             tickFormatter={(value) => `$${value >= 1000 ? (value/1000).toFixed(0) + 'k' : value}`}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
+                        
                         <Legend 
+                            content={renderCustomLegend}
                             verticalAlign="top" 
                             align="right"
-                            height={30}
-                            iconType="circle"
-                            wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', paddingBottom: '20px' }}
                         />
                         
                         <Area
@@ -169,18 +177,20 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
                             stroke="#10b981"
                             strokeWidth={2}
                         />
+
                         <Bar
                             dataKey="facturado"
-                            name="Facturado"
-                            fill="#3b82f6"
+                            name="Pendiente"
+                            fill="#eab308"
                             radius={[4, 4, 0, 0]}
                             barSize={viewRange === 12 ? 15 : 25}
-                            fillOpacity={0.3}
+                            fillOpacity={0.4}
                         />
+
                         <Line
                             type="monotone"
                             dataKey="pendiente"
-                            name="Pendiente"
+                            name="Morosidad"
                             stroke="#f43f5e"
                             strokeWidth={3}
                             dot={{ fill: '#f43f5e', r: 4 }}
@@ -192,4 +202,3 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
         </motion.div>
     )
 }
-

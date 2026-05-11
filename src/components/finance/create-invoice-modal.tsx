@@ -216,6 +216,7 @@ export function CreateInvoiceModal({
                 status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
                 due_date: formData.dueDate,
                 description: finalNotes ? `${formData.concept} - ${finalNotes}` : formData.concept,
+                payment_method: paymentMethod,
                 ...(paymentMethod === 'Efectivo' && {
                     paid_at: new Date().toISOString(),
                     paid_amount: parseFloat(formData.amount),

@@ -44,6 +44,7 @@ export default function AdminDashboardPropiedadesClient({
     recentActivity = [] 
 }: AdminDashboardClientProps) {
     const isPropiedades = true
+    const { isAdmin } = useUserRole()
     const [totalIngresos, setTotalIngresos] = useState<number | null>(null)
     const [isLoadingIngresos, setIsLoadingIngresos] = useState(true)
     const [ingresosError, setIngresosError] = useState<string | null>(null)
@@ -194,10 +195,12 @@ export default function AdminDashboardPropiedadesClient({
         <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
             <DashboardHeader userEmail={userEmail} userName={userName} />
 
-            <PlanExpirationBanner 
-                nextPaymentDate={nextPaymentDate} 
-                dias={daysRemaining || 0} 
-            />
+            {isAdmin && (
+                <PlanExpirationBanner 
+                    nextPaymentDate={nextPaymentDate} 
+                    dias={daysRemaining || 0} 
+                />
+            )}
 
             <motion.div
                 variants={container}

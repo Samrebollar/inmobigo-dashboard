@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
 import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
+import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
 export default async function ResidenteLayout({
     children,
@@ -44,6 +45,36 @@ export default async function ResidenteLayout({
     }
 
     const isPropiedades = false // Or retrieve organization info if needed for labels.
+
+    const { createAdminClient } = await import('@/utils/supabase/admin')
+    const adminSupabase = createAdminClient()
+
+    const organizationId = (resident?.condominiums as any)?.organization_id
+
+    const { data: activeSub } = await adminSupabase
+        .from('subscriptions')
+        .select('subscription_status, plan_name, created_at, next_payment_date')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+    let globalDaysRemaining = 999
+
+    if (activeSub?.next_payment_date) {
+        const nextPayment = new Date(activeSub.next_payment_date)
+        const now = new Date()
+        const diffTime = nextPayment.getTime() - now.getTime()
+        globalDaysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    } else if (organizationId) {
+        const { data: org } = await adminSupabase.from('organizations').select('created_at').eq('id', organizationId).maybeSingle()
+        if (org?.created_at) {
+            const nextPayment = new Date(new Date(org.created_at).getTime() + 30 * 24 * 60 * 60 * 1000)
+            const now = new Date()
+            const diffTime = nextPayment.getTime() - now.getTime()
+            globalDaysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        }
+    }
 
     const sidebarContent = (
         <>
@@ -158,7 +189,9 @@ export default async function ResidenteLayout({
                 />
             }
         >
-            {children}
+            <SubscriptionLockWrapper daysRemaining={globalDaysRemaining} role="resident">
+                {children}
+            </SubscriptionLockWrapper>
         </DashboardLayoutClient>
     )
 }

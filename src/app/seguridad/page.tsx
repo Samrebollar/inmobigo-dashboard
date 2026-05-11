@@ -96,18 +96,38 @@ export default async function SecurityDashboardPage() {
     }
 
     // 4. Fetch Subscription Status for Banner
+    const { data: organization } = await adminSupabase
+      .from('organizations')
+      .select('created_at')
+      .eq('id', safeOrgId)
+      .maybeSingle()
+
     const { data: subscription } = await adminSupabase
       .from('subscriptions')
       .select('next_payment_date, subscription_status')
       .eq('organization_id', safeOrgId)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     let daysRemaining = 999
-    if (subscription?.next_payment_date) {
-      const nextPayment = new Date(subscription.next_payment_date)
+    let finalNextPaymentDate = subscription?.next_payment_date
+
+    if (finalNextPaymentDate) {
+      const nextPayment = new Date(finalNextPaymentDate)
       const now = new Date()
       const diffTime = nextPayment.getTime() - now.getTime()
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    } else if (organization?.created_at) {
+      // Fail-safe para pagos recientes: calculamos 30 días desde la creación
+      const createdDate = new Date(organization.created_at)
+      const nextPayment = new Date(createdDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+      finalNextPaymentDate = nextPayment.toISOString()
+      const now = new Date()
+      const diffTime = nextPayment.getTime() - now.getTime()
+      daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    } else {
+      daysRemaining = 30
     }
 
     // 5. Fetch all available condominiums for this context
@@ -125,7 +145,7 @@ export default async function SecurityDashboardPage() {
         organizationId={safeOrgId}
         availableCondos={availableCondos || []}
         daysRemaining={daysRemaining}
-        nextPaymentDate={subscription?.next_payment_date}
+        nextPaymentDate={finalNextPaymentDate}
         stats={{
           incidenciasPendientes: pendingTicketsCount,
           anuncios: 0

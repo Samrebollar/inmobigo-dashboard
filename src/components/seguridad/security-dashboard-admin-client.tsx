@@ -34,6 +34,7 @@ import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { QRScannerModal } from '@/components/seguridad/modals/qr-scanner-modal'
 import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-modal'
 import { PlanExpirationBanner } from '@/components/seguridad/PlanExpirationBanner'
+import { useUserRole } from '@/hooks/use-user-role'
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
     <svg 
@@ -90,6 +91,7 @@ export default function SecurityDashboardAdminClient({
     const [unitToCondoMap, setUnitToCondoMap] = useState<Record<string, string>>({}) // Map unit_id -> condominium_id
     const [loading, setLoading] = useState(true)
     const [mounted, setMounted] = useState(false)
+    const { isAdmin, role } = useUserRole()
 
     useEffect(() => {
         setMounted(true)
@@ -311,10 +313,12 @@ export default function SecurityDashboardAdminClient({
                 onCondoChange={setSelectedCondoId}
             />
 
-            <PlanExpirationBanner 
-                daysRemaining={daysRemaining} 
-                nextPaymentDate={nextPaymentDate} 
-            />
+            {isAdmin && (
+                <PlanExpirationBanner 
+                    daysRemaining={daysRemaining} 
+                    nextPaymentDate={nextPaymentDate} 
+                />
+            )}
 
             <motion.div
                 variants={container}

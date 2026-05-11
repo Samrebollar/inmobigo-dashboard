@@ -179,16 +179,27 @@ export default async function DashboardPage({
     .from('subscriptions')
     .select('next_payment_date, subscription_status')
     .eq('organization_id', organization.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   let daysRemaining = 999
-  if (subscription?.next_payment_date) {
-    const nextPayment = new Date(subscription.next_payment_date)
+  let finalNextPaymentDate = subscription?.next_payment_date
+
+  if (finalNextPaymentDate) {
+    const nextPayment = new Date(finalNextPaymentDate)
+    const now = new Date()
+    const diffTime = nextPayment.getTime() - now.getTime()
+    daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  } else if (organization?.created_at) {
+    // Fail-safe para pagos recientes: calculamos 30 días desde la creación
+    const createdDate = new Date(organization.created_at)
+    const nextPayment = new Date(createdDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    finalNextPaymentDate = nextPayment.toISOString()
     const now = new Date()
     const diffTime = nextPayment.getTime() - now.getTime()
     daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   } else {
-    // Fail-safe para pagos recientes (como el de ayer)
     daysRemaining = 30
   }
 
@@ -291,7 +302,7 @@ export default async function DashboardPage({
       userEmail={user.email}
       userName={firstName}
       daysRemaining={daysRemaining}
-      nextPaymentDate={subscription?.next_payment_date}
+      nextPaymentDate={finalNextPaymentDate}
       stats={{
         totalFacturado,
         totalCobrado,

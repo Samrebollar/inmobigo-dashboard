@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
 import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
+import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
 export default async function DashboardLayout({
     children,
@@ -102,9 +103,8 @@ export default async function DashboardLayout({
 
     const { data: activeSub } = await adminSupabase
         .from('subscriptions')
-        .select('subscription_status, plan_name, created_at')
+        .select('subscription_status, plan_name, created_at, next_payment_date')
         .eq('organization_id', organizationId)
-        .eq('subscription_status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -113,19 +113,35 @@ export default async function DashboardLayout({
     
     // Calculate Subscription Info
     let subscriptionInfo = null
-    if (activeSub) {
-        const createdAt = new Date(activeSub.created_at)
-        const nextPayment = new Date(createdAt)
-        nextPayment.setMonth(nextPayment.getMonth() + 1)
-        
+    let globalDaysRemaining = 999
+
+    if (activeSub?.next_payment_date) {
+        const nextPayment = new Date(activeSub.next_payment_date)
         const now = new Date()
         const diffTime = nextPayment.getTime() - now.getTime()
         const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        globalDaysRemaining = daysRemaining
 
         subscriptionInfo = {
-            planName: activeSub.plan_name,
+            planName: activeSub.plan_name || 'Pro',
             daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
             nextPaymentDate: nextPayment.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+        }
+    } else if (organizationId) {
+        // Fallback to org creation date
+        const { data: org } = await adminSupabase.from('organizations').select('created_at').eq('id', organizationId).maybeSingle()
+        if (org?.created_at) {
+            const nextPayment = new Date(new Date(org.created_at).getTime() + 30 * 24 * 60 * 60 * 1000)
+            const now = new Date()
+            const diffTime = nextPayment.getTime() - now.getTime()
+            const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            globalDaysRemaining = daysRemaining
+            
+            subscriptionInfo = {
+                planName: 'Pro',
+                daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+                nextPaymentDate: nextPayment.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+            }
         }
     }
     // Metadata is IGNORED for authorization to prevent "Self-declared Admins"
@@ -354,7 +370,9 @@ export default async function DashboardLayout({
                 />
             }
         >
-            {children}
+            <SubscriptionLockWrapper daysRemaining={globalDaysRemaining} role={role}>
+                {children}
+            </SubscriptionLockWrapper>
         </DashboardLayoutClient>
     )
 }

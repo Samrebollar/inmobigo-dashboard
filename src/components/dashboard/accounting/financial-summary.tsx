@@ -22,44 +22,52 @@ export function FinancialSummary({
 
     const cards = [
         {
-            title: 'Ingresos Cobrados',
-            amount: metrics.totalCollected,
-            icon: Wallet,
-            color: 'text-emerald-400',
-            iconBg: 'bg-emerald-500/15',
-            bg: 'bg-emerald-950/30 backdrop-blur-xl',
-            border: 'border-emerald-500/20',
-            glow: 'hover:border-emerald-500/40 hover:shadow-emerald-500/10'
-        },
-        {
-            title: 'Cuentas por Cobrar',
-            amount: metrics.totalReceivable,
-            icon: Clock,
-            color: 'text-amber-400',
-            iconBg: 'bg-amber-500/15',
-            bg: 'bg-amber-950/30 backdrop-blur-xl',
-            border: 'border-amber-500/20',
-            glow: 'hover:border-amber-500/40 hover:shadow-amber-500/10'
-        },
-        {
-            title: 'Total Cuotas',
+            title: 'Total del Periodo',
             amount: metrics.totalInvoiced,
             icon: Receipt,
             color: 'text-indigo-400',
             iconBg: 'bg-indigo-500/15',
             bg: 'bg-indigo-950/30 backdrop-blur-xl',
             border: 'border-indigo-500/20',
-            glow: 'hover:border-indigo-500/40 hover:shadow-indigo-500/10'
+            glow: 'hover:border-indigo-500/40 hover:shadow-indigo-500/10',
+            subtext: 'Cobranza esperada del periodo',
+            subtextColor: 'text-indigo-400/80'
         },
         {
-            title: 'Egresos (Captura Manual)',
+            title: 'Cobrado',
+            amount: metrics.totalCollected,
+            icon: Wallet,
+            color: 'text-emerald-400',
+            iconBg: 'bg-emerald-500/15',
+            bg: 'bg-emerald-950/30 backdrop-blur-xl',
+            border: 'border-emerald-500/20',
+            glow: 'hover:border-emerald-500/40 hover:shadow-emerald-500/10',
+            subtext: 'Pagado por residentes',
+            subtextColor: 'text-emerald-400/80'
+        },
+        {
+            title: 'Pendiente',
+            amount: metrics.totalReceivable,
+            icon: Clock,
+            color: 'text-amber-400',
+            iconBg: 'bg-amber-500/15',
+            bg: 'bg-amber-950/30 backdrop-blur-xl',
+            border: 'border-amber-500/20',
+            glow: 'hover:border-amber-500/40 hover:shadow-amber-500/10',
+            subtext: 'Pendiente dentro de fecha',
+            subtextColor: 'text-amber-400/80'
+        },
+        {
+            title: 'Gastos del Periodo',
             amount: metrics.totalExpenses,
             icon: CreditCard,
             color: 'text-rose-400',
             iconBg: 'bg-rose-500/15',
             bg: 'bg-rose-950/30 backdrop-blur-xl',
             border: 'border-rose-500/20',
-            glow: 'hover:border-rose-500/40 hover:shadow-rose-500/10'
+            glow: 'hover:border-rose-500/40 hover:shadow-rose-500/10',
+            subtext: 'Gastos operativos registrados',
+            subtextColor: 'text-rose-400/80'
         },
         {
             title: 'Resultado Neto',
@@ -70,7 +78,8 @@ export function FinancialSummary({
             bg: isProfit ? 'bg-emerald-500/10' : 'bg-rose-500/10',
             border: isProfit ? 'border-emerald-500/20' : 'border-rose-500/20',
             glow: isProfit ? 'hover:border-emerald-500/40 hover:shadow-emerald-500/10' : 'hover:border-rose-500/40 hover:shadow-rose-500/10',
-            subtext: isProfit ? 'El condominio opera con superávit' : 'El condominio presenta déficit'
+            subtext: isProfit ? 'Operación saludable' : 'Déficit operativo',
+            subtextColor: isProfit ? 'text-emerald-400/80' : 'text-rose-400/80'
         }
     ]
 
@@ -105,9 +114,6 @@ export function FinancialSummary({
                         <div className={cn("p-3 rounded-2xl", (card as any).iconBg)}>
                             <card.icon size={22} className={card.color} />
                         </div>
-                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 opacity-60 group-hover:opacity-100 transition-opacity">
-                            PERIODO ACTUAL
-                        </div>
                     </div>
 
                     <div className="space-y-1">
@@ -119,7 +125,7 @@ export function FinancialSummary({
                             <span className="text-xs font-bold text-zinc-500 ml-1">MXN</span>
                         </div>
                         {card.subtext && (
-                            <p className={cn("text-[10px] font-bold uppercase tracking-wider mt-2", isProfit ? "text-emerald-400/80" : "text-rose-400/80")}>
+                            <p className={cn("text-[8.5px] font-bold uppercase tracking-wider mt-2", (card as any).subtextColor)}>
                                 {card.subtext}
                             </p>
                         )}

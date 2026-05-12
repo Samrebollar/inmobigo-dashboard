@@ -121,9 +121,24 @@ export async function getAccountingData(condominiumId: string = 'all') {
             id, amount, status, created_at, folio, description,
             condominium_id,
             condominiums (name),
-            units (unit_number)
+            units (unit_number, payment_deadline)
         `)
     
+    // Fetch Expected Income from Units
+    let unitsQuery = supabase.from('units').select('monto_mensual, billing_status')
+    if (condominiumId && condominiumId !== 'all') {
+        unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
+    } else {
+        // For 'all', we need to filter by condominiums belonging to the organization
+        const condoIds = condominiums.map(c => c.id)
+        unitsQuery = unitsQuery.in('condominium_id', condoIds)
+    }
+
+    const { data: unitsForIncome } = await unitsQuery
+    const expected_monthly_income = (unitsForIncome || [])
+        .filter(u => u.billing_status !== 'suspended')
+        .reduce((sum, u) => sum + (Number(u.monto_mensual) || 0), 0)
+
     // Only filter by condo if one is selected, otherwise fetch all accessible
     if (condominiumId && condominiumId !== 'all') {
         billingQuery = billingQuery.eq('condominium_id', condominiumId)
@@ -186,7 +201,7 @@ export async function getAccountingData(condominiumId: string = 'all') {
         metrics: {
             totalCollected,
             totalReceivable,
-            totalInvoiced,
+            totalInvoiced: expected_monthly_income, // Now showing Expected Monthly Income from Units
             totalExpenses,
             utilidad,
             isrEstimado
@@ -203,6 +218,7 @@ export async function getAccountingData(condominiumId: string = 'all') {
                 status: normalizeStatus(inv.status) === 'pagado' || normalizeStatus(inv.status) === 'paid' ? 'pagado' : 'pendiente',
                 is_invoice: true,
                 unit_number: (inv.units as any)?.unit_number,
+                payment_deadline: (inv.units as any)?.payment_deadline,
                 condominium_id: inv.condominium_id,
                 condominium_name: (inv.condominiums as any)?.name
             })),

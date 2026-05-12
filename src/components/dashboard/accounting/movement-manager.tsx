@@ -74,7 +74,10 @@ export function MovementManager({
     condominiums,
     onNewRecord,
     onDelete,
-    selectedCondoId
+    selectedCondoId,
+    selectedMonth,
+    onMonthChange,
+    months
 }: { 
     records: any[], 
     regime: FiscalRegime,
@@ -83,7 +86,10 @@ export function MovementManager({
     condominiums: any[],
     onNewRecord: (r: any) => void,
     onDelete: (id: string) => void,
-    selectedCondoId: string
+    selectedCondoId: string,
+    selectedMonth: string,
+    onMonthChange: (m: string) => void,
+    months: { value: string, label: string }[]
 }) {
     const [searchTerm, setSearchTerm] = useState('')
     const [filterType, setFilterType] = useState<'all' | 'ingreso' | 'egreso'>('all')
@@ -121,7 +127,8 @@ export function MovementManager({
         const matchesSearch = r.description?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               r.category?.toLowerCase().includes(searchTerm.toLowerCase())
         const matchesType = filterType === 'all' || r.type === filterType
-        return matchesSearch && matchesType
+        const matchesMonth = selectedMonth === 'all' || (r.date && r.date.split('-')[1] === selectedMonth)
+        return matchesSearch && matchesType && matchesMonth
     })
 
     const activeCategories = regime ? REGIME_CATEGORIES[regime] : REGIME_CATEGORIES['condominio_no_lucrativo']
@@ -245,6 +252,20 @@ export function MovementManager({
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-10 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50 transition-all font-medium"
                         />
+                    </div>
+
+                    <div className="relative w-full md:w-44">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                        <select 
+                            value={selectedMonth}
+                            onChange={(e) => onMonthChange(e.target.value)}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-8 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50 transition-all font-medium appearance-none cursor-pointer"
+                        >
+                            {months.map(month => (
+                                <option key={month.value} value={month.value}>{month.label}</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={14} />
                     </div>
                 </div>
 

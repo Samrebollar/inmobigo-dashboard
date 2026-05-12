@@ -301,6 +301,7 @@ export default async function DashboardPage({
     <AdminDashboardCondominioClient
       userEmail={user.email}
       userName={firstName}
+      organizationId={organization.id}
       daysRemaining={daysRemaining}
       nextPaymentDate={finalNextPaymentDate}
       stats={{

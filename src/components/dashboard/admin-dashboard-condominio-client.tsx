@@ -19,6 +19,7 @@ import { IncomeComparisonChart } from '@/components/dashboard/IncomeComparisonCh
 interface AdminDashboardClientProps {
     userEmail?: string
     userName?: string
+    organizationId: string
     daysRemaining?: number
     nextPaymentDate?: string
     stats: {
@@ -38,10 +39,11 @@ interface AdminDashboardClientProps {
 export default function AdminDashboardCondominioClient({ 
     userEmail, 
     userName, 
+    organizationId,
     daysRemaining = 999, 
     nextPaymentDate,
-    stats, 
-    recentActivity = [] 
+    stats: initialStats, 
+    recentActivity: initialActivity = [] 
 }: AdminDashboardClientProps) {
     const isPropiedades = false
     const { isAdmin } = useUserRole()
@@ -63,6 +65,9 @@ export default function AdminDashboardCondominioClient({
     const [incomeSummary, setIncomeSummary] = useState<Array<{ month: string, total_cobrado: number, total_pendiente: number }>>([])
     const [isLoadingIncome, setIsLoadingIncome] = useState(true)
     const [incomeError, setIncomeError] = useState<string | null>(null)
+
+    const [recentActivity, setRecentActivity] = useState<any[]>(initialActivity)
+    const [ingresosAnterior, setIngresosAnterior] = useState<number>(0)
 
     const [condominiums, setCondominiums] = useState<Array<{ id: string, name: string }>>([])
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
@@ -126,23 +131,68 @@ export default function AdminDashboardCondominioClient({
 
     useEffect(() => {
         let isMounted = true
-        const fetchIncome = async () => {
+        
+        const fetchData = async () => {
             try {
+                setIsLoadingIngresos(true)
+                setIsLoadingDeuda(true)
+                setIsLoadingTasa(true)
+                setIsLoadingMorosidad(true)
                 setIsLoadingIncome(true)
-                setIncomeError(null)
-                // This method returns { month, total_cobrado, total_pendiente }
-                const data = await financeService.getIncomeSummaryYear(selectedCondoId || undefined)
-                if (isMounted) setIncomeSummary(data)
+
+                setIngresosError(null)
+                setDeudaError(null)
+                setTasaError(null)
+                setMorosidadError(null)
+
+                const analytics = await financeService.getDashboardAnalytics(organizationId, selectedCondoId || undefined)
+
+                if (isMounted) {
+                    setTotalIngresos(analytics.ingresosTotales)
+                    setIngresosAnterior(analytics.ingresosTotalesAnterior)
+                    setTotalDeuda(analytics.deudaTotal)
+                    setTasaCobranza(analytics.tasaCobranza)
+                    setMorosidad({
+                        total_facturas_vencidas: analytics.morosidadCount,
+                        monto_vencido: analytics.morosidadMonto
+                    })
+                    setIncomeSummary(analytics.incomeSummary)
+                    setRecentActivity(analytics.recentActivity)
+
+                    setIsLoadingIngresos(false)
+                    setIsLoadingDeuda(false)
+                    setIsLoadingTasa(false)
+                    setIsLoadingMorosidad(false)
+                    setIsLoadingIncome(false)
+                }
             } catch (err) {
-                console.error('Error fetching income summary:', err)
-                if (isMounted) setIncomeError('Error al cargar datos')
-            } finally {
-                if (isMounted) setIsLoadingIncome(false)
+                console.error('Error fetching dashboard analytics:', err)
+                if (isMounted) {
+                    setIngresosError('Error')
+                    setDeudaError('Error')
+                    setTasaError('Error')
+                    setMorosidadError('Error')
+                    setIsLoadingIngresos(false)
+                    setIsLoadingDeuda(false)
+                    setIsLoadingTasa(false)
+                    setIsLoadingMorosidad(false)
+                    setIsLoadingIncome(false)
+                }
             }
         }
-        fetchIncome()
+
+        const fetchCondos = async () => {
+            const supabase = createClient()
+            const { data } = await supabase.from('condominiums').select('id, name').eq('organization_id', organizationId)
+            if (isMounted && data) {
+                setCondominiums(data)
+            }
+        }
+
+        fetchData()
+        fetchCondos()
         return () => { isMounted = false }
-    }, [selectedCondoId])
+    }, [selectedCondoId, organizationId])
 
     const container = {
         hidden: { opacity: 0 },
@@ -197,8 +247,14 @@ export default function AdminDashboardCondominioClient({
                                         <div className="text-2xl font-bold text-white">
                                             {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(totalIngresos || 0)}
                                         </div>
-                                        <p className="text-xs text-emerald-500 flex items-center mt-1">
-                                            <TrendingUp className="h-3 w-3 mr-1" /> +20.1% vs mes anterior
+                                        <p className={cn(
+                                            "text-xs flex items-center mt-1",
+                                            (totalIngresos || 0) >= ingresosAnterior ? "text-emerald-500" : "text-rose-500"
+                                        )}>
+                                            {(totalIngresos || 0) >= ingresosAnterior ? <TrendingUp className="h-3 w-3 mr-1" /> : <Activity className="h-3 w-3 mr-1" />}
+                                            {ingresosAnterior > 0 
+                                                ? `${(((totalIngresos || 0) - ingresosAnterior) / ingresosAnterior * 100).toFixed(1)}%` 
+                                                : '+100%'} vs mes anterior
                                         </p>
                                     </>
                                 )}
@@ -223,7 +279,7 @@ export default function AdminDashboardCondominioClient({
                                             {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(totalDeuda || 0)}
                                         </div>
                                         <p className="text-xs text-amber-500 mt-1">
-                                            Monto vencido total
+                                            Saldo pendiente total (V5)
                                         </p>
                                     </>
                                 )}
@@ -267,9 +323,11 @@ export default function AdminDashboardCondominioClient({
                                     <div className="text-sm font-medium text-rose-500 mt-2">{morosidadError}</div>
                                 ) : (
                                     <>
-                                        <div className="text-2xl font-bold text-white">{morosidad?.total_facturas_vencidas || 0}</div>
+                                        <div className="text-2xl font-bold text-white">
+                                            {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(morosidad?.monto_vencido || 0)}
+                                        </div>
                                         <p className="text-xs text-rose-500 mt-1">
-                                            {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(morosidad?.monto_vencido || 0)} vencido
+                                            {morosidad?.total_facturas_vencidas || 0} residentes en atraso
                                         </p>
                                     </>
                                 )}
@@ -364,7 +422,7 @@ export default function AdminDashboardCondominioClient({
                                                     textClass = 'text-emerald-400';
                                                     break;
                                                 case 'overdue':
-                                                    Icon = Activity; // Or AlertCircle
+                                                    Icon = AlertTriangle; 
                                                     colorClass = 'bg-rose-500/10 text-rose-500 border border-rose-500/20';
                                                     textClass = 'text-rose-400';
                                                     break;
@@ -374,9 +432,14 @@ export default function AdminDashboardCondominioClient({
                                                     textClass = 'text-amber-400';
                                                     break;
                                                 case 'resident':
-                                                    Icon = Users; // Or UserPlus
+                                                    Icon = Users; 
                                                     colorClass = 'bg-blue-500/10 text-blue-500 border border-blue-500/20';
                                                     textClass = 'text-blue-400';
+                                                    break;
+                                                case 'expense':
+                                                    Icon = DollarSign;
+                                                    colorClass = 'bg-orange-500/10 text-orange-500 border border-orange-500/20';
+                                                    textClass = 'text-orange-400';
                                                     break;
                                             }
 
@@ -401,9 +464,9 @@ export default function AdminDashboardCondominioClient({
                                                     </p>
                                                 </div>
                                                 <div className="flex flex-col items-end">
-                                                    {(activity.type === 'payment' || activity.type === 'overdue') && (
+                                                    {(activity.type === 'payment' || activity.type === 'overdue' || activity.type === 'expense') && (
                                                         <div className={`text-sm font-bold ${textClass}`}>
-                                                            {activity.type === 'payment' ? '+' : ''}${activity.amount?.toLocaleString()}
+                                                            {activity.type === 'payment' ? '+' : activity.type === 'expense' ? '-' : ''}${activity.amount?.toLocaleString()}
                                                         </div>
                                                     )}
                                                     <div className="text-[10px] text-zinc-600">
@@ -462,7 +525,7 @@ export default function AdminDashboardCondominioClient({
                                             <Wrench className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <p className="text-2xl font-bold text-white">{stats.incidenciasPendientes || 0}</p>
+                                            <p className="text-2xl font-bold text-white">{initialStats.incidenciasPendientes || 0}</p>
                                             <p className="text-sm text-zinc-400">Incidencias pendientes</p>
                                         </div>
                                     </CardContent>

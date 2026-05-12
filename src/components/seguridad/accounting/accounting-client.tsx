@@ -28,6 +28,22 @@ import { SatTaxProjection } from './sat-tax-projection'
 import { RegimeSelector } from './regime-selector'
 import { cn } from '@/lib/utils'
 
+const MONTHS = [
+    { value: 'all', label: 'Todo el año' },
+    { value: '01', label: 'Enero' },
+    { value: '02', label: 'Febrero' },
+    { value: '03', label: 'Marzo' },
+    { value: '04', label: 'Abril' },
+    { value: '05', label: 'Mayo' },
+    { value: '06', label: 'Junio' },
+    { value: '07', label: 'Julio' },
+    { value: '08', label: 'Agosto' },
+    { value: '09', label: 'Septiembre' },
+    { value: '10', label: 'Octubre' },
+    { value: '11', label: 'Noviembre' },
+    { value: '12', label: 'Diciembre' },
+]
+
 export function AccountingClient({ 
     data,
     organizationId
@@ -39,13 +55,15 @@ export function AccountingClient({
     const searchParams = useSearchParams()
     const { 
         movements: records, 
-        metrics, 
+        metrics: serverMetrics,
         condominiums, 
         regime, 
         selectedCondoId,
         unitsInRange,
         fundData
     } = data
+
+    const [selectedMonth, setSelectedMonth] = useState('all')
     
     // VIEW STATE MANAGEMENT via SearchParams for persistence on reload
     const activeView = searchParams.get('view') === 'fiscal' ? 'fiscal' : 'dashboard'
@@ -67,9 +85,120 @@ export function AccountingClient({
     const [isExportMenuOpen, setExportMenuOpen] = useState(false)
     const exportMenuRef = useRef<HTMLDivElement>(null)
 
-    // IA ANALYSIS LOGIC
-    const isHealthy = metrics.utilidad >= 0
-    const expensesByCategory = records
+    // IA ANALYSIS LOGIC & FILTERED METRICS
+    const filteredRecordsForMetrics = records.filter((r: any) => 
+        selectedMonth === 'all' || (r.date && r.date.split('-')[1] === selectedMonth)
+    )
+
+    const metrics = {
+        totalCollected: filteredRecordsForMetrics
+            .filter((r: any) => r.type === 'ingreso' && r.status === 'pagado')
+            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
+        totalReceivable: filteredRecordsForMetrics
+            .filter((r: any) => {
+                if (r.type !== 'ingreso' || r.status !== 'pendiente') return false
+                
+                // Logic for "Pending (not expired)"
+                const now = new Date()
+                const today = now.getDate()
+                const currentMonthNum = now.getMonth() + 1
+                const recordMonth = parseInt(r.date.split('-')[1])
+                const recordYear = parseInt(r.date.split('-')[0])
+                
+                // If past month, it's already expired
+                if (recordYear < now.getFullYear() || (recordYear === now.getFullYear() && recordMonth < currentMonthNum)) {
+                    return false
+                }
+                
+                // If current month, check deadline
+                if (recordMonth === currentMonthNum && recordYear === now.getFullYear()) {
+                    return !r.payment_deadline || today <= r.payment_deadline
+                }
+                
+                return true // Future months
+            })
+            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
+        totalOverdue: filteredRecordsForMetrics
+            .filter((r: any) => {
+                if (r.type !== 'ingreso' || r.status !== 'pendiente') return false
+                
+                const now = new Date()
+                const today = now.getDate()
+                const currentMonthNum = now.getMonth() + 1
+                const recordMonth = parseInt(r.date.split('-')[1])
+                const recordYear = parseInt(r.date.split('-')[0])
+                
+                // Past month
+                if (recordYear < now.getFullYear() || (recordYear === now.getFullYear() && recordMonth < currentMonthNum)) {
+                    return true
+                }
+                
+                // Current month, check deadline
+                if (recordMonth === currentMonthNum && recordYear === now.getFullYear()) {
+                    return r.payment_deadline && today > r.payment_deadline
+                }
+                
+                return false // Future
+            })
+            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
+        totalInvoiced: serverMetrics.totalInvoiced || 0, // Ingreso Mensual Esperado from Units
+        totalExpenses: filteredRecordsForMetrics
+            .filter((r: any) => r.type === 'egreso')
+            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
+        utilidad: 0,
+        isrEstimado: 0
+    }
+    metrics.utilidad = metrics.totalCollected - metrics.totalExpenses
+    metrics.isrEstimado = regime ? Math.max(0, metrics.utilidad * 0.30) : 0
+
+    const getIAState = () => {
+        const { totalCollected, totalInvoiced, totalExpenses, utilidad, totalOverdue } = metrics;
+        
+        // 1. DÉFICIT OPERATIVO (Intense Red)
+        if (utilidad < -(totalCollected * 0.3) && totalExpenses > totalCollected * 1.3) {
+            return {
+                badge: 'Déficit Operativo',
+                color: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
+                message: 'Déficit operativo detectado. Los gastos del periodo superan significativamente los ingresos cobrados, afectando la liquidez del condominio. Se recomienda intervención administrativa inmediata.',
+                iconBg: 'bg-rose-600 shadow-rose-600/30',
+                containerBg: 'bg-rose-500/5 border-rose-500/20'
+            };
+        }
+        
+        // 2. ATENCIÓN REQUERIDA (Red)
+        if (totalExpenses > totalCollected || totalOverdue > totalInvoiced * 0.15 || utilidad < 0) {
+            return {
+                badge: 'Atención Requerida',
+                color: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
+                message: 'Atención requerida. El periodo presenta presión financiera debido a baja recuperación de cuotas o incremento operativo en gastos. Se recomienda reforzar cobranza y revisar egresos registrados.',
+                iconBg: 'bg-rose-600 shadow-rose-600/30',
+                containerBg: 'bg-rose-500/5 border-rose-500/20'
+            };
+        }
+        
+        // 3. COBRANZA PARCIAL (Orange)
+        if (totalCollected < totalInvoiced && utilidad >= 0) {
+            return {
+                badge: 'Cobranza Parcial',
+                color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+                message: 'Cobranza parcial detectada. Actualmente se ha recaudado una parte del ingreso esperado del periodo. La operación mantiene estabilidad financiera, aunque aún existen cuotas pendientes por recuperar.',
+                iconBg: 'bg-amber-600 shadow-amber-600/20',
+                containerBg: 'bg-amber-500/5 border-amber-500/10'
+            };
+        }
+        
+        // 4. OPERACIÓN SALUDABLE (Green)
+        return {
+            badge: 'Operación Saludable',
+            color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
+            message: 'Operación saludable. El periodo actual presenta una cobranza sólida y balance financiero positivo. Los ingresos permiten mantener estabilidad operativa en el condominio.',
+            iconBg: 'bg-indigo-600 shadow-indigo-600/20',
+            containerBg: 'bg-zinc-900/50 border-zinc-800'
+        };
+    };
+
+    const iaState = getIAState();
+    const expensesByCategory = filteredRecordsForMetrics
         .filter((r: any) => r.type === 'egreso')
         .reduce((acc: any, curr: any) => {
             const cat = curr.category || 'Otros'
@@ -95,16 +224,10 @@ export function AccountingClient({
     }, [])
 
     const generateMagicComment = () => {
-        const currentMonth = new Date().toLocaleDateString('es-MX', { month: 'long' })
         if (metrics.totalCollected === 0 && metrics.totalExpenses === 0) {
             return "Sin movimientos registrados este mes. El análisis se activará al procesar la primera factura o gasto."
         }
-        
-        if (isHealthy) {
-            return `Análisis de ${currentMonth}: Operación saludable con un superávit de $${metrics.utilidad.toLocaleString()}. El gasto se concentra principalmente en ${topCategory || 'operación general'}, manteniendo el cumplimiento fiscal.`
-        } else {
-            return `Alerta Administrativa: El periodo presenta un déficit de $${Math.abs(metrics.utilidad).toLocaleString()}. Se recomienda revisar los gastos de ${topCategory || 'mantenimiento'} y agilizar la cobranza de las facturas pendientes.`
-        }
+        return iaState.message
     }
 
     const getExportFilename = (ext: string) => `reporte_contable_${selectedCondoId}_${new Date().toISOString().split('T')[0]}.${ext}`
@@ -305,9 +428,7 @@ export function AccountingClient({
                             animate={{ opacity: 1, y: 0 }}
                             className={cn(
                                 "relative overflow-hidden p-6 md:p-10 rounded-[32px] md:rounded-[48px] border transition-all duration-500",
-                                isHealthy 
-                                    ? "bg-zinc-900/50 border-zinc-800" 
-                                    : "bg-rose-500/5 border-rose-500/20"
+                                iaState.containerBg
                             )}
                         >
                             <div className="absolute top-0 right-0 p-8 text-indigo-500/5 select-none">
@@ -316,10 +437,8 @@ export function AccountingClient({
 
                             <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 md:gap-10">
                                 <div className={cn(
-                                    "w-16 h-16 md:w-24 md:h-24 rounded-2xl md:rounded-3xl flex items-center justify-center shadow-2xl shrink-0 transition-transform hover:scale-105 duration-300",
-                                    isHealthy 
-                                        ? "bg-indigo-600 shadow-indigo-600/20 text-white" 
-                                        : "bg-rose-600 shadow-rose-600/30 text-white"
+                                    "w-16 h-16 md:w-24 md:h-24 rounded-2xl md:rounded-3xl flex items-center justify-center shadow-2xl shrink-0 transition-transform hover:scale-105 duration-300 text-white",
+                                    iaState.iconBg
                                 )}>
                                     <Brain className="w-8 h-8 md:w-12 md:h-12" />
                                 </div>
@@ -331,17 +450,16 @@ export function AccountingClient({
                                         </h4>
                                         <div className={cn(
                                             "inline-flex px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest border self-center md:self-auto",
-                                            isHealthy 
-                                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" 
-                                                : "bg-rose-500/10 border-rose-500/20 text-rose-500"
+                                            iaState.color
                                         )}>
-                                            {isHealthy ? 'Operación Saludable' : 'Atención Requerida'}
+                                            {iaState.badge}
                                         </div>
                                     </div>
 
                                     <p className={cn(
                                         "text-base md:text-xl font-medium leading-relaxed italic",
-                                        isHealthy ? "text-zinc-400" : "text-rose-200/80"
+                                        iaState.badge.includes('Saludable') ? "text-zinc-400" : 
+                                        iaState.badge.includes('Parcial') ? "text-amber-200/80" : "text-rose-200/80"
                                     )}>
                                         "{generateMagicComment()}"
                                     </p>
@@ -371,6 +489,9 @@ export function AccountingClient({
                             onNewRecord={() => router.refresh()}
                             onDelete={() => router.refresh()}
                             selectedCondoId={selectedCondoId}
+                            selectedMonth={selectedMonth}
+                            onMonthChange={setSelectedMonth}
+                            months={MONTHS}
                         />
 
                         {/* 📊 ACCESO A CUMPLIMIENTO FISCAL (TARJETA FINAL) */}

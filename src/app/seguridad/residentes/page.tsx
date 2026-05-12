@@ -440,9 +440,9 @@ export default function ResidentsPage() {
                                     <div className="p-5 md:p-8 lg:w-[380px] border-b lg:border-b-0 lg:border-r border-zinc-800 flex flex-col justify-center bg-zinc-900/10">
                                         <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:gap-6">
                                             <div>
-                                                <p className="text-zinc-500 text-[10px] md:text-xs font-bold mb-1 uppercase tracking-widest">Saldo pendiente</p>
-                                                <p className={`text-2xl md:text-3xl font-bold tracking-tight ${resident.calculatedDebt > 0 ? 'text-rose-500' : 'text-white/40'}`}>
-                                                    {formatMoney(resident.calculatedDebt)}
+                                                <p className="text-zinc-500 text-[10px] md:text-xs font-bold mb-1 uppercase tracking-widest">Saldo a favor</p>
+                                                <p className={`text-2xl md:text-3xl font-bold tracking-tight ${(resident.calculatedCredit || 0) > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
+                                                    {formatMoney(resident.calculatedCredit || 0)}
                                                 </p>
                                             </div>
                                             <motion.div
@@ -450,9 +450,9 @@ export default function ResidentsPage() {
                                                 animate={{ opacity: 1, x: 0 }}
                                                 className="lg:border-t lg:border-zinc-800 lg:pt-4"
                                             >
-                                                <p className="text-zinc-500 text-[10px] md:text-xs font-bold mb-1 uppercase tracking-widest">Saldo a favor</p>
-                                                <p className={`text-2xl md:text-3xl font-bold tracking-tight ${(resident.calculatedCredit || 0) > 0 ? 'text-emerald-400' : 'text-white/40'}`}>
-                                                    {formatMoney(resident.calculatedCredit || 0)}
+                                                <p className="text-zinc-500 text-[10px] md:text-xs font-bold mb-1 uppercase tracking-widest">Saldo pendiente</p>
+                                                <p className={`text-2xl md:text-3xl font-bold tracking-tight ${resident.calculatedDebt > 0 ? 'text-rose-500' : 'text-white/40'}`}>
+                                                    {formatMoney(resident.calculatedDebt)}
                                                 </p>
                                             </motion.div>
                                         </div>
@@ -465,7 +465,7 @@ export default function ResidentsPage() {
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-zinc-400 text-xs md:text-sm">{resident.overdueCount} facturas vencidas</span>
+                                                <span className="text-zinc-400 text-xs md:text-sm">{resident.overdueCount} cuotas vencidas</span>
                                                 {resident.overdueCount > 0 && (
                                                     <Badge variant="destructive" className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 transition-colors py-0 md:py-1">
                                                         {resident.maxDaysOverdue}+ días

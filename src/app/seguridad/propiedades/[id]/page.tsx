@@ -202,16 +202,23 @@ export default function CondominiumPage() {
                                         });
 
                                         const targetResident = resident || residentAlt;
-                                        const residentName = targetResident ? `${targetResident.first_name || ''} ${targetResident.last_name || ''}`.trim() : 'Residente'
-                                        const unitDisplay = targetResident?.unit_number || unit.id.split('-').pop() || 'S/N'
                                         
-                                        morosidadAlerts.push({
-                                            id: `alert-${unit.id}`,
-                                            title: residentName,
-                                            amount: expected - paid,
-                                            timeText: 'Mes Actual',
-                                            name: `Unidad ${unitDisplay}`
-                                        })
+                                        // Filtro: Solo residentes activos y con información capturada (no mostrar si está eliminado o no capturado)
+                                        if (targetResident && targetResident.status === 'active') {
+                                            const residentName = `${targetResident.first_name || ''} ${targetResident.last_name || ''}`.trim()
+                                            
+                                            if (residentName) {
+                                                const unitDisplay = targetResident?.unit_number || unit.id.split('-').pop() || 'S/N'
+                                                
+                                                morosidadAlerts.push({
+                                                    id: `alert-${unit.id}`,
+                                                    title: residentName,
+                                                    amount: expected - paid,
+                                                    timeText: 'Mes Actual',
+                                                    name: `Unidad ${unitDisplay}`
+                                                })
+                                            }
+                                        }
                                     }
                                 })
                             }
@@ -224,18 +231,25 @@ export default function CondominiumPage() {
 
                             pastOverdueInvoices.forEach(inv => {
                                 const resident = residentsList?.find(r => r.id === inv.resident_id)
-                                const residentName = resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente'
-                                const unitDisplay = resident?.unit_number || 'S/N'
-                                const amount = inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0)
-                                const daysOverdue = Math.floor((new Date().getTime() - new Date(inv.created_at).getTime()) / (1000 * 3600 * 24))
                                 
-                                morosidadAlerts.push({
-                                    id: inv.id || Math.random().toString(),
-                                    title: residentName,
-                                    amount: amount,
-                                    timeText: `Hace ${daysOverdue} días`,
-                                    name: `Unidad ${unitDisplay}`
-                                })
+                                // Filtro: Solo residentes activos y con información capturada (no mostrar si está eliminado o no capturado)
+                                if (resident && resident.status === 'active') {
+                                    const residentName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
+                                    
+                                    if (residentName) {
+                                        const unitDisplay = resident?.unit_number || 'S/N'
+                                        const amount = inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0)
+                                        const daysOverdue = Math.floor((new Date().getTime() - new Date(inv.created_at).getTime()) / (1000 * 3600 * 24))
+                                        
+                                        morosidadAlerts.push({
+                                            id: inv.id || Math.random().toString(),
+                                            title: residentName,
+                                            amount: amount,
+                                            timeText: `Hace ${daysOverdue} días`,
+                                            name: `Unidad ${unitDisplay}`
+                                        })
+                                    }
+                                }
                             })
 
                             morosidadAlerts.sort((a, b) => b.amount - a.amount)

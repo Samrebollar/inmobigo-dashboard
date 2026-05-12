@@ -42,7 +42,7 @@ export function FinancialSummary({
             glow: 'hover:border-amber-500/40 hover:shadow-amber-500/10'
         },
         {
-            title: 'Total Facturado',
+            title: 'Total Cuotas',
             amount: metrics.totalInvoiced,
             icon: Receipt,
             color: 'text-indigo-400',

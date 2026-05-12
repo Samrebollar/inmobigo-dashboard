@@ -194,7 +194,7 @@ export default function ResidentMovementsPage() {
         const unpaidInvoices = invoices.filter(inv => inv.status === 'overdue' || inv.status === 'pending')
         
         if (unpaidInvoices.length === 0) {
-            setStatus({ type: 'warning', message: '⚠️ No hay facturas pendientes para recordar.' })
+            setStatus({ type: 'warning', message: '⚠️ No hay recibos pendientes para recordar.' })
             return
         }
 
@@ -270,7 +270,7 @@ export default function ResidentMovementsPage() {
             events.push({
                 date: inv.created_at,
                 type: 'invoice',
-                description: `Se generó la factura ${inv.folio}`,
+                description: `Se generó el recibo ${inv.folio}`,
                 amount: inv.amount
             })
 
@@ -279,7 +279,7 @@ export default function ResidentMovementsPage() {
                 events.push({
                     date: inv.paid_at,
                     type: 'payment',
-                    description: `Se registró el pago completo de la factura ${inv.folio}`,
+                    description: `Pago registrado correctamente del recibo ${inv.folio}`,
                     amount: inv.amount
                 })
             }
@@ -289,7 +289,7 @@ export default function ResidentMovementsPage() {
                 events.push({
                     date: inv.due_date, // Using due date as the event date
                     type: 'overdue',
-                    description: `La factura ${inv.folio} ha vencido`,
+                    description: `El recibo ${inv.folio} ha vencido`,
                     amount: inv.amount
                 })
 
@@ -409,12 +409,12 @@ export default function ResidentMovementsPage() {
                                     <div className="p-1.5 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
                                         <Receipt size={16} />
                                     </div>
-                                    <span className="text-sm font-bold">Total Facturado</span>
+                                    <span className="text-sm font-bold">Total Cuotas</span>
                                 </div>
                                 <div className="text-3xl font-bold text-white tracking-tight mt-2">{formatMoney(stats.totalBilled)}</div>
                             </div>
                             <div className="text-xs text-indigo-400 mt-4 flex items-center gap-1 font-medium">
-                                <CheckCircle size={12} /> Facturación histórica
+                                <CheckCircle size={12} /> Cuotas histórica
                             </div>
                         </CardContent>
                     </Card>
@@ -478,7 +478,7 @@ export default function ResidentMovementsPage() {
                     </Card>
                 </motion.div>
 
-                {/* Facturas Vencidas */}
+                {/* Cuotas vencidas */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -496,7 +496,7 @@ export default function ResidentMovementsPage() {
                                     <div className="p-1.5 rounded-md bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
                                         <Clock size={16} />
                                     </div>
-                                    <span className="text-sm font-bold">Facturas Vencidas</span>
+                                    <span className="text-sm font-bold">Cuotas vencidas</span>
                                 </div>
                                 <div className="text-3xl font-bold text-white tracking-tight mt-2">{stats.overdueCount}</div>
                             </div>
@@ -515,7 +515,7 @@ export default function ResidentMovementsPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                         <Input
-                            placeholder="Buscar factura..."
+                            placeholder="Buscar recibo..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="bg-zinc-900 border-zinc-800 pl-9 focus:border-indigo-500"
@@ -662,7 +662,7 @@ export default function ResidentMovementsPage() {
             {/* History Timeline */}
             <div className="space-y-4 pt-8 border-t border-zinc-800">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-white">Historial cronológico de movimientos</h2>
+                    <h2 className="text-xl font-bold text-white">Historial Financiero</h2>
                     <span className="text-sm text-zinc-500">Hace 3 días ➔</span>
                 </div>
 

@@ -186,7 +186,12 @@ export function FinanceTab() {
             // 1. Calculate Expected Total (Sum of all units' monthly fees)
             const { data: unitsData } = await supabase
                 .from('units')
-                .select('monto_mensual')
+                .select('id, monto_mensual')
+                .eq('condominium_id', condoId)
+            
+            const { data: residentsData } = await supabase
+                .from('residents')
+                .select('id, unit_id')
                 .eq('condominium_id', condoId)
             
             const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
@@ -197,71 +202,70 @@ export function FinanceTab() {
             
             const { data: periodInvoices } = await supabase
                 .from('invoices')
-                .select('paid_amount, balance_due, amount, status')
+                .select('paid_amount, balance_due, amount, status, unit_id, resident_id')
                 .eq('condominium_id', condoId)
                 .gte('created_at', startOfPeriod)
                 .lte('created_at', endOfPeriod)
 
             const totalRecaudado = periodInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
             
-            // 3. Logic for Pendiente vs Morosidad (Day 10 cutoff only applies to current month)
+            // 3. Logic for Pendiente vs Morosidad (Calculate individual debts)
             const now = new Date()
             const isCurrentMonth = now.getMonth() === selectedPeriod.month && now.getFullYear() === selectedPeriod.year
             const currentDay = now.getDate()
-            const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
             
-            let pendiente = 0
-            let morosidad = 0
-            
-            if (isCurrentMonth) {
-                if (currentDay <= 10) {
-                    pendiente = unpaidBalance
-                    morosidad = 0
-                } else {
-                    pendiente = 0
-                    morosidad = unpaidBalance
-                }
-            } else {
-                // For past months, if not paid, it's definitely Morosidad
-                pendiente = 0
-                morosidad = unpaidBalance
-            }
-
-            // 4. Calculate count of residents/units with debt in this period
-            // We sum all payments PER UNIT and compare against their monthly fee
+            let totalPendiente = 0
+            let totalMorosidad = 0
             let morososCount = 0
+
             if (unitsData && periodInvoices) {
-                // Map to store total paid per unit
                 const paymentsPerUnit: Record<string, number> = {}
                 
+                // Mapa de residente a unidad
+                const residentToUnit: Record<string, string> = {}
+                residentsData?.forEach(res => {
+                    if (res.id && res.unit_id) residentToUnit[res.id] = res.unit_id
+                })
+
                 periodInvoices.forEach(inv => {
-                    const id = inv.unit_id || inv.resident_id
-                    if (id) {
-                        paymentsPerUnit[id] = (paymentsPerUnit[id] || 0) + (Number(inv.paid_amount) || 0)
+                    // Si no tiene unit_id, intentamos obtenerlo a través del resident_id
+                    const unitId = inv.unit_id || (inv.resident_id ? residentToUnit[inv.resident_id] : null)
+                    
+                    if (unitId) {
+                        paymentsPerUnit[unitId] = (paymentsPerUnit[unitId] || 0) + (Number(inv.paid_amount) || 0)
                     }
                 })
 
-                // Compare each unit's total paid vs its expected fee
                 unitsData.forEach(unit => {
                     const paid = paymentsPerUnit[unit.id] || 0
-                    if (paid < Number(unit.monto_mensual)) {
+                    const expected = Number(unit.monto_mensual) || 0
+                    
+                    if (paid < expected) {
+                        const debt = expected - paid
                         morososCount++
+                        
+                        if (isCurrentMonth && currentDay <= 10) {
+                            totalPendiente += debt
+                        } else {
+                            // Si es mes pasado o si es mes actual después del día 10
+                            totalMorosidad += debt
+                        }
                     }
                 })
-            } else if (unpaidBalance > 0) {
-                const { data: residentsInDebt } = await supabase.rpc('get_residents_with_debt', { p_condominium_id: condoId })
-                morososCount = residentsInDebt?.length || 0
+            } else {
+                const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
+                if (isCurrentMonth && currentDay <= 10) {
+                    totalPendiente = unpaidBalance
+                } else {
+                    totalMorosidad = unpaidBalance
+                }
             }
 
-            // If we are in the middle of the month (<= day 10), and it's current month,
-            // the user might not consider them "morosos" yet in the card, but "en atraso" is what they asked.
-            // Wait, the user said "serian 2 residnetes en atraso".
-            
             setMetrics({
                 facturado: expectedTotal,
                 recaudado: totalRecaudado,
-                porCobrar: pendiente,
-                vencido: morosidad,
+                porCobrar: totalPendiente,
+                vencido: totalMorosidad,
                 morosos: morososCount
             })
         } catch (err) {

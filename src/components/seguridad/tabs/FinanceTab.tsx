@@ -151,20 +151,83 @@ export function FinanceTab() {
                 return
             }
 
-            const { data, error } = await supabase.rpc('get_billing_summary', { p_condominium_id: condoId })
+            // Para seguridad, calculamos el periodo actual (mes en curso)
+            const now = new Date()
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+            const currentDay = now.getDate()
+
+            // 1. Obtener unidades y sus montos esperados
+            const { data: unitsData } = await supabase
+                .from('units')
+                .select('id, monto_mensual')
+                .eq('condominium_id', condoId)
             
-            if (error) {
-                console.error('Error cargando métricas de facturación:', error)
-            } else if (data && data.length > 0) {
-                const summary = data[0]
-                setMetrics({
-                    facturado: Number(summary.total_facturado) || 0,
-                    recaudado: Number(summary.total_recaudado) || 0,
-                    porCobrar: Number(summary.total_por_cobrar) || 0,
-                    vencido: Number(summary.total_vencido) || 0,
-                    morosos: Number(summary.residentes_en_mora) || 0
+            // Obtener residentes para mapear resident_id a unit_id
+            const { data: residentsData } = await supabase
+                .from('residents')
+                .select('id, unit_id')
+                .eq('condominium_id', condoId)
+            
+            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
+
+            // 2. Obtener facturas/pagos del mes actual
+            const { data: currentMonthInvoices } = await supabase
+                .from('invoices')
+                .select('unit_id, resident_id, paid_amount')
+                .eq('condominium_id', condoId)
+                .gte('created_at', startOfMonth)
+                .lte('created_at', endOfMonth)
+
+            const totalRecaudado = currentMonthInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
+
+            // 3. Calcular deuda individual por unidad
+            let totalPendiente = 0
+            let totalMorosidad = 0
+            let morososCount = 0
+
+            if (unitsData) {
+                const paymentsPerUnit: Record<string, number> = {}
+                
+                // Mapa de residente a unidad
+                const residentToUnit: Record<string, string> = {}
+                residentsData?.forEach(res => {
+                    if (res.id && res.unit_id) residentToUnit[res.id] = res.unit_id
+                })
+
+                currentMonthInvoices?.forEach(inv => {
+                    // Si no tiene unit_id, intentamos obtenerlo a través del resident_id
+                    const unitId = inv.unit_id || (inv.resident_id ? residentToUnit[inv.resident_id] : null)
+                    
+                    if (unitId) {
+                        paymentsPerUnit[unitId] = (paymentsPerUnit[unitId] || 0) + (Number(inv.paid_amount) || 0)
+                    }
+                })
+
+                unitsData.forEach(unit => {
+                    const paid = paymentsPerUnit[unit.id] || 0
+                    const expected = Number(unit.monto_mensual) || 0
+                    
+                    if (paid < expected) {
+                        const debt = expected - paid
+                        morososCount++
+                        
+                        if (currentDay <= 10) {
+                            totalPendiente += debt
+                        } else {
+                            totalMorosidad += debt
+                        }
+                    }
                 })
             }
+
+            setMetrics({
+                facturado: expectedTotal,
+                recaudado: totalRecaudado,
+                porCobrar: totalPendiente,
+                vencido: totalMorosidad,
+                morosos: morososCount
+            })
         } catch (err) {
             console.error('Fetch billing error:', err)
         }

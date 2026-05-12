@@ -744,7 +744,7 @@ export const financeService = {
                 unit_id,
                 resident_id,
                 condominiums (name),
-                units (unit_number)
+                units (unit_number, condominium_id)
             `)
         
         if (condominiumId && condominiumId !== 'all' && !condominiumId.startsWith('demo-')) {
@@ -756,7 +756,7 @@ export const financeService = {
         const { data: invoices } = await invoiceQuery;
 
         // 2. Fetch Units for "Expected Income" and Deadlines
-        let unitsQuery = supabase.from('units').select('id, unit_number, monto_mensual, payment_deadline, residents(id)')
+        let unitsQuery = supabase.from('units').select('id, condominium_id, unit_number, monto_mensual, payment_deadline, residents(id)')
         if (condominiumId && condominiumId !== 'all' && !condominiumId.startsWith('demo-')) {
             unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
         } else {
@@ -811,98 +811,81 @@ export const financeService = {
         const morosos = new Set()
         const monthlyData: Record<string, { cobrado: number, pendiente: number }> = {};
 
-        (invoices || []).forEach(inv => {
-            const invDate = new Date(inv.created_at)
-            const invMonth = invDate.getMonth()
-            const invYear = invDate.getFullYear()
-            const monthKey = invDate.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' })
-            const amountToCharge = inv.balance_due ?? inv.amount
-
-            if (!monthlyData[monthKey]) monthlyData[monthKey] = { cobrado: 0, pendiente: 0 }
-
-            if (inv.status === 'paid') {
-                monthlyData[monthKey].cobrado += inv.amount
-                if (invMonth === currentMonth && invYear === currentYear) {
-                    stats.ingresosTotales += inv.amount
-                } else if (invMonth === prevMonth && invYear === prevYear) {
-                    stats.ingresosTotalesAnterior += inv.amount
-                }
-            } else if (inv.status === 'overdue' || inv.status === 'pending') {
-                const isOverdue = inv.status === 'overdue' || 
-                                 new Date(inv.due_date) < now ||
-                                 (invYear < currentYear) ||
-                                 (invYear === currentYear && invMonth < currentMonth);
-                
-                if (isOverdue) {
-                    stats.morosidadMonto += amountToCharge
-                    if (inv.resident_id) morosos.add(inv.resident_id)
-                } else {
-                    monthlyData[monthKey].pendiente += amountToCharge
-                }
-            }
-        })
-
-        stats.morosidadCount = morosos.size
+        const todayDay = now.getDate();
         
-        // ADVANCED LOGIC: Calculate expected current month morosidad based on unit deadlines
-        const todayDay = now.getDate()
-        const paidUnitIds = new Set();
-        
+        // Build a map of unit_id -> total paid this month (handles partial payments correctly)
+        const unitPaidMap: Record<string, number> = {};
         (invoices || []).forEach(inv => {
-            const invDate = new Date(inv.created_at)
+            const invDate = new Date(inv.created_at);
             if (inv.status === 'paid' && invDate.getMonth() === currentMonth && invDate.getFullYear() === currentYear) {
-                if (inv.unit_id) paidUnitIds.add(inv.unit_id)
-            }
-        })
-
-        let autoMorosidadMonto = 0
-        const autoMorosos = new Set(); 
-
-        (units || []).forEach((u: any) => {
-            // Use a more aggressive deadline if not set (default to 5th for dashboard visibility)
-            const deadline = u.payment_deadline || 5 
-            
-            if (!paidUnitIds.has(u.id) && todayDay > deadline) {
-                const amount = Number(u.monto_mensual) || 0
-                autoMorosidadMonto += amount
-                
-                let hasResident = false
-                if (u.residents) {
-                    const resList = Array.isArray(u.residents) ? u.residents : [u.residents]
-                    resList.forEach((r: any) => {
-                        if (r.id) {
-                            autoMorosos.add(r.id)
-                            hasResident = true
-                        }
-                    })
+                if (inv.unit_id) {
+                    unitPaidMap[inv.unit_id] = (unitPaidMap[inv.unit_id] || 0) + inv.amount;
                 }
-                
-                if (!hasResident) autoMorosos.add(u.id)
             }
-        })
+        });
 
-        // Integration: Morosidad Monto should be the SUM of historical + current month auto-detected
-        stats.morosidadMonto += autoMorosidadMonto
-        
-        const allMorosos = new Set([
-            ...Array.from(morosos), 
-            ...Array.from(autoMorosos)
-        ].filter(id => id !== null && id !== undefined))
-        
-        stats.morosidadCount = allMorosos.size
+        // 3. CORE CALCULATION ENGINE (CLEAN SLATE)
+        const condoData: Record<string, { expected: number, collected: number, currentMonthMorosidad: number, historicalMorosidad: number, overdueUnits: number, unitCount: number }> = {};
 
-        // ULTIMATE BYPASS: If past day 10 and we have a gap, it IS morosidad.
-        if (todayDay > 10) {
-            const gap = Math.max(0, expectedMonthly - stats.ingresosTotales)
-            if (gap > 0) {
-                stats.morosidadMonto = gap
-                if (stats.morosidadCount <= 0) stats.morosidadCount = 2
+        // Initialize and process units
+        (units || []).forEach((u: any) => {
+            const cId = u.condominium_id || 'org_total';
+            if (!condoData[cId]) condoData[cId] = { expected: 0, collected: 0, currentMonthMorosidad: 0, historicalMorosidad: 0, overdueUnits: 0, unitCount: 0 };
+            
+            const quota = Number(u.monto_mensual) || 0;
+            const paidThisMonth = unitPaidMap[u.id] || 0;
+            condoData[cId].expected += quota;
+            condoData[cId].collected += paidThisMonth;
+            condoData[cId].unitCount += 1;
+
+            // If unit paid LESS than quota after deadline -> it's overdue (handles partial payments)
+            if (todayDay > (u.payment_deadline || 10) && paidThisMonth < quota) {
+                condoData[cId].currentMonthMorosidad += (quota - paidThisMonth);
+                condoData[cId].overdueUnits += 1;
             }
-        }
-        
-        stats.deudaTotal = Math.max(0, expectedMonthly - stats.ingresosTotales) + Math.max(0, stats.morosidadMonto - Math.max(0, expectedMonthly - stats.ingresosTotales))
+        });
 
-        stats.tasaCobranza = expectedMonthly > 0 ? (stats.ingresosTotales / expectedMonthly) * 100 : 0
+        // Process invoices for historical debt only (previous months)
+        (invoices || []).forEach(inv => {
+            const cId = inv.condominium_id || (inv.units as any)?.condominium_id || 'org_total';
+            if (!condoData[cId]) condoData[cId] = { expected: 0, collected: 0, currentMonthMorosidad: 0, historicalMorosidad: 0, overdueUnits: 0, unitCount: 0 };
+
+            const invDate = new Date(inv.created_at);
+            const isHistorical = (invDate.getFullYear() < currentYear) || (invDate.getFullYear() === currentYear && invDate.getMonth() < currentMonth);
+
+            if ((inv.status === 'overdue' || inv.status === 'pending') && isHistorical) {
+                condoData[cId].historicalMorosidad += (inv.balance_due ?? inv.amount);
+            }
+        });
+
+        // Consolidate totals
+        let finalIngresos = 0;
+        let finalMorosidad = 0;
+        let finalDeuda = 0;
+        let finalMorososCount = 0;
+
+        const activeCondoIds = (condominiumId && condominiumId !== 'all') 
+            ? Object.keys(condoData).filter(id => id === condominiumId)
+            : Object.keys(condoData).filter(id => condoData[id].expected > 0); // Only condos with active units
+
+        activeCondoIds.forEach(cId => {
+            const d = condoData[cId];
+            finalIngresos += d.collected;
+            
+            // currentMonthMorosidad = sum of (quota - paid) for each overdue unit
+            // This correctly handles partial payments
+            const currentOverdue = (todayDay > 10) ? d.currentMonthMorosidad : 0;
+            
+            finalMorosidad += d.historicalMorosidad + currentOverdue;
+            finalDeuda += d.currentMonthMorosidad + d.historicalMorosidad;
+            finalMorososCount += d.overdueUnits;
+        });
+
+        stats.ingresosTotales = finalIngresos;
+        stats.morosidadMonto = finalMorosidad;
+        stats.deudaTotal = finalDeuda;
+        stats.morosidadCount = finalMorososCount;
+        stats.tasaCobranza = expectedMonthly > 0 ? (finalIngresos / expectedMonthly) * 100 : 0;
 
         // Format Income Summary
         const last12Months = []
@@ -913,8 +896,9 @@ export const financeService = {
             let total_cobrado = monthlyData[key]?.cobrado || 0
             let total_pendiente = monthlyData[key]?.pendiente || 0
             
-            // For current month, the "pending" amount in the chart should match the total morosidad/debt
+            // For current month, sync chart with the KPI cards
             if (i === 0) {
+                total_cobrado = stats.ingresosTotales
                 total_pendiente = stats.morosidadMonto
             }
 

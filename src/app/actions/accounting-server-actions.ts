@@ -330,7 +330,6 @@ export async function getTransparencyData(condominiumId: string) {
     if (!user) throw new Error('Not authenticated')
 
     // 1. SECURITY CHECK: Verify user is a resident or admin of this condo
-    // We check using the standard user-session client first (respecting RLS)
     const { data: isResident } = await supabase
         .from('residents')
         .select('id')
@@ -349,9 +348,6 @@ export async function getTransparencyData(condominiumId: string) {
     }
 
     // 2. FETCH DATA USING ADMIN CLIENT (Bypassing RLS for aggregate visibility)
-    // We fetch everything for this specific condo
-    
-    // Resolve organization_id to get the fiscal regime correctly
     const { data: condo } = await adminClient
         .from('condominiums')
         .select('organization_id, fiscal_regime, name')
@@ -362,7 +358,19 @@ export async function getTransparencyData(condominiumId: string) {
     const organizationId = condo.organization_id
     const regime = condo.fiscal_regime as FiscalRegime
 
-    // 2.a Invoices (Income)
+    // ─── FILTRO: SOLO EL MES EN CURSO ─────────────────────────────────────────
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() // 0-indexed
+    // Primer día del mes actual (UTC)
+    const monthStart = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString()
+    // Primer día del mes SIGUIENTE (para filtro exclusivo con .lt)
+    const monthEnd = new Date(Date.UTC(currentYear, currentMonth + 1, 1)).toISOString()
+    // Nombre del mes para exponerlo al cliente
+    const monthName = now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // 2.a Invoices (Income) — solo del mes en curso
     const { data: billing, error: billingError } = await adminClient
         .from('invoices')
         .select(`
@@ -372,15 +380,19 @@ export async function getTransparencyData(condominiumId: string) {
             units (unit_number)
         `)
         .eq('condominium_id', condominiumId)
+        .gte('created_at', monthStart)
+        .lt('created_at', monthEnd)
         .order('created_at', { ascending: false })
 
     if (billingError) console.error('[TransparencyAction] Error fetching billing:', billingError)
 
-    // 2.b Manual Expenses
+    // 2.b Manual Expenses — solo del mes en curso
     const { data: expenses, error: expError } = await adminClient
         .from('condo_expenses')
         .select('*, condominiums(name)')
         .eq('condominium_id', condominiumId)
+        .gte('date', monthStart.split('T')[0])  // date es DATE en Postgres
+        .lt('date', monthEnd.split('T')[0])
         .order('date', { ascending: false })
 
     if (expError) console.error('[TransparencyAction] Error fetching expenses:', expError)
@@ -393,7 +405,7 @@ export async function getTransparencyData(condominiumId: string) {
 
     const normalizeStatus = (s: string) => s?.toLowerCase() || ''
 
-    // 4. Calculate Metrics (Same logic as getAccountingData)
+    // 3. Calcular métricas — solo del mes en curso
     const totalCollected = billingData
         .filter(b => normalizeStatus(b.status) === 'pagado' || normalizeStatus(b.status) === 'paid')
         .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
@@ -408,11 +420,12 @@ export async function getTransparencyData(condominiumId: string) {
     const totalInvoiced = billingData.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
     const utilidad = totalCollected - totalExpenses
 
-    // 5. Fetch Reserve Fund Data (Read-only for transparency)
+    // 4. Fetch Reserve Fund Data (Read-only for transparency)
     const fundData = await getReserveFundData(condominiumId)
 
     return {
         success: true,
+        currentMonth: monthName,  // exponer el nombre del mes al cliente
         metrics: {
             totalCollected,
             totalReceivable,

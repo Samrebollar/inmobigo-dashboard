@@ -16,7 +16,7 @@ interface TransparencyClientProps {
 }
 
 export function TransparencyClient({ data, condominiumId, isAdmin = false }: TransparencyClientProps) {
-    const { metrics, movements, fundData } = data
+    const { metrics, movements, fundData, currentMonth } = data
 
     // GROUP EXPENSES BY CATEGORY
     const expensesByCategory = movements
@@ -49,7 +49,8 @@ export function TransparencyClient({ data, condominiumId, isAdmin = false }: Tra
                     <h1 className="text-4xl font-black text-white tracking-tight">Transparencia Financiera</h1>
                 </div>
                 <p className="text-zinc-500 text-lg font-medium max-w-2xl leading-relaxed">
-                    Consulta cómo se administran los ingresos y gastos de tu condominio.
+                    Ingresos y egresos de tu condominio — 
+                    <span className="text-indigo-400 font-bold capitalize">{currentMonth || 'Mes actual'}</span>
                 </p>
             </motion.div>
 
@@ -73,7 +74,7 @@ export function TransparencyClient({ data, condominiumId, isAdmin = false }: Tra
             <div className="flex items-center gap-4 py-4">
                 <div className="h-px flex-1 bg-white/5" />
                 <div className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/10 bg-white/[0.02] text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">
-                    Detalle Completo de Operaciones
+                    Movimientos de <span className="text-indigo-400 capitalize ml-1">{currentMonth || 'Este mes'}</span>
                 </div>
                 <div className="h-px flex-1 bg-white/5" />
             </div>

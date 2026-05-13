@@ -35,9 +35,16 @@ import { useUserRole } from '@/hooks/use-user-role'
 interface ResidentDashboardClientProps {
     resident: any
     userName: string
+    financialData?: {
+        saldoPendiente: number
+        ultimoPago: number
+        ultimaFechaPago: string | null
+        diasDesdeUltimoPago: number | null
+        cuotasPagadasEsteAnio?: number
+    }
 }
 
-export default function ResidentDashboardCondominioClient({ resident, userName }: ResidentDashboardClientProps) {
+export default function ResidentDashboardCondominioClient({ resident, userName, financialData }: ResidentDashboardClientProps) {
     const supabase = createClient()
     const isPropiedades = false
     const [announcements, setAnnouncements] = useState<any[]>([])
@@ -189,26 +196,41 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
     // El monitor de paquetería en tiempo real se ha movido a ServiciosClient
     // para centralizar la lógica en el módulo correspondiente.
 
+    // Formatear la fecha del último pago en español corto (ej: "9 May")
+    const ultimaFechaStr = financialData?.ultimaFechaPago
+        ? (() => {
+            const d = new Date(financialData.ultimaFechaPago!)
+            const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+            return `${d.getDate()} ${meses[d.getMonth()]}`
+          })()
+        : null
+
+    const saldoPendiente = financialData?.saldoPendiente ?? (resident?.debt_amount || 0)
+    const ultimoPago = financialData?.ultimoPago ?? (resident?.last_payment_amount || 0)
+    const diasDesdeUltimoPago = financialData?.diasDesdeUltimoPago ?? null
+    const cuotasPagadasEsteAnio = financialData?.cuotasPagadasEsteAnio ?? (resident?.paid_installments_count || 0)
+    const anioActual = new Date().getFullYear()
+
     const stats = [
         {
             label: 'Saldo Pendiente',
-            value: `$${(resident?.debt_amount || 2500).toLocaleString()}`,
-            subtext: 'Vence: 5 Abr',
+            value: `$${saldoPendiente.toLocaleString('es-MX')}`,
+            subtext: saldoPendiente > 0 ? `Morosidad acumulada` : 'Al corriente',
             icon: CreditCard,
-            color: 'rose',
-            accent: 'rose-500'
+            color: saldoPendiente > 0 ? 'rose' : 'emerald',
+            accent: saldoPendiente > 0 ? 'rose-500' : 'emerald-500'
         },
         {
             label: 'Último Pago',
-            value: `$${(resident?.last_payment_amount || 2500).toLocaleString()}`,
-            subtext: '3 Mar',
+            value: ultimoPago > 0 ? `$${ultimoPago.toLocaleString('es-MX')}` : '$0',
+            subtext: ultimaFechaStr || 'Sin pagos',
             icon: CheckCircle2,
             color: 'emerald',
             accent: 'emerald-500'
         },
         {
             label: 'Incidencias',
-            value: resident?.active_tickets_count || '1',
+            value: resident?.active_tickets_count || '0',
             subtext: 'Activo',
             icon: Wrench,
             color: 'amber',
@@ -216,8 +238,8 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
         },
         {
             label: 'Historial',
-            value: resident?.paid_installments_count || '12',
-            subtext: 'Este año',
+            value: String(cuotasPagadasEsteAnio),
+            subtext: `Pagos en ${anioActual}`,
             icon: Receipt,
             color: 'indigo',
             accent: 'indigo-500'
@@ -267,20 +289,6 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
                         </p>
                     </motion.div>
 
-                    <motion.div 
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="w-full md:w-auto bg-zinc-900/60 backdrop-blur-xl border border-white/10 px-6 py-4 rounded-[28px] flex items-center justify-between md:justify-start gap-6 shadow-2xl relative overflow-hidden"
-                    >
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 blur-2xl rounded-full translate-x-1/2 -translate-y-1/2" />
-                        <div className="space-y-0.5 relative z-10">
-                            <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Próximo vencimiento</p>
-                            <p className="text-2xl font-black text-white tracking-tight italic">5 Días</p>
-                        </div>
-                        <div className="h-12 w-12 bg-indigo-600 shadow-lg shadow-indigo-600/20 rounded-2xl flex items-center justify-center border border-white/10 relative z-10">
-                            <Zap className="h-6 w-6 text-white fill-white/20" />
-                        </div>
-                    </motion.div>
                 </header>
 
                 {/* Dynamic Payment Status Banner */}
@@ -290,7 +298,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
                     transition={{ delay: 0.1 }}
                     className={cn(
                         "w-full p-6 rounded-2xl border backdrop-blur-md shadow-xl ring-1 ring-white/5 flex flex-col md:flex-row items-center justify-between gap-4",
-                        (resident?.debt_amount > 0 || !resident?.debt_amount) 
+                        saldoPendiente > 0
                             ? "bg-rose-500/10 border-rose-500/20 text-rose-400" 
                             : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
                     )}
@@ -298,27 +306,31 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
                     <div className="flex items-center gap-4">
                         <div className={cn(
                             "h-12 w-12 rounded-full flex items-center justify-center shadow-lg",
-                            (resident?.debt_amount > 0 || !resident?.debt_amount) ? "bg-rose-500 text-white" : "bg-emerald-500 text-white"
+                            saldoPendiente > 0 ? "bg-rose-500 text-white" : "bg-emerald-500 text-white"
                         )}>
-                            {(resident?.debt_amount > 0 || !resident?.debt_amount) ? <Bell className="h-6 w-6" /> : <ShieldCheck className="h-6 w-6" />}
+                            {saldoPendiente > 0 ? <Bell className="h-6 w-6" /> : <ShieldCheck className="h-6 w-6" />}
                         </div>
                         <div className="space-y-0.5 text-center md:text-left">
                             <h2 className="text-xl font-bold tracking-tight text-white">
-                                {(resident?.debt_amount > 0 || !resident?.debt_amount) 
-                                    ? "Debes ponerte al corriente con tus pagos" 
-                                    : "¡Estás al día con tus pagos!"}
+                                {saldoPendiente > 0
+                                    ? `Tienes $${saldoPendiente.toLocaleString('es-MX')} en morosidad acumulada`
+                                    : "\u00a1Estás al día con tus pagos!"}
                             </h2>
                             <p className="text-sm font-medium opacity-80">
-                                {(resident?.debt_amount > 0 || !resident?.debt_amount)
-                                    ? "Tu último pago fue hace 20 días"
+                                {saldoPendiente > 0
+                                    ? diasDesdeUltimoPago !== null
+                                        ? `Tu último pago fue hace ${diasDesdeUltimoPago} día${diasDesdeUltimoPago !== 1 ? 's' : ''}`
+                                        : "Regulariza tu saldo para evitar restricciones."
                                     : "Gracias por tu puntualidad y compromiso."}
                             </p>
                         </div>
                     </div>
-                    {resident?.debt_amount > 0 && (
-                         <Button variant="outline" className="bg-white/5 border-rose-500/30 hover:bg-rose-500 hover:text-white transition-all rounded-xl font-bold text-xs uppercase tracking-widest px-6 h-10">
-                            Revisar Detalles
-                         </Button>
+                    {saldoPendiente > 0 && (
+                        <Link href="/residente/payments">
+                            <Button variant="outline" className="bg-white/5 border-rose-500/30 hover:bg-rose-500 hover:text-white transition-all rounded-xl font-bold text-xs uppercase tracking-widest px-6 h-10">
+                                Revisar Detalles
+                            </Button>
+                        </Link>
                     )}
                 </motion.div>
 

@@ -29,6 +29,8 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
 
     const [propertyFilter, setPropertyFilter] = useState<string>('todos')
     const [properties, setProperties] = useState<any[]>([])
+    // Período que cubre el pago (YYYY-MM), uno por validación
+    const [periodMonths, setPeriodMonths] = useState<{ [key: string]: string }>({})
     
     // Bank Accounts State
     const [bankAccounts, setBankAccounts] = useState<any[]>([])
@@ -139,7 +141,8 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
     const handleAction = async (id: string, status: 'aprobado' | 'rechazado') => {
         setActionLoading(id)
         const obs = observations[id] || ''
-        const res = await updateValidationStatus(id, status, obs)
+        const period = periodMonths[id] || '' // Período que cubre el pago (YYYY-MM)
+        const res = await updateValidationStatus(id, status, obs, period)
         if (res.success) {
             toast.success(`Pago ${status === 'aprobado' ? 'aprobado' : 'rechazado'} con éxito`)
             if (status === 'aprobado') {
@@ -310,10 +313,28 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                             <div className="flex items-center justify-center gap-2">
                                                 <button onClick={() => setSelectedProof(item.comprobante_url)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-indigo-400 transition-all"><Eye size={18} /></button>
                                                 {item.status === 'pendiente' ? (
-                                                    <>
-                                                        <button onClick={() => handleAction(item.id, 'aprobado')} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
-                                                        <button onClick={() => handleAction(item.id, 'rechazado')} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
-                                                    </>
+                                                    <div className="flex flex-col gap-2 items-center">
+                                                        {/* Selector del mes al que corresponde el pago */}
+                                                        <select
+                                                            value={periodMonths[item.id] || ''}
+                                                            onChange={(e) => setPeriodMonths(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                            className="bg-zinc-950 border border-zinc-700 text-white rounded-lg px-2 py-1 text-[10px] font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                                            title="Mes que cubre este pago"
+                                                        >
+                                                            <option value="">Período del pago...</option>
+                                                            {Array.from({ length: 12 }, (_, i) => {
+                                                                const d = new Date()
+                                                                d.setMonth(d.getMonth() - i)
+                                                                const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                                                                const label = d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+                                                                return <option key={val} value={val}>{label}</option>
+                                                            })}
+                                                        </select>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => handleAction(item.id, 'aprobado')} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
+                                                            <button onClick={() => handleAction(item.id, 'rechazado')} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
+                                                        </div>
+                                                    </div>
                                                 ) : null}
                                                 <button onClick={() => setDeleteConfirmation(item.id)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-rose-400 transition-all"><Trash size={18} /></button>
                                             </div>

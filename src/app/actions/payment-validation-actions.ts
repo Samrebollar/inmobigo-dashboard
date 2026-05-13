@@ -20,7 +20,7 @@ export async function getValidations() {
     }
 }
 
-export async function updateValidationStatus(id: string, status: 'aprobado' | 'rechazado', observacion?: string) {
+export async function updateValidationStatus(id: string, status: 'aprobado' | 'rechazado', observacion?: string, periodMonth?: string) {
     try {
         const supabase = await createClient()
         
@@ -170,9 +170,34 @@ export async function updateValidationStatus(id: string, status: 'aprobado' | 'r
                         }
                     }
                     
-                    // Registrar el excedente como saldo a favor
+                    // Registrar el excedente como nueva factura (saldo a favor o pago parcial)
                     if (remainingPayment > 0) {
                         const folio = `INV-${Math.floor(100000 + Math.random() * 900000)}`
+
+                        // Calcular el due_date correcto:
+                        // Si el admin indicó el período (YYYY-MM), usamos el día paymentDeadline de ese mes.
+                        // Si no, usamos la fecha en que se registró el comprobante.
+                        let dueDateStr = validation.date || new Date().toISOString().split('T')[0]
+
+                        if (periodMonth) {
+                            // Obtener el payment_deadline de la unidad del residente
+                            let deadlineDay = 10 // default
+                            if (resData.unit_id) {
+                                const { data: unitInfo } = await adminClient
+                                    .from('units')
+                                    .select('payment_deadline')
+                                    .eq('id', resData.unit_id)
+                                    .maybeSingle()
+                                if (unitInfo?.payment_deadline) {
+                                    deadlineDay = unitInfo.payment_deadline
+                                }
+                            }
+                            const [year, month] = periodMonth.split('-').map(Number)
+                            // due_date = día límite oficial de ese mes
+                            const dueDate = new Date(year, month - 1, deadlineDay)
+                            dueDateStr = dueDate.toISOString().split('T')[0]
+                        }
+
                         await adminClient
                             .from('invoices')
                             .insert({
@@ -185,7 +210,7 @@ export async function updateValidationStatus(id: string, status: 'aprobado' | 'r
                                 paid_amount: remainingPayment,
                                 balance_due: 0,
                                 status: 'paid',
-                                due_date: validation.date || new Date().toISOString().split('T')[0],
+                                due_date: dueDateStr,
                                 description: validation.nota ? `Pago manual validado - ${validation.nota}` : 'Pago manual validado',
                                 created_at: new Date().toISOString(),
                                 paid_at: new Date().toISOString(),

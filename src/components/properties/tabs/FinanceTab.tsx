@@ -338,6 +338,7 @@ export function FinanceTab() {
                         unidad: unitName,
                         concepto: mappedConcept,
                         monto: inv.amount,
+                        paid_amount: Number(inv.paid_amount) || 0,
                         estado: inv.status,
                         telefono: phone,
                         atraso: delayDays,
@@ -600,7 +601,7 @@ export function FinanceTab() {
                                                                         "tipo": "recordatorio",
                                                                         "first_name": "Residente", // Name not directly in inv object, could be improved
                                                                         "phone": inv.telefono || '',
-                                                                        "amount": inv.monto,
+                                                                        "amount": inv.monto - inv.paid_amount, // Saldo real pendiente
                                                                         "due_date": inv.due_date,
                                                                         "payment_link": null, // Not easily available here
                                                                         "condominium": "", // Not easily available here

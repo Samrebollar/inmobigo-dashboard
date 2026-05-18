@@ -210,7 +210,7 @@ export default function ResidentMovementsPage() {
                 "tipo": "recordatorio",
                 "first_name": `${resident.first_name} ${resident.last_name}`,
                 "phone": resident.phone || '',
-                "amount": targetInvoice.amount,
+                "amount": stats.totalPending, // Saldo real pendiente (balance_due + debt_amount)
                 "due_date": targetInvoice.due_date,
                 "payment_link": targetInvoice.payment_link || null,
                 "condominium": condominiumName || '',

@@ -7,13 +7,17 @@ interface FinancialComparisonChartProps {
     data: {
         totalCollected: number
         totalExpenses: number
+        totalPending?: number
+        totalOverdue?: number
     }
 }
 
 export function FinancialComparisonChart({ data }: FinancialComparisonChartProps) {
     const chartData = [
-        { name: 'Ingresos', value: data.totalCollected, color: '#10b981' },
-        { name: 'Gastos', value: data.totalExpenses, color: '#f43f5e' }
+        { name: 'Ingresos',  value: data.totalCollected,        gradient: 'url(#incomeGradient)'  },
+        { name: 'Pendiente', value: data.totalPending  || 0,     gradient: 'url(#pendingGradient)' },
+        { name: 'Morosidad', value: data.totalOverdue  || 0,     gradient: 'url(#overdueGradient)' },
+        { name: 'Gastos',    value: data.totalExpenses,          gradient: 'url(#expenseGradient)' },
     ]
 
     return (
@@ -34,6 +38,14 @@ export function FinancialComparisonChart({ data }: FinancialComparisonChartProps
                             <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.8}/>
                                 <stop offset="100%" stopColor="#10b981" stopOpacity={0.2}/>
+                            </linearGradient>
+                            <linearGradient id="pendingGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                                <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.2}/>
+                            </linearGradient>
+                            <linearGradient id="overdueGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8}/>
+                                <stop offset="100%" stopColor="#ef4444" stopOpacity={0.2}/>
                             </linearGradient>
                             <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.8}/>
@@ -69,17 +81,25 @@ export function FinancialComparisonChart({ data }: FinancialComparisonChartProps
                             minPointSize={10}
                         >
                             {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.name === 'Ingresos' ? 'url(#incomeGradient)' : 'url(#expenseGradient)'} />
+                                <Cell key={`cell-${index}`} fill={entry.gradient} />
                             ))}
                         </Bar>
                     </BarChart>
                 </ResponsiveContainer>
             </div>
 
-            <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+            <div className="flex items-center gap-6 pt-4 border-t border-white/5 flex-wrap">
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
                     <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Ingresos</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-amber-500" />
+                    <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Pendiente</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Morosidad</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-rose-500" />

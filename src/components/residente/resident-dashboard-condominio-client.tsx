@@ -646,7 +646,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                                 )}
                             </div>
 
-                                <Link href="/dashboard/avisos" className="w-full">
+                                <Link href="/residente/avisos" className="w-full">
                                     <Button 
                                         variant="ghost" 
                                         className="w-full text-zinc-500 hover:text-white hover:bg-white/5 transition-all py-6 group rounded-2xl border border-dashed border-white/5 mt-4"

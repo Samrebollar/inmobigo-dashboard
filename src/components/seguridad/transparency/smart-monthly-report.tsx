@@ -14,6 +14,9 @@ interface SmartMonthlyReportProps {
         totalCollected: number
         totalExpenses: number
         utilidad: number
+        totalInvoiced?: number
+        totalPending?: number
+        totalOverdue?: number
     }
     topCategory: string
     movements: any[]
@@ -41,11 +44,17 @@ export function SmartMonthlyReport({ metrics, topCategory, movements, isAdmin = 
         if (metrics.totalCollected === 0 && metrics.totalExpenses === 0) {
             return "Aún no se registran movimientos para este periodo. La información se actualizará conforme la administración procese los pagos y gastos."
         }
+
+        const uncollected = (metrics.totalPending || 0) + (metrics.totalOverdue || 0)
         
         if (isHealthy) {
-            return `Durante el mes de ${currentMonth}, el condominio mantuvo una operación estable, logrando cubrir el 100% de los compromisos operativos y generando un excedente de $${metrics.utilidad.toLocaleString()}. El recurso se destinó principalmente a ${topCategory || 'gastos generales'}.`
+            if (uncollected > 0) {
+                return `Durante el mes de ${currentMonth}, el condominio mantiene un flujo de caja favorable con $${metrics.totalCollected.toLocaleString()} recaudados y $${uncollected.toLocaleString()} pendientes de cobro. Los recursos se han administrado eficientemente para cubrir la operación corriente sin contratiempos, destinada principalmente a ${topCategory || 'gastos generales'}.`
+            } else {
+                return `Durante el mes de ${currentMonth}, el condominio mantuvo una excelente eficiencia en recaudación, logrando el 100% de la cobranza esperada ($${(metrics.totalInvoiced || metrics.totalCollected).toLocaleString()}) y registrando un superávit neto de $${metrics.utilidad.toLocaleString()}. El recurso se destinó principalmente a ${topCategory || 'gastos generales'}.`
+            }
         } else {
-            return `Este periodo presenta un balance negativo de $${Math.abs(metrics.utilidad).toLocaleString()}. La administración está utilizando fondos de reserva o saldos anteriores para cubrir la diferencia, principalmente en el área de ${topCategory || 'mantenimiento'}.`
+            return `Este periodo presenta un balance operativo negativo temporal de $${Math.abs(metrics.utilidad).toLocaleString()} debido a que los compromisos de egresos superaron la recaudación corriente del mes. La administración solventa esta diferencia mediante fondos acumulados o de reserva, orientados principalmente a ${topCategory || 'mantenimiento y mejoras'}.`
         }
     }
 
@@ -193,7 +202,7 @@ export function SmartMonthlyReport({ metrics, topCategory, movements, isAdmin = 
                         <Sparkles size={48} />
                     </div>
                     <div className="relative z-10 flex flex-col gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400/80">Comentario Automático</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400/80">Diagnóstico Operativo</span>
                         <p className="text-zinc-300 text-sm leading-relaxed font-medium italic">
                             "{generateCommentary()}"
                         </p>

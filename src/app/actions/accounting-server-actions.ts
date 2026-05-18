@@ -397,6 +397,16 @@ export async function getTransparencyData(condominiumId: string) {
 
     if (expError) console.error('[TransparencyAction] Error fetching expenses:', expError)
 
+    // 2.c Expected monthly income from active units (Cobranza esperada del periodo)
+    const { data: unitsData } = await adminClient
+        .from('units')
+        .select('monto_mensual, billing_status')
+        .eq('condominium_id', condominiumId)
+        .neq('billing_status', 'suspended')
+
+    const expectedMonthlyIncome = (unitsData || [])
+        .reduce((sum: number, u: any) => sum + (Number(u.monto_mensual) || 0), 0)
+
     const billingData = billing || []
     const expensesData = (expenses || []).map((e: any) => ({
         ...e,
@@ -405,19 +415,38 @@ export async function getTransparencyData(condominiumId: string) {
 
     const normalizeStatus = (s: string) => s?.toLowerCase() || ''
 
+    // isPaid: acepta 'paid' (inglés, tabla invoices) y 'pagado' (español, tabla condo_expenses)
+    const isPaid = (s: string) => normalizeStatus(s) === 'paid' || normalizeStatus(s) === 'pagado'
+    // isPending: acepta 'pending' (inglés) y 'pendiente' (español)
+    const isPending = (s: string) => normalizeStatus(s) === 'pending' || normalizeStatus(s) === 'pendiente'
+    // isOverdue: acepta 'overdue' (inglés) y 'vencido'/'moroso' (español)
+    const isOverdue = (s: string) => normalizeStatus(s) === 'overdue' || normalizeStatus(s) === 'vencido' || normalizeStatus(s) === 'moroso'
+
     // 3. Calcular métricas — solo del mes en curso
     const totalCollected = billingData
-        .filter(b => normalizeStatus(b.status) === 'pagado' || normalizeStatus(b.status) === 'paid')
+        .filter(b => isPaid(b.status))
         .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
 
     const totalReceivable = billingData
-        .filter(b => normalizeStatus(b.status) !== 'pagado' && normalizeStatus(b.status) !== 'paid')
+        .filter(b => !isPaid(b.status))
         .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+
+    // totalInvoiced = cobranza esperada del periodo (suma de monto_mensual de unidades activas)
+    const totalInvoiced = expectedMonthlyIncome
+
+    // Diferencia no cobrada = Total esperado − Lo ya cobrado
+    const uncollected = Math.max(0, totalInvoiced - totalCollected)
+
+    // Regla de negocio: 
+    //   - Días 1–10 del mes → la diferencia es "Pendiente" (dentro de plazo)
+    //   - Día 11 en adelante → la diferencia es "Morosidad" (fuera de plazo)
+    const todayDay = now.getDate()
+    const totalPending = todayDay <= 10 ? uncollected : 0
+    const totalOverdue = todayDay > 10 ? uncollected : 0
 
     const totalExpenses = expensesData
         .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
 
-    const totalInvoiced = billingData.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
     const utilidad = totalCollected - totalExpenses
 
     // 4. Fetch Reserve Fund Data (Read-only for transparency)
@@ -429,6 +458,8 @@ export async function getTransparencyData(condominiumId: string) {
         metrics: {
             totalCollected,
             totalReceivable,
+            totalPending,
+            totalOverdue,
             totalInvoiced,
             totalExpenses,
             utilidad
@@ -441,7 +472,7 @@ export async function getTransparencyData(condominiumId: string) {
                 category: 'Ingreso (facturación)',
                 description: `${inv.folio || 'INV'} - ${inv.description || 'Consulta de pago'}`,
                 date: inv.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-                status: normalizeStatus(inv.status) === 'pagado' || normalizeStatus(inv.status) === 'paid' ? 'pagado' : 'pendiente',
+                status: isPaid(inv.status) ? 'pagado' : isOverdue(inv.status) ? 'vencido' : 'pendiente',
                 is_invoice: true,
                 unit_number: (inv.units as any)?.unit_number,
                 condominium_name: (inv.condominiums as any)?.name

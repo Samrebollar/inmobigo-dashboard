@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Wallet, TrendingUp, TrendingDown, Scale, Percent, Clock, FileText, Activity, Receipt, CreditCard } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Scale, Percent, Clock, FileText, Activity, Receipt, CreditCard, AlertCircle } from 'lucide-react'
 import { FiscalRegime } from '@/types/accounting'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +10,7 @@ export function FinancialSummary({
     metrics: {
         totalCollected: number,
         totalReceivable: number,
+        totalOverdue: number,
         totalInvoiced: number,
         totalExpenses: number,
         utilidad: number,
@@ -58,16 +59,28 @@ export function FinancialSummary({
             subtextColor: 'text-amber-400/80'
         },
         {
+            title: 'Morosidad',
+            amount: metrics.totalOverdue,
+            icon: AlertCircle,
+            color: 'text-red-500',
+            iconBg: 'bg-red-500/15',
+            bg: 'bg-red-950/30 backdrop-blur-xl',
+            border: 'border-red-500/20',
+            glow: 'hover:border-red-500/40 hover:shadow-red-500/10',
+            subtext: 'Pagos fuera de plazo',
+            subtextColor: 'text-red-400/80'
+        },
+        {
             title: 'Gastos del Periodo',
             amount: metrics.totalExpenses,
             icon: CreditCard,
-            color: 'text-rose-400',
-            iconBg: 'bg-rose-500/15',
-            bg: 'bg-rose-950/30 backdrop-blur-xl',
-            border: 'border-rose-500/20',
-            glow: 'hover:border-rose-500/40 hover:shadow-rose-500/10',
+            color: 'text-purple-400',
+            iconBg: 'bg-purple-500/15',
+            bg: 'bg-purple-950/30 backdrop-blur-xl',
+            border: 'border-purple-500/20',
+            glow: 'hover:border-purple-500/40 hover:shadow-purple-500/10',
             subtext: 'Gastos operativos registrados',
-            subtextColor: 'text-rose-400/80'
+            subtextColor: 'text-purple-400/80'
         },
         {
             title: 'Resultado Neto',
@@ -96,7 +109,7 @@ export function FinancialSummary({
     }
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
             {cards.map((card, index) => (
                 <motion.div
                     key={index}
@@ -104,7 +117,7 @@ export function FinancialSummary({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
                     className={cn(
-                        "relative p-6 rounded-[32px] border transition-all duration-500 ease-out group hover:-translate-y-1 hover:shadow-2xl",
+                        "relative p-5 rounded-[32px] border transition-all duration-500 ease-out group hover:-translate-y-1 hover:shadow-2xl",
                         card.bg,
                         card.border,
                         (card as any).glow
@@ -118,11 +131,11 @@ export function FinancialSummary({
 
                     <div className="space-y-1">
                         <p className="text-sm font-bold text-zinc-400">{card.title}</p>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-2xl font-black text-white tracking-tight">
+                        <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+                            <span className="text-xl xl:text-2xl font-black text-white tracking-tight leading-none">
                                 {card.amount < 0 ? '-' : ''}${Math.abs(card.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
-                            <span className="text-xs font-bold text-zinc-500 ml-1">MXN</span>
+                            <span className="text-[10px] font-black text-zinc-500 shrink-0 uppercase">MXN</span>
                         </div>
                         {card.subtext && (
                             <p className={cn("text-[8.5px] font-bold uppercase tracking-wider mt-2", (card as any).subtextColor)}>

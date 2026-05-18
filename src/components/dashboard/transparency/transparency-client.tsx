@@ -83,11 +83,11 @@ export function TransparencyClient({ data, condominiumId, isAdmin = false }: Tra
             <TransparencyTable movements={movements} />
 
             {/* FOOTER INFO */}
-            <div className="flex items-start gap-4 p-6 rounded-3xl bg-blue-500/5 border border-blue-500/10 max-w-3xl">
+            <div className="flex items-start gap-4 p-6 rounded-3xl bg-blue-500/5 border border-blue-500/10 w-full">
                 <Info className="text-blue-400 mt-1 flex-shrink-0" size={20} />
                 <p className="text-blue-400/80 text-sm leading-relaxed font-medium">
-                    <strong className="text-blue-300 block mb-1">Nota sobre Transparencia:</strong>
-                    La información mostrada se genera automáticamente en tiempo real con base en los registros autorizados por la administración. Los nombres de otros residentes se ocultan por motivos de privacidad.
+                    <strong className="text-blue-300 block mb-1">Política de Privacidad y Transparencia:</strong>
+                    Este registro financiero se audita y actualiza automáticamente en tiempo real utilizando las fuentes de datos oficiales autorizadas por la administración. En cumplimiento con los estándares internacionales de protección de datos, la información sensible y la identidad de otros residentes han sido anonimizadas de forma estricta.
                 </p>
             </div>
         </div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock } from 'lucide-react'
+import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, FilePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -280,23 +280,19 @@ export default function ResidentMovementsPage() {
         
         if (selectedMonth === 'all') return true
         
-        const payDateStr = inv.paid_at || inv.created_at
-        if (inv.status === 'paid' && payDateStr) {
-            const payDate = new Date(payDateStr)
-            return payDate.getMonth().toString() === selectedMonth
-        }
-        
-        return false
+        // Always filter by created_at — this is the "Fecha de Movimiento" shown in the table
+        if (!inv.created_at) return false
+        return new Date(inv.created_at).getMonth().toString() === selectedMonth
     })
 
     // KPI invoices: same month filter but includes ALL statuses for card metrics
+    // Uses created_at (Fecha de Movimiento) as the single source of truth for month matching
     const kpiInvoices = useMemo(() => {
         if (selectedMonth === 'all') return invoices
         const monthNum = parseInt(selectedMonth)
         return invoices.filter(inv => {
-            const dateStr = inv.status === 'paid' ? (inv.paid_at || inv.created_at) : inv.created_at
-            if (!dateStr) return false
-            return new Date(dateStr).getMonth() === monthNum
+            if (!inv.created_at) return false
+            return new Date(inv.created_at).getMonth() === monthNum
         })
     }, [invoices, selectedMonth])
 
@@ -700,17 +696,18 @@ export default function ResidentMovementsPage() {
                 </div>
 
                 {/* Table */}
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
-                    <table className="w-full text-sm text-left">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
+                    <table className="w-full text-sm text-left min-w-[1100px]">
                         <thead className="bg-zinc-950/50 text-zinc-400 font-medium">
                             <tr className="border-b border-zinc-800">
-                                <th className="px-6 py-4">Fecha Pago</th>
+                                <th className="px-6 py-4">Fecha de Movimiento</th>
                                 <th className="px-6 py-4">Folio</th>
                                 <th className="px-6 py-4">Concepto</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4">Monto</th>
                                 <th className="px-6 py-4">Pago</th>
                                 <th className="px-6 py-4">Vencimiento</th>
+                                <th className="px-6 py-4">Fecha Pago</th>
                                 <th className="px-6 py-4">Días de atraso</th>
                                 <th className="px-6 py-4 text-right">Acciones</th>
                             </tr>
@@ -719,7 +716,7 @@ export default function ResidentMovementsPage() {
                             {filteredInvoices.map((inv) => (
                                 <tr key={inv.id} className="hover:bg-zinc-800/50 transition-colors">
                                     <td className="px-6 py-4 text-zinc-400">
-                                        {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
+                                        {formatDate(inv.created_at)}
                                     </td>
                                     <td className="px-6 py-4 font-medium text-white">{inv.folio}</td>
                                     <td className="px-6 py-4 text-zinc-300 max-w-[200px] truncate" title={inv.description}>
@@ -743,42 +740,48 @@ export default function ResidentMovementsPage() {
                                         {inv.status === 'paid' ? formatMoney(inv.amount) : '-'}
                                     </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
+                                    <td className="px-6 py-4 text-zinc-400">
+                                        {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
+                                    </td>
                                     <td className="px-6 py-4">
                                         {(inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
                                             ? <span className="text-red-400 font-medium">{Math.max(0, differenceInDays(new Date(), parseISO(inv.due_date)))} días</span>
                                             : <span className="text-zinc-600">-</span>
                                         }
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <Link href={`/dashboard/invoices/${inv.id}`}>
-                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-white">
-                                                <Zap size={16} />
+                                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                                        <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Factura">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-8 w-8 p-0 text-purple-400 bg-purple-500/10 border border-purple-500/20 hover:text-purple-200 hover:bg-purple-500/30 hover:border-purple-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:rotate-12 active:scale-95"
+                                            >
+                                                <Receipt size={16} className="transition-transform duration-300" />
                                             </Button>
                                         </Link>
+                                        {inv.status !== 'paid' && (
+                                            <Button 
+                                                onClick={() => setShowCreateInvoiceModal(true)}
+                                                variant="ghost" 
+                                                size="sm" 
+                                                title="Crear Recibo"
+                                                className="h-8 w-8 p-0 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:text-emerald-200 hover:bg-emerald-500/30 hover:border-emerald-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:-rotate-12 active:scale-95"
+                                            >
+                                                <FilePlus size={16} className="transition-transform duration-300" />
+                                            </Button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={10} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
-
-                    {/* Pagination Mock */}
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 text-zinc-500 text-xs">
-                        <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" disabled>&lt;&lt;</Button>
-                            <Button variant="ghost" size="sm" disabled>&lt;</Button>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" disabled>&gt;</Button>
-                            <Button variant="ghost" size="sm" disabled>&gt;&gt;</Button>
-                        </div>
-                    </div>
                 </div>
             </div>
 

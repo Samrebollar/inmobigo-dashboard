@@ -105,82 +105,77 @@ export default function CondominiumPage() {
                             { id: '1', title: 'Pago Recibido - Unidad B-202', name: 'Laura Martínez', amount: 1500, timeText: 'Hace 10 m' },
                         ]
                     } else {
-                            // 1. Ingresos: sum of paid_amount from invoices for this condominium this month
+                            // 1. Time references
                             const now = new Date()
                             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
                             const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
                             const currentDay = now.getDate()
 
-                            // Fetch all units to get the expected revenue (truth)
+                            // 2. Active residents for this condominium (used to filter all invoice metrics)
+                            const { data: activeResidents } = await supabase
+                                .from('residents')
+                                .select('id, first_name, last_name, unit_number, status')
+                                .eq('condominium_id', id)
+                                .eq('status', 'active')
+
+                            const activeResidentIds = new Set((activeResidents || []).map(r => r.id))
+
+                            // 3. Active units
                             const { data: unitsData } = await supabase
                                 .from('units')
                                 .select('id, monto_mensual')
                                 .eq('condominium_id', id)
-                            
-                            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
 
-                            // Fetch all invoices for this condominium
-                            const { data: invoices } = await supabase
+                            // 4. Fetch ALL invoices for this condominium
+                            const { data: allInvoices } = await supabase
                                 .from('invoices')
                                 .select('id, unit_id, amount, paid_amount, balance_due, resident_id, status, created_at')
                                 .eq('condominium_id', id)
 
-                            const totalRecaudado = invoices?.filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
-                                .reduce((acc, curr) => acc + (curr.paid_amount || 0), 0) || 0
+                            // Filter invoices to only those belonging to currently active residents
+                            const invoices = (allInvoices || []).filter(inv =>
+                                inv.resident_id && activeResidentIds.has(inv.resident_id)
+                            )
 
-                            // Ingresos (Mes) KPI
+                            // 5. Ingresos del mes: paid_amount from invoices created this month (active residents only)
+                            const totalRecaudado = invoices
+                                .filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
+                                .reduce((acc, curr) => acc + (Number(curr.paid_amount) || 0), 0)
+
                             ;(data as any).ingresos_mes = totalRecaudado
 
-                            // 2. Logic for Morosidad (matches FinanceTab)
+                            // 6. Expected revenue from active units only
+                            const expectedTotal = (unitsData || []).reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0)
+
+                            // 7. Morosidad logic
                             const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
-                            
-                            // Deuda Total should show MOROSIDAD (vencido), not just total unpaid
-                            // Cutoff rule: After day 10, current month debt becomes Morosidad. 
-                            // Before day 10, it's just 'Pendiente' and doesn't count as 'Deuda Total' (Morosidad) here.
-                            let morosidadAmount = 0
-                            if (currentDay > 10) {
-                                morosidadAmount = unpaidBalance
-                            } else {
-                                // Before day 10, only past months or officially overdue invoices count as Morosidad
-                                // However, following the SaaS standard requested:
-                                morosidadAmount = 0 
-                            }
-                            
+                            const morosidadAmount = currentDay > 10 ? unpaidBalance : 0
                             ;(data as any).deuda_total = morosidadAmount
 
-                            // 3. Residentes Morosos: count those who contribute to debt
+                            // 8. Residentes Morosos
                             let morososCount = 0
-                            if (unitsData && invoices) {
+                            if (unitsData && invoices.length > 0) {
                                 const currentPeriodInvoices = invoices.filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
                                 const paymentsPerUnit: Record<string, number> = {}
-                                
                                 currentPeriodInvoices.forEach(inv => {
-                                    const uid = inv.unit_id
-                                    if (uid) {
-                                        paymentsPerUnit[uid] = (paymentsPerUnit[uid] || 0) + (Number(inv.paid_amount) || 0)
+                                    if (inv.unit_id) {
+                                        paymentsPerUnit[inv.unit_id] = (paymentsPerUnit[inv.unit_id] || 0) + (Number(inv.paid_amount) || 0)
                                     }
                                 })
-
                                 unitsData.forEach(unit => {
                                     const paid = paymentsPerUnit[unit.id] || 0
-                                    if (paid < Number(unit.monto_mensual)) {
-                                        morososCount++
-                                    }
+                                    if (paid < Number(unit.monto_mensual)) morososCount++
                                 })
                             }
-
-                            // If we are before day 10, the user doesn't want to see them as "Morosos" in the summary yet
-                            // based on the instruction "Deuda Total debe de ser lo que tenemos en Morosidad"
                             ;(data as any).morosos_count = currentDay > 10 ? morososCount : 0
 
-                            // 4. Generar Alertas de Morosidad (Respetando regla del día 10)
-                            const residentsList = await residentsService.getByCondominium(id).catch(() => [])
+                            // 9. Morosidad alerts (active residents only)
+                            const residentsList = activeResidents || []
                             const morosidadAlerts: any[] = []
 
-                            if (unitsData && invoices) {
+                            if (unitsData && invoices.length > 0) {
                                 const currentPeriodInvoices = invoices.filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
                                 const paymentsPerUnit: Record<string, number> = {}
-                                
                                 currentPeriodInvoices.forEach(inv => {
                                     if (inv.unit_id) {
                                         paymentsPerUnit[inv.unit_id] = (paymentsPerUnit[inv.unit_id] || 0) + (Number(inv.paid_amount) || 0)
@@ -190,31 +185,20 @@ export default function CondominiumPage() {
                                 unitsData.forEach(unit => {
                                     const paid = paymentsPerUnit[unit.id] || 0
                                     const expected = Number(unit.monto_mensual) || 0
-                                    
-                                    // Si es después del día 10 y hay saldo pendiente, es una alerta
                                     if (currentDay > 10 && paid < expected) {
-                                        const resident = residentsList?.find(r => r.unit_number === unit.id || r.id === invoices.find(inv => inv.unit_id === unit.id)?.resident_id)
-                                        // Intento alternativo de encontrar al residente si el anterior falla
-                                        const residentAlt = residentsList?.find(r => {
-                                            const inv = invoices.find(i => i.unit_id === unit.id);
-                                            return inv ? r.id === inv.resident_id : false;
-                                        });
-
-                                        const targetResident = resident || residentAlt;
-                                        
-                                        // Filtro: Solo residentes activos y con información capturada (no mostrar si está eliminado o no capturado)
-                                        if (targetResident && targetResident.status === 'active') {
-                                            const residentName = `${targetResident.first_name || ''} ${targetResident.last_name || ''}`.trim()
-                                            
+                                        const resident = residentsList.find(r => {
+                                            const inv = invoices.find(i => i.unit_id === unit.id)
+                                            return inv ? r.id === inv.resident_id : false
+                                        })
+                                        if (resident) {
+                                            const residentName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
                                             if (residentName) {
-                                                const unitDisplay = targetResident?.unit_number || unit.id.split('-').pop() || 'S/N'
-                                                
                                                 morosidadAlerts.push({
                                                     id: `alert-${unit.id}`,
                                                     title: residentName,
                                                     amount: expected - paid,
                                                     timeText: 'Mes Actual',
-                                                    name: `Unidad ${unitDisplay}`
+                                                    name: `Unidad ${resident.unit_number || unit.id.split('-').pop() || 'S/N'}`
                                                 })
                                             }
                                         }
@@ -222,30 +206,23 @@ export default function CondominiumPage() {
                                 })
                             }
 
-                            // También incluir facturas históricas vencidas que no sean del mes actual
-                            const pastOverdueInvoices = invoices?.filter(i => 
-                                i.created_at < startOfMonth && 
+                            // Past overdue invoices (active residents only — already filtered in `invoices`)
+                            const pastOverdueInvoices = invoices.filter(i =>
+                                i.created_at < startOfMonth &&
                                 (i.status === 'overdue' || (i.balance_due && i.balance_due > 0))
-                            ) || []
-
+                            )
                             pastOverdueInvoices.forEach(inv => {
-                                const resident = residentsList?.find(r => r.id === inv.resident_id)
-                                
-                                // Filtro: Solo residentes activos y con información capturada (no mostrar si está eliminado o no capturado)
-                                if (resident && resident.status === 'active') {
+                                const resident = residentsList.find(r => r.id === inv.resident_id)
+                                if (resident) {
                                     const residentName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
-                                    
                                     if (residentName) {
-                                        const unitDisplay = resident?.unit_number || 'S/N'
-                                        const amount = inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0)
                                         const daysOverdue = Math.floor((new Date().getTime() - new Date(inv.created_at).getTime()) / (1000 * 3600 * 24))
-                                        
                                         morosidadAlerts.push({
                                             id: inv.id || Math.random().toString(),
                                             title: residentName,
-                                            amount: amount,
+                                            amount: inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0),
                                             timeText: `Hace ${daysOverdue} días`,
-                                            name: `Unidad ${unitDisplay}`
+                                            name: `Unidad ${resident.unit_number || 'S/N'}`
                                         })
                                     }
                                 }
@@ -254,9 +231,10 @@ export default function CondominiumPage() {
                             morosidadAlerts.sort((a, b) => b.amount - a.amount)
                             ;(data as any).alerts = morosidadAlerts
 
-                            const paidInvoices = invoices?.filter(i => i.status === 'paid' || i.status === 'completed') || []
+                            // 10. Recent activity (paid invoices from active residents only)
+                            const paidInvoices = invoices.filter(i => i.status === 'paid' || i.status === 'completed')
                             const recentActivity = paidInvoices.map(inv => {
-                                const resident = residentsList?.find(r => r.id === inv.resident_id)
+                                const resident = residentsList.find(r => r.id === inv.resident_id)
                                 const unit = resident?.unit_number || 'S/N'
                                 const name = resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Desconocido'
                                 const activityDate = new Date(inv.created_at)
@@ -266,48 +244,38 @@ export default function CondominiumPage() {
                                     title: `Pago Recibido - Unidad ${unit}`,
                                     amount: inv.paid_amount || inv.amount || 0,
                                     timeText: daysAgo === 0 ? 'Hoy' : daysAgo === 1 ? 'Ayer' : `Hace ${daysAgo} días`,
-                                    name: name,
+                                    name,
                                     date: activityDate.getTime()
                                 }
                             })
                             recentActivity.sort((a, b) => b.date - a.date)
                             ;(data as any).recent_activity = recentActivity.slice(0, 10)
 
-                            // Ocupadas: total de unidades creadas
+                            // 11. Unidades ocupadas
                             const { count: ocupadasCount } = await supabase
                                 .from('units')
                                 .select('*', { count: 'exact', head: true })
                                 .eq('condominium_id', id)
-
                             ;(data as any).ocupadas_count = ocupadasCount || 0
 
-                            // Sync historical chart
+                            // 12. Revenue chart (active residents' invoices only)
                             const staticMonths = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun']
                             const last6Months = staticMonths.map((monthName, index) => ({
-                                name: monthName,
-                                month: index,
-                                invoiced: 0,
-                                income: 0,
-                                pending: 0
+                                name: monthName, month: index, invoiced: 0, income: 0, pending: 0
                             }))
-
-                            if (invoices) {
-                                invoices.forEach(inv => {
-                                    const invDate = new Date(inv.created_at)
-                                    const invMonth = invDate.getMonth()
-                                    const targetMonth = last6Months.find(m => m.month === invMonth)
-                                    if (targetMonth) {
-                                        if (inv.status === 'paid' || inv.status === 'completed') {
-                                            targetMonth.invoiced += Number(inv.amount || 0)
-                                        }
-                                        targetMonth.income += Number(inv.paid_amount || 0)
-                                        const deudaReal = inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0)
-                                        if (inv.status === 'pending' || inv.status === 'overdue' || (inv.balance_due && inv.balance_due > 0)) {
-                                            targetMonth.pending += Number(deudaReal)
-                                        }
+                            invoices.forEach(inv => {
+                                const invMonth = new Date(inv.created_at).getMonth()
+                                const targetMonth = last6Months.find(m => m.month === invMonth)
+                                if (targetMonth) {
+                                    if (inv.status === 'paid' || inv.status === 'completed') {
+                                        targetMonth.invoiced += Number(inv.amount || 0)
                                     }
-                                })
-                            }
+                                    targetMonth.income += Number(inv.paid_amount || 0)
+                                    if (inv.status === 'pending' || inv.status === 'overdue' || (inv.balance_due && inv.balance_due > 0)) {
+                                        targetMonth.pending += Number(inv.balance_due && inv.balance_due > 0 ? inv.balance_due : inv.amount || 0)
+                                    }
+                                }
+                            })
                             setRevenueData(last6Months)
                         }
                     }

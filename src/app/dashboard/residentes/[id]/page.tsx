@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles } from 'lucide-react'
+import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -280,19 +280,26 @@ export default function ResidentMovementsPage() {
 
     // ── Month activity guard ──────────────────────────────────────────────────
     // Returns true only when the selected month is on-or-after the resident's
-    // registration month (or when 'all' is selected).
+    // active billing start month (or when 'all' is selected).
+    // If the resident is registered after the 10th, billing starts the following month.
     const monthIsActive = useMemo(() => {
         if (selectedMonth === 'all') return true
         if (!residentStartDate) return true // unknown → show data
+        
         const monthNum = parseInt(selectedMonth)
         const currentYear = new Date().getFullYear()
         const selectedDate = new Date(currentYear, monthNum, 1)
-        const startOfRegistration = new Date(
+        
+        // Determine the start of active billing:
+        // If created after the 10th, active billing starts next month
+        const startMonthOffset = residentStartDate.getDate() > 10 ? 1 : 0
+        const billingStartMonth = new Date(
             residentStartDate.getFullYear(),
-            residentStartDate.getMonth(),
+            residentStartDate.getMonth() + startMonthOffset,
             1
         )
-        return selectedDate >= startOfRegistration
+        
+        return selectedDate >= billingStartMonth
     }, [selectedMonth, residentStartDate])
 
     const filteredInvoices = invoices.filter(inv => {
@@ -300,112 +307,139 @@ export default function ResidentMovementsPage() {
             inv.description.toLowerCase().includes(search.toLowerCase())
             
         if (!matchesSearch) return false
-
-        // For inactive months (before resident start), show nothing
-        if (!monthIsActive) return false
         
         if (selectedMonth === 'all') return true
 
         const monthNum = parseInt(selectedMonth)
 
-        // Paid invoices: match by payment date
-        if (inv.status === 'paid') {
-            const payDateStr = inv.paid_at || inv.created_at
-            if (payDateStr && new Date(payDateStr).getMonth() === monthNum) return true
-        }
-
-        // Pending/overdue invoices: match by due_date month
-        if (inv.status === 'pending' || inv.status === 'overdue') {
-            if (inv.due_date && new Date(inv.due_date).getMonth() === monthNum) return true
-        }
-
-        return false
+        // Always filter by created_at — this is the "Fecha de Movimiento" shown in the table
+        if (!inv.created_at) return false
+        return new Date(inv.created_at).getMonth() === monthNum
     })
 
+    // ── Annual billing target ─────────────────────────────────────────────────
+    // Total cuota for the year = monthlyFee × number of active billing months.
+    // Active billing starts after the resident's first full billing month.
+    const annualFeeTarget = useMemo(() => {
+        const today = new Date()
+        const currentMonthIndex = today.getMonth()
+        if (!residentStartDate) return monthlyFee * (currentMonthIndex + 1)
+        const startDay = residentStartDate.getDate()
+        // If created after day 10, first billing month is the next calendar month
+        const billingStartMonthIndex = startDay > 10
+            ? residentStartDate.getMonth() + 1
+            : residentStartDate.getMonth()
+        const billingStartYear = residentStartDate.getFullYear()
+        const currentYear = today.getFullYear()
+        // If billing started in a prior year, count from January of current year
+        const firstMonth = billingStartYear < currentYear ? 0 : Math.min(billingStartMonthIndex, 11)
+        const activeMonths = Math.max(0, currentMonthIndex - firstMonth + 1)
+        return monthlyFee * activeMonths
+    }, [residentStartDate, monthlyFee])
+
     // KPI invoices: same month filter but includes ALL statuses for card metrics
+    // Data-driven: shows any month that has real invoices with created_at in that month
     const kpiInvoices = useMemo(() => {
-        if (!monthIsActive) return [] // month before registration → zero out everything
         if (selectedMonth === 'all') return invoices
         const monthNum = parseInt(selectedMonth)
         return invoices.filter(inv => {
-            // For paid invoices use the payment date; for others use the due_date month
-            const dateStr = inv.status === 'paid'
-                ? (inv.paid_at || inv.created_at)
-                : (inv.due_date || inv.created_at)
-            if (!dateStr) return false
-            return new Date(dateStr).getMonth() === monthNum
+            if (!inv.created_at) return false
+            return new Date(inv.created_at).getMonth() === monthNum
         })
-    }, [invoices, selectedMonth, monthIsActive])
+    }, [invoices, selectedMonth])
 
     // Dynamic stats derived from the period filter — update automatically
     const dynamicStats = useMemo(() => {
-        // Paid amount from invoices marked as paid in this period
+        if (selectedMonth === 'all') {
+            // ── Annual view ───────────────────────────────────────────────────
+            const totalPaid = kpiInvoices
+                .filter(inv => inv.status === 'paid')
+                .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
+            const pendingSum = kpiInvoices
+                .filter(inv => inv.status === 'pending')
+                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
+            const overdueSum = kpiInvoices
+                .filter(inv => inv.status === 'overdue')
+                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
+            const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
+            let maxDays = 0
+            if (overdueInvoices.length > 0) {
+                const oldest = overdueInvoices.reduce((prev, curr) =>
+                    new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
+                )
+                maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
+            }
+            const creditBalance = annualFeeTarget > 0 ? Math.max(0, totalPaid - annualFeeTarget) : 0
+            return { totalPaid, totalPending: pendingSum, overdueCount: overdueInvoices.length, overdueAmount: overdueSum, maxDaysOverdue: maxDays, creditBalance }
+        }
+
+        // ── Single-month view (CUMULATIVE) ────────────────────────────────────
+        // Find the first billing month from actual invoice data
+        const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
+        const firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
+        const selectedMonthNum = parseInt(selectedMonth)
+        const isActiveBillingMonth = selectedMonthNum >= firstBillingMonth
+
+        if (!isActiveBillingMonth) {
+            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0 }
+        }
+
+        // All invoices created up to the end of the selected month
+        const currentYear = new Date().getFullYear()
+        const endOfSelectedMonth = new Date(currentYear, selectedMonthNum + 1, 0, 23, 59, 59)
+        const invoicesUpToMonth = invoices.filter(inv => inv.created_at && new Date(inv.created_at) <= endOfSelectedMonth)
+
+        // Cumulative paid (all paid invoices up to selected month)
+        const cumulativePaid = invoicesUpToMonth
+            .filter(inv => inv.status === 'paid')
+            .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
+
+        // Paid only in the selected month (for this month's card display)
         const totalPaid = kpiInvoices
             .filter(inv => inv.status === 'paid')
             .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
 
-        // Traditional pending (invoices explicitly marked pending/overdue)
-        const traditionalPending = kpiInvoices
-            .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+        // Explicit overdue/pending invoice amounts up to selected month
+        const cumulativeInvoiceDebt = invoicesUpToMonth
+            .filter(inv => inv.status === 'overdue' || inv.status === 'pending')
             .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
 
-        // ── Partial payment gap ───────────────────────────────────────────────
-        // If the resident paid less than the monthly fee, the gap is outstanding.
-        // We only apply this when a specific month is selected and the month is active.
-        const effectiveFee = monthIsActive ? monthlyFee : 0
-        const partialGap = selectedMonth !== 'all' && effectiveFee > 0
-            ? Math.max(0, effectiveFee - totalPaid)
-            : 0
+        // Number of billing months elapsed (first billing month → selected month, inclusive)
+        const billingMonthCount = selectedMonthNum - firstBillingMonth + 1
 
-        // Total pending = explicit unpaid invoices + partial gap from fee
-        const totalPending = traditionalPending + partialGap
+        // Monthly fee gap: total expected fees minus all paid so far
+        const expectedCumulative = monthlyFee * billingMonthCount
+        const feeGap = Math.max(0, expectedCumulative - cumulativePaid)
 
-        // ── Overdue detection ─────────────────────────────────────────────────
-        // 1. Invoices explicitly overdue
-        const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
+        // Accumulated total debt = fee gap + separate invoice charges (maintenance, etc.)
+        const accumulatedDebt = feeGap + cumulativeInvoiceDebt
 
-        // 2. Route the gap based on the current day of the month:
-        //    - Days  1–10: still within grace period → Saldo Pendiente
-        //    - Days 11+  : past grace period → Cuotas Vencidas
-        const dayOfMonth = new Date().getDate()
-
-        // For past months (selectedMonth < current month), always treat as overdue
-        const currentMonth = new Date().getMonth()
-        const selectedMonthNum = selectedMonth !== 'all' ? parseInt(selectedMonth) : currentMonth
-        const isPastMonth = selectedMonthNum < currentMonth
-
-        const isOverduePeriod = isPastMonth || dayOfMonth > 10
-
-        // saldoPendiente: gap within first 10 days of current month → pending card
-        // cuotasVencidas: gap after day 10 (or any past month) → overdue card (show amount)
-        const saldoPendiente = isOverduePeriod ? 0 : totalPending
-        const overdueAmount = isOverduePeriod ? totalPending : 0
-
+        // Overdue invoices in the selected month (for maxDays)
+        const overdueInvoices = invoicesUpToMonth.filter(inv => inv.status === 'overdue')
         let maxDays = 0
         if (overdueInvoices.length > 0) {
             const oldest = overdueInvoices.reduce((prev, curr) =>
                 new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
             )
             maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
-        } else if (overdueAmount > 0) {
-            maxDays = dayOfMonth
         }
 
-        // ── Saldo a Favor ─────────────────────────────────────────────────────
-        // If the resident paid MORE than the monthly fee, the excess is credit.
-        const creditBalance = effectiveFee > 0
-            ? Math.max(0, totalPaid - effectiveFee)
-            : 0
+        const currentMonth = new Date().getMonth()
+        const isPastMonth = selectedMonthNum < currentMonth
+        const dayOfMonth = new Date().getDate()
+        const isOverduePeriod = isPastMonth || dayOfMonth > 10
+
+        const creditBalance = cumulativePaid > expectedCumulative ? cumulativePaid - expectedCumulative : 0
 
         return {
             totalPaid,
-            totalPending: saldoPendiente,
+            totalPending: isOverduePeriod ? 0 : accumulatedDebt,
             overdueCount: overdueInvoices.length,
-            overdueAmount,          // monetary amount for the overdue card
+            overdueAmount: isOverduePeriod ? accumulatedDebt : 0,
             maxDaysOverdue: maxDays,
-            creditBalance           // positive surplus → Saldo a Favor
+            creditBalance
         }
-    }, [kpiInvoices, monthlyFee, selectedMonth, monthIsActive])
+    }, [invoices, kpiInvoices, monthlyFee, selectedMonth, annualFeeTarget])
 
     if (loading) {
         return <div className="p-8 text-center text-zinc-500">Cargando información del residente...</div>
@@ -574,12 +608,18 @@ export default function ResidentMovementsPage() {
                                     <div className="p-1.5 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
                                         <Receipt size={16} />
                                     </div>
-                                    <span className="text-sm font-bold">Cuota Mensual</span>
+                                    <span className="text-sm font-bold">
+                                        {selectedMonth === 'all' ? 'Cuota Anual' : 'Cuota Mensual'}
+                                    </span>
                                 </div>
-                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{formatMoney(monthIsActive ? monthlyFee : 0)}</div>
+                                <div className="text-3xl font-bold text-white tracking-tight mt-2">
+                                    {formatMoney(selectedMonth === 'all' ? annualFeeTarget : monthlyFee)}
+                                </div>
                             </div>
                             <div className="text-xs text-indigo-400 mt-4 flex items-center gap-1 font-medium">
-                                <CheckCircle size={12} /> {monthIsActive ? `Cuota fija asignada${unitNumber ? ` · Unidad ${unitNumber}` : ''}` : 'Sin actividad en este mes'}
+                                <CheckCircle size={12} /> {selectedMonth === 'all'
+                                    ? `Meta acumulada del año${unitNumber ? ` · Unidad ${unitNumber}` : ''}`
+                                    : `Cuota fija asignada${unitNumber ? ` · Unidad ${unitNumber}` : ''}`}
                             </div>
                         </CardContent>
                     </Card>
@@ -828,17 +868,18 @@ export default function ResidentMovementsPage() {
                 </div>
 
                 {/* Table */}
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
-                    <table className="w-full text-sm text-left">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
+                    <table className="w-full text-sm text-left min-w-[1100px]">
                         <thead className="bg-zinc-950/50 text-zinc-400 font-medium">
                             <tr className="border-b border-zinc-800">
-                                <th className="px-6 py-4">Fecha Pago</th>
+                                <th className="px-6 py-4">Fecha de Movimiento</th>
                                 <th className="px-6 py-4">Folio</th>
                                 <th className="px-6 py-4">Concepto</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4">Monto</th>
                                 <th className="px-6 py-4">Pago</th>
                                 <th className="px-6 py-4">Vencimiento</th>
+                                <th className="px-6 py-4">Fecha Pago</th>
                                 <th className="px-6 py-4">Días de atraso</th>
                                 <th className="px-6 py-4 text-right">Acciones</th>
                             </tr>
@@ -847,7 +888,7 @@ export default function ResidentMovementsPage() {
                             {filteredInvoices.map((inv) => (
                                 <tr key={inv.id} className="hover:bg-zinc-800/50 transition-colors">
                                     <td className="px-6 py-4 text-zinc-400">
-                                        {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
+                                        {formatDate(inv.created_at)}
                                     </td>
                                     <td className="px-6 py-4 font-medium text-white">{inv.folio}</td>
                                     <td className="px-6 py-4 text-zinc-300 max-w-[200px] truncate" title={inv.description}>
@@ -871,42 +912,48 @@ export default function ResidentMovementsPage() {
                                         {inv.status === 'paid' ? formatMoney(inv.amount) : '-'}
                                     </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
+                                    <td className="px-6 py-4 text-zinc-400">
+                                        {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
+                                    </td>
                                     <td className="px-6 py-4">
                                         {(inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
                                             ? <span className="text-red-400 font-medium">{Math.max(0, differenceInDays(new Date(), parseISO(inv.due_date)))} días</span>
                                             : <span className="text-zinc-600">-</span>
                                         }
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <Link href={`/dashboard/invoices/${inv.id}`}>
-                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-white">
-                                                <Zap size={16} />
+                                    <td className="px-6 py-4 flex items-center justify-end gap-2">
+                                        <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Factura">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-8 w-8 p-0 text-purple-400 bg-purple-500/10 border border-purple-500/20 hover:text-purple-200 hover:bg-purple-500/30 hover:border-purple-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:rotate-12 active:scale-95"
+                                            >
+                                                <Receipt size={16} className="transition-transform duration-300" />
                                             </Button>
                                         </Link>
+                                        {inv.status !== 'paid' && (
+                                            <Button 
+                                                onClick={() => setShowCreateInvoiceModal(true)}
+                                                variant="ghost" 
+                                                size="sm" 
+                                                title="Crear Recibo"
+                                                className="h-8 w-8 p-0 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:text-emerald-200 hover:bg-emerald-500/30 hover:border-emerald-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:-rotate-12 active:scale-95"
+                                            >
+                                                <FilePlus size={16} className="transition-transform duration-300" />
+                                            </Button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={10} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
-
-                    {/* Pagination Mock */}
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 text-zinc-500 text-xs">
-                        <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" disabled>&lt;&lt;</Button>
-                            <Button variant="ghost" size="sm" disabled>&lt;</Button>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" disabled>&gt;</Button>
-                            <Button variant="ghost" size="sm" disabled>&gt;&gt;</Button>
-                        </div>
-                    </div>
                 </div>
             </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock } from 'lucide-react'
@@ -22,6 +22,23 @@ import { motion, AnimatePresence } from 'framer-motion'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
+import { createClient } from '@/utils/supabase/client'
+
+const MONTHS = [
+    { value: 'all', label: 'Este Año' },
+    { value: '0', label: 'Enero' },
+    { value: '1', label: 'Febrero' },
+    { value: '2', label: 'Marzo' },
+    { value: '3', label: 'Abril' },
+    { value: '4', label: 'Mayo' },
+    { value: '5', label: 'Junio' },
+    { value: '6', label: 'Julio' },
+    { value: '7', label: 'Agosto' },
+    { value: '8', label: 'Septiembre' },
+    { value: '9', label: 'Octubre' },
+    { value: '10', label: 'Noviembre' },
+    { value: '11', label: 'Diciembre' }
+]
 
 export default function ResidentMovementsPage() {
     const params = useParams()
@@ -35,6 +52,8 @@ export default function ResidentMovementsPage() {
     const [search, setSearch] = useState('')
     const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false)
     const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
+    const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
+    const [selectedMonth, setSelectedMonth] = useState<string>('all')
     const [sendingReminder, setSendingReminder] = useState(false)
     const [organizationId, setOrganizationId] = useState('')
     const [condominiumName, setCondominiumName] = useState('')
@@ -48,6 +67,8 @@ export default function ResidentMovementsPage() {
         overdueCount: 0,
         maxDaysOverdue: 0
     })
+    const [monthlyFee, setMonthlyFee] = useState(0)
+    const [unitNumber, setUnitNumber] = useState('')
 
     useEffect(() => {
         if (id) {
@@ -70,6 +91,20 @@ export default function ResidentMovementsPage() {
                 if (condo) {
                     setOrganizationId(condo.organization_id)
                     setCondominiumName(condo.name)
+                }
+            }
+
+            // Fetch unit monthly fee
+            if (residentData?.unit_id) {
+                const supabase = createClient()
+                const { data: unitData } = await supabase
+                    .from('units')
+                    .select('monto_mensual, unit_number')
+                    .eq('id', residentData.unit_id)
+                    .single()
+                if (unitData) {
+                    setMonthlyFee(Number(unitData.monto_mensual) || 0)
+                    setUnitNumber(unitData.unit_number || '')
                 }
             }
 
@@ -237,10 +272,52 @@ export default function ResidentMovementsPage() {
         }
     }
 
-    const filteredInvoices = invoices.filter(inv =>
-        inv.folio.toLowerCase().includes(search.toLowerCase()) ||
-        inv.description.toLowerCase().includes(search.toLowerCase())
-    )
+    const filteredInvoices = invoices.filter(inv => {
+        const matchesSearch = inv.folio.toLowerCase().includes(search.toLowerCase()) ||
+            inv.description.toLowerCase().includes(search.toLowerCase())
+            
+        if (!matchesSearch) return false
+        
+        if (selectedMonth === 'all') return true
+        
+        const payDateStr = inv.paid_at || inv.created_at
+        if (inv.status === 'paid' && payDateStr) {
+            const payDate = new Date(payDateStr)
+            return payDate.getMonth().toString() === selectedMonth
+        }
+        
+        return false
+    })
+
+    // KPI invoices: same month filter but includes ALL statuses for card metrics
+    const kpiInvoices = useMemo(() => {
+        if (selectedMonth === 'all') return invoices
+        const monthNum = parseInt(selectedMonth)
+        return invoices.filter(inv => {
+            const dateStr = inv.status === 'paid' ? (inv.paid_at || inv.created_at) : inv.created_at
+            if (!dateStr) return false
+            return new Date(dateStr).getMonth() === monthNum
+        })
+    }, [invoices, selectedMonth])
+
+    // Dynamic stats derived from the period filter — update automatically
+    const dynamicStats = useMemo(() => {
+        const totalPaid = kpiInvoices
+            .filter(inv => inv.status === 'paid')
+            .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
+        const totalPending = kpiInvoices
+            .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+            .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
+        const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
+        let maxDays = 0
+        if (overdueInvoices.length > 0) {
+            const oldest = overdueInvoices.reduce((prev, curr) =>
+                new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
+            )
+            maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
+        }
+        return { totalPaid, totalPending, overdueCount: overdueInvoices.length, maxDaysOverdue: maxDays }
+    }, [kpiInvoices])
 
     if (loading) {
         return <div className="p-8 text-center text-zinc-500">Cargando información del residente...</div>
@@ -362,10 +439,10 @@ export default function ResidentMovementsPage() {
                             <span className="flex items-center gap-1"><Phone size={14} /> {resident.phone}</span>
                         </div>
 
-                        {stats.overdueCount > 0 && (
+                        {dynamicStats.overdueCount > 0 && (
                             <Badge variant="destructive" className="bg-red-500/10 text-red-400 border-red-500/20 px-3 py-1 text-sm flex items-center w-fit gap-2">
                                 <AlertTriangle size={14} />
-                                {stats.maxDaysOverdue}+ días de atraso
+                                {dynamicStats.maxDaysOverdue}+ días de atraso
                             </Badge>
                         )}
                     </div>
@@ -409,12 +486,12 @@ export default function ResidentMovementsPage() {
                                     <div className="p-1.5 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
                                         <Receipt size={16} />
                                     </div>
-                                    <span className="text-sm font-bold">Total Cuotas</span>
+                                    <span className="text-sm font-bold">Total por Recaudar</span>
                                 </div>
-                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{formatMoney(stats.totalBilled)}</div>
+                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{formatMoney(monthlyFee)}</div>
                             </div>
                             <div className="text-xs text-indigo-400 mt-4 flex items-center gap-1 font-medium">
-                                <CheckCircle size={12} /> Cuotas histórica
+                                <CheckCircle size={12} /> Cuota mensual{unitNumber ? ` · Unidad ${unitNumber}` : ''}
                             </div>
                         </CardContent>
                     </Card>
@@ -440,7 +517,7 @@ export default function ResidentMovementsPage() {
                                     </div>
                                     <span className="text-sm font-bold">Total Pagado</span>
                                 </div>
-                                <div className="text-3xl font-bold text-emerald-500 tracking-tight mt-2">{formatMoney(stats.totalPaid)}</div>
+                                <div className="text-3xl font-bold text-emerald-500 tracking-tight mt-2">{formatMoney(dynamicStats.totalPaid)}</div>
                             </div>
                             <div className="text-xs text-emerald-400 mt-4 flex items-center gap-1 font-medium">
                                 <CheckCircle size={12} /> Al día
@@ -469,7 +546,7 @@ export default function ResidentMovementsPage() {
                                     </div>
                                     <span className="text-sm font-bold">Saldo Pendiente</span>
                                 </div>
-                                <div className="text-3xl font-bold text-amber-500 tracking-tight mt-2">{formatMoney(stats.totalPending)}</div>
+                                <div className="text-3xl font-bold text-amber-500 tracking-tight mt-2">{formatMoney(dynamicStats.totalPending)}</div>
                             </div>
                             <div className="text-xs text-amber-500 mt-4 flex items-center gap-1 font-medium">
                                 ● Pendiente de pago
@@ -498,10 +575,10 @@ export default function ResidentMovementsPage() {
                                     </div>
                                     <span className="text-sm font-bold">Cuotas vencidas</span>
                                 </div>
-                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{stats.overdueCount}</div>
+                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{dynamicStats.overdueCount}</div>
                             </div>
                             <div className="text-xs text-red-400/80 mt-4 flex items-center gap-1 font-medium">
-                                {stats.maxDaysOverdue > 0 ? `● ${stats.maxDaysOverdue} días de atraso` : 'Sin vencimientos'}
+                                {dynamicStats.maxDaysOverdue > 0 ? `● ${dynamicStats.maxDaysOverdue} días de atraso` : 'Sin vencimientos'}
                             </div>
                         </CardContent>
                     </Card>
@@ -521,9 +598,51 @@ export default function ResidentMovementsPage() {
                             className="bg-zinc-900 border-zinc-800 pl-9 focus:border-indigo-500"
                         />
                     </div>
-                    <Button variant="outline" className="border-zinc-800 bg-zinc-900 text-zinc-300 gap-2">
-                        <Filter size={16} /> Este Año
-                    </Button>
+                    <div className="relative">
+                        <Button 
+                            onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+                            variant="outline" 
+                            className="border-zinc-800 bg-zinc-900 text-zinc-300 gap-2 cursor-pointer transition-all duration-200"
+                        >
+                            <Filter size={16} /> {MONTHS.find(m => m.value === selectedMonth)?.label || 'Este Año'}
+                        </Button>
+                        
+                        <AnimatePresence>
+                            {isFilterDropdownOpen && (
+                                <>
+                                    <div 
+                                        className="fixed inset-0 z-10" 
+                                        onClick={() => setIsFilterDropdownOpen(false)}
+                                    />
+                                    
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                        transition={{ duration: 0.2, ease: "easeOut" }}
+                                        className="absolute right-0 mt-2 w-48 max-h-60 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/90 backdrop-blur-xl p-1.5 shadow-2xl z-20 flex flex-col gap-1 scrollbar-thin scrollbar-thumb-zinc-800"
+                                    >
+                                        {MONTHS.map(m => (
+                                            <motion.button
+                                                key={m.value}
+                                                whileHover={{ backgroundColor: "rgba(79, 70, 229, 0.1)", color: "#818cf8" }}
+                                                onClick={() => {
+                                                    setSelectedMonth(m.value)
+                                                    setIsFilterDropdownOpen(false)
+                                                }}
+                                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer ${
+                                                    selectedMonth === m.value ? 'bg-indigo-600/20 text-indigo-400 font-bold' : 'text-zinc-300'
+                                                }`}
+                                            >
+                                                <span>{m.label}</span>
+                                                {selectedMonth === m.value && <CheckCircle size={14} className="text-indigo-500" />}
+                                            </motion.button>
+                                        ))}
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <div className="relative">
                         <Button 
                             onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
@@ -585,6 +704,7 @@ export default function ResidentMovementsPage() {
                     <table className="w-full text-sm text-left">
                         <thead className="bg-zinc-950/50 text-zinc-400 font-medium">
                             <tr className="border-b border-zinc-800">
+                                <th className="px-6 py-4">Fecha Pago</th>
                                 <th className="px-6 py-4">Folio</th>
                                 <th className="px-6 py-4">Concepto</th>
                                 <th className="px-6 py-4">Estado</th>
@@ -592,12 +712,15 @@ export default function ResidentMovementsPage() {
                                 <th className="px-6 py-4">Pago</th>
                                 <th className="px-6 py-4">Vencimiento</th>
                                 <th className="px-6 py-4">Días de atraso</th>
-                                <th className="px-6 py-4 text-right">...</th>
+                                <th className="px-6 py-4 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800">
                             {filteredInvoices.map((inv) => (
                                 <tr key={inv.id} className="hover:bg-zinc-800/50 transition-colors">
+                                    <td className="px-6 py-4 text-zinc-400">
+                                        {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
+                                    </td>
                                     <td className="px-6 py-4 font-medium text-white">{inv.folio}</td>
                                     <td className="px-6 py-4 text-zinc-300 max-w-[200px] truncate" title={inv.description}>
                                         {inv.description}
@@ -637,7 +760,7 @@ export default function ResidentMovementsPage() {
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>

@@ -50,6 +50,7 @@ interface ResidentWithFinance extends Resident {
     lastPaymentDate?: string
     maxDaysOverdue: number
     oldestPendingInvoiceId?: string
+    oldestPendingInvoiceDueDate?: string
 }
 
 
@@ -185,6 +186,7 @@ export default function ResidentsPage() {
 
                 let maxDays = 0
                 let oldestPendingInvoiceId = undefined
+                let oldestPendingInvoiceDueDate = undefined
 
                 if (overdueInvoices.length > 0) {
                     const oldest = overdueInvoices.reduce((prev, curr) =>
@@ -192,11 +194,13 @@ export default function ResidentsPage() {
                     )
                     maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
                     oldestPendingInvoiceId = oldest.id
+                    oldestPendingInvoiceDueDate = oldest.due_date
                 } else if (pendingInvoices.length > 0) {
                     const oldest = pendingInvoices.reduce((prev, curr) =>
                         new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
                     )
                     oldestPendingInvoiceId = oldest.id
+                    oldestPendingInvoiceDueDate = oldest.due_date
                 }
 
                 return {
@@ -206,7 +210,8 @@ export default function ResidentsPage() {
                     overdueCount: overdueInvoices.length,
                     lastPaymentDate: lastPayment,
                     maxDaysOverdue: maxDays,
-                    oldestPendingInvoiceId
+                    oldestPendingInvoiceId,
+                    oldestPendingInvoiceDueDate
                 }
             })
 
@@ -231,34 +236,66 @@ export default function ResidentsPage() {
     const handleSendReminder = async (residentId: string) => {
         checkAction(async () => {
             const resident = residents.find(r => r.id === residentId)
-            if (!resident || !resident.oldestPendingInvoiceId) {
-                setStatus({ type: 'warning', message: '⚠️ No hay facturas pendientes para recordar.' })
+            if (!resident || resident.calculatedDebt <= 0) {
+                setStatus({ type: 'warning', message: '⚠️ No hay saldo pendiente para recordar.' })
                 return
             }
             
             setSendingReminderId(residentId)
             try {
-                const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
-                console.log('Enviando recordatorio a:', webhookUrl)
-
-                const payload = {
-                    "tipo": "recordatorio",
-                    "first_name": `${resident.first_name} ${resident.last_name}`,
-                    "phone": resident.phone || '',
-                    "amount": resident.calculatedDebt,
-                    "due_date": residents.find(r => r.id === residentId)?.lastPaymentDate || '', // Note: This might need more logic but keeping it simple as per request
-                    "payment_link": null, // Not easily available here without more fetching
-                    "condominium": condominiums.find(c => c.id === selectedCondo)?.name || '',
-                    "unit": resident.unit_number || 'S/N'
+                let invoiceId = resident.oldestPendingInvoiceId
+                
+                // Si el residente tiene saldo pendiente pero no tiene factura en base de datos,
+                // creamos dinámicamente la factura de "Saldo inicial" en Supabase para poder recordarlo.
+                if (!invoiceId && resident.calculatedDebt > 0 && !isDemo) {
+                    const folio = `INV-${Date.now().toString().slice(-6)}`
+                    const invoicePayload = {
+                        organization_id: organizationId,
+                        condominium_id: selectedCondo,
+                        resident_id: resident.id,
+                        unit_id: resident.unit_id || null,
+                        amount: resident.calculatedDebt,
+                        paid_amount: 0,
+                        balance_due: resident.calculatedDebt,
+                        status: 'pending',
+                        description: 'Saldo inicial',
+                        due_date: new Date().toISOString(),
+                        folio
+                    }
+                    
+                    const { data: newInv, error: invError } = await supabase
+                        .from('invoices')
+                        .insert(invoicePayload)
+                        .select('id')
+                        .single()
+                        
+                    if (invError) {
+                        console.error('Error al auto-crear factura para saldo inicial:', invError)
+                        throw new Error('No se pudo crear la factura de saldo inicial')
+                    }
+                    
+                    if (newInv) {
+                        invoiceId = newInv.id
+                        // Ponemos debt_amount en 0 para no duplicar el saldo (ahora está en la factura)
+                        await supabase
+                            .from('residents')
+                            .update({ debt_amount: 0 })
+                            .eq('id', resident.id)
+                        
+                        // Refrescamos datos locales
+                        await fetchData(selectedCondo)
+                    }
                 }
 
-                // If we want more precise data, we'd need to fetch the invoice here, 
-                // but since the user provided a generic structure, I'll use available data.
+                if (!invoiceId) {
+                    setStatus({ type: 'warning', message: '⚠️ No hay facturas pendientes para recordar.' })
+                    return
+                }
 
-                const res = await fetch(webhookUrl, {
+                const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ invoice_id: invoiceId })
                 })
 
                 if (res.ok) {
@@ -267,7 +304,7 @@ export default function ResidentsPage() {
                     setStatus({ type: 'error', message: '❌ Error al enviar el recordatorio por WhatsApp' })
                 }
             } catch (e) {
-                setStatus({ type: 'error', message: '❌ Error: Hubo un problema de conexión' })
+                setStatus({ type: 'error', message: '❌ Error: Hubo un problema al procesar el recordatorio' })
             } finally {
                 setSendingReminderId(null)
                 setTimeout(() => setStatus(null), 4000)

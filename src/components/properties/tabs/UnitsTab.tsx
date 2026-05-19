@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, TrendingUp } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, TrendingUp, DollarSign } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,11 @@ import { Upload } from 'lucide-react'
 
 import { useDemoMode } from '@/hooks/use-demo-mode'
 
-export function UnitsTab() {
+interface UnitsTabProps {
+    onUnitsUpdated?: () => void
+}
+
+export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
     const params = useParams()
     const condominiumId = params.id as string
     const { isDemo } = useDemoMode()
@@ -39,6 +43,11 @@ export function UnitsTab() {
     const [deleteAllModalOpen, setDeleteAllModalOpen] = useState(false)
     const [deleteAllStep, setDeleteAllStep] = useState(1)
     const [isDeletingAll, setIsDeletingAll] = useState(false)
+
+    // Update All Fees State
+    const [updateFeeModalOpen, setUpdateFeeModalOpen] = useState(false)
+    const [newFeeValue, setNewFeeValue] = useState('')
+    const [isUpdatingFees, setIsUpdatingFees] = useState(false)
 
     useEffect(() => {
         fetchUnits()
@@ -75,6 +84,7 @@ export function UnitsTab() {
                 await unitsService.delete(unitToDelete.id)
                 await fetchUnits()
             }
+            onUnitsUpdated?.()
         } catch (error) {
             console.error("Error deleting unit:", error)
             alert("Error al eliminar unidad.")
@@ -100,12 +110,34 @@ export function UnitsTab() {
             setIsDeletingAll(true)
             await unitsService.deleteAll(condominiumId)
             await fetchUnits()
+            onUnitsUpdated?.()
         } catch (error) {
             console.error("Error deleting all units:", error)
             alert("Error al eliminar las unidades.")
         } finally {
             setIsDeletingAll(false)
             setDeleteAllModalOpen(false)
+        }
+    }
+
+    const handleUpdateAllFees = async () => {
+        const fee = parseFloat(newFeeValue)
+        if (isNaN(fee) || fee < 0) {
+            alert('Por favor introduce un monto de cuota válido.')
+            return
+        }
+        setIsUpdatingFees(true)
+        try {
+            await unitsService.updateAllFees(condominiumId, fee)
+            await fetchUnits()
+            onUnitsUpdated?.()
+            setUpdateFeeModalOpen(false)
+            setNewFeeValue('')
+        } catch (error) {
+            console.error('Error updating all fees:', error)
+            alert('Error al actualizar las cuotas.')
+        } finally {
+            setIsUpdatingFees(false)
         }
     }
 
@@ -160,10 +192,13 @@ export function UnitsTab() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 rounded-xl px-5 py-6">
+                    <Button onClick={() => setUpdateFeeModalOpen(true)} variant="outline" className="border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 rounded-xl px-5 py-6 transition-all duration-300 hover:scale-[1.02]">
+                        <DollarSign className="mr-2 h-5 w-5" /> Actualizar Cuota
+                    </Button>
+                    <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 rounded-xl px-5 py-6 transition-all duration-300 hover:scale-[1.02]">
                         <Trash2 className="mr-2 h-5 w-5" /> Borrar Todo
                     </Button>
-                    <Button onClick={() => { setUnitToEdit(null); setIsCreateOpen(true) }} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 rounded-xl px-5 py-6">
+                    <Button onClick={() => { setUnitToEdit(null); setIsCreateOpen(true) }} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 rounded-xl px-5 py-6 transition-all duration-300 hover:scale-[1.02]">
                         <Plus className="mr-2 h-5 w-5" /> Nueva Unidad
                     </Button>
                 </div>
@@ -274,6 +309,7 @@ export function UnitsTab() {
                     } else {
                         fetchUnits()
                     }
+                    onUnitsUpdated?.()
                 }}
                 condominiumId={condominiumId}
                 unitToEdit={unitToEdit}
@@ -379,6 +415,53 @@ export function UnitsTab() {
                             </div>
                         </>
                     )}
+                </div>
+            </Modal>
+
+            {/* Update All Fees Modal */}
+            <Modal isOpen={updateFeeModalOpen} onClose={() => !isUpdatingFees && setUpdateFeeModalOpen(false)}>
+                <div className="p-6 space-y-6">
+                    <div className="mx-auto w-16 h-16 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.15)] animate-pulse">
+                        <DollarSign className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-2 text-center">
+                        <h3 className="text-xl font-black text-white tracking-tight">
+                            Actualizar Cuota de Mantenimiento
+                        </h3>
+                        <p className="text-zinc-400 text-sm max-w-sm mx-auto leading-relaxed">
+                            Establece una nueva cuota mensual para <span className="text-indigo-400 font-bold">todas las unidades</span> de este condominio. Esto modificará los montos de mantenimiento actuales de forma global.
+                        </p>
+                    </div>
+                    <div className="space-y-4 max-w-xs mx-auto">
+                        <div className="relative group">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400 font-bold text-lg group-focus-within:text-indigo-300 transition-colors">$</span>
+                            <Input
+                                type="number"
+                                step="any"
+                                placeholder="0.00"
+                                value={newFeeValue}
+                                onChange={(e) => setNewFeeValue(e.target.value)}
+                                className="pl-8 bg-zinc-950/60 border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl py-7 text-xl font-black text-white text-center transition-all shadow-inner placeholder:text-zinc-700"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-3 justify-center pt-4">
+                        <Button
+                            variant="outline"
+                            onClick={() => setUpdateFeeModalOpen(false)}
+                            disabled={isUpdatingFees}
+                            className="bg-transparent border-zinc-700 hover:bg-zinc-800 text-zinc-300 min-w-[120px] rounded-xl py-5"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleUpdateAllFees}
+                            isLoading={isUpdatingFees}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white min-w-[160px] shadow-lg shadow-indigo-600/25 rounded-xl py-5 font-bold transition-all duration-300 hover:shadow-indigo-600/40"
+                        >
+                            {isUpdatingFees ? 'Actualizando...' : 'Confirmar y Aplicar'}
+                        </Button>
+                    </div>
                 </div>
             </Modal>
         </div>

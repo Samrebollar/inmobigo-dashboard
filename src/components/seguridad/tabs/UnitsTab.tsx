@@ -17,7 +17,11 @@ import { Upload } from 'lucide-react'
 
 import { useDemoMode } from '@/hooks/use-demo-mode'
 
-export function UnitsTab() {
+interface UnitsTabProps {
+    onUnitsUpdated?: () => void
+}
+
+export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
     const params = useParams()
     const condominiumId = params.id as string
     const { isDemo } = useDemoMode()
@@ -75,6 +79,7 @@ export function UnitsTab() {
                 await unitsService.delete(unitToDelete.id)
                 await fetchUnits()
             }
+            onUnitsUpdated?.()
         } catch (error) {
             console.error("Error deleting unit:", error)
             alert("Error al eliminar unidad.")
@@ -100,6 +105,7 @@ export function UnitsTab() {
             setIsDeletingAll(true)
             await unitsService.deleteAll(condominiumId)
             await fetchUnits()
+            onUnitsUpdated?.()
         } catch (error) {
             console.error("Error deleting all units:", error)
             alert("Error al eliminar las unidades.")
@@ -246,6 +252,7 @@ export function UnitsTab() {
                     } else {
                         fetchUnits()
                     }
+                    onUnitsUpdated?.()
                 }}
                 condominiumId={condominiumId}
                 unitToEdit={unitToEdit}

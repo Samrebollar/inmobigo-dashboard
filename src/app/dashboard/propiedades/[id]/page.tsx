@@ -439,8 +439,8 @@ export default function CondominiumPage() {
                     >
                         {/* END DEBUG UI */}
                         {activeTab === 'summary' && <SummaryTab condo={condo} revenueData={revenueData} />}
-                        {activeTab === 'units' && <UnitsTab />}
-                        {activeTab === 'residents' && <ResidentsTab />}
+                        {activeTab === 'units' && <UnitsTab onUnitsUpdated={fetchCondo} />}
+                        {activeTab === 'residents' && <ResidentsTab onResidentsUpdated={fetchCondo} />}
                         {activeTab === 'finance' && <FinanceTab />}
                         {activeTab === 'settings' && <SettingsTab />}
                     </motion.div>

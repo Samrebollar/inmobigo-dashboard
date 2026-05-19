@@ -233,5 +233,22 @@ export const unitsService = {
             .eq('condominium_id', condominiumId)
 
         if (error) throw error
+    },
+
+    async updateAllFees(condominiumId: string, newFee: number): Promise<void> {
+        if (condominiumId.startsWith('demo-')) {
+            const units = demoDb.getUnits(condominiumId)
+            units.forEach(u => {
+                demoDb.saveUnit({ ...u, monto_mensual: newFee })
+            })
+            return
+        }
+        const supabase = createClient()
+        const { error } = await supabase
+            .from('units')
+            .update({ monto_mensual: newFee })
+            .eq('condominium_id', condominiumId)
+
+        if (error) throw error
     }
 }

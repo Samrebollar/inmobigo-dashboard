@@ -19,7 +19,11 @@ import { UnifiedBulkUploadModal } from './UnifiedBulkUploadModal'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
 
-export function ResidentsTab() {
+interface ResidentsTabProps {
+    onResidentsUpdated?: () => void
+}
+
+export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
     const { isPropiedades } = useUserRole()
     const params = useParams()
     const condominiumId = params.id as string
@@ -74,6 +78,7 @@ export function ResidentsTab() {
         try {
             await residentsService.delete(residentToDelete.id)
             await fetchResidents()
+            onResidentsUpdated?.()
         } catch (error) {
             console.error("Error deleting resident:", error)
             alert("Error al eliminar el residente.")
@@ -104,6 +109,7 @@ export function ResidentsTab() {
             setIsDeletingAll(true)
             await residentsService.deleteAll(condominiumId)
             await fetchResidents()
+            onResidentsUpdated?.()
         } catch (error) {
             console.error("Error deleting all residents:", error)
             alert("Error al eliminar los residentes.")
@@ -304,7 +310,10 @@ export function ResidentsTab() {
             <CreateResidentModal
                 isOpen={isCreateOpen}
                 onClose={() => setIsCreateOpen(false)}
-                onSuccess={fetchResidents}
+                onSuccess={() => {
+                    fetchResidents()
+                    onResidentsUpdated?.()
+                }}
                 condominiumId={condominiumId}
                 residentToEdit={residentToEdit}
             />
@@ -312,7 +321,10 @@ export function ResidentsTab() {
             <UnifiedBulkUploadModal
                 isOpen={isBulkOpen}
                 onClose={() => setIsBulkOpen(false)}
-                onSuccess={fetchResidents}
+                onSuccess={() => {
+                    fetchResidents()
+                    onResidentsUpdated?.()
+                }}
                 condominiumId={condominiumId}
             />
 

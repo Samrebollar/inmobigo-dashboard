@@ -370,18 +370,48 @@ export default function ResidentMovementsPage() {
                 maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
             }
             const creditBalance = annualFeeTarget > 0 ? Math.max(0, totalPaid - annualFeeTarget) : 0
-            return { totalPaid, totalPending: pendingSum, overdueCount: overdueInvoices.length, overdueAmount: overdueSum, maxDaysOverdue: maxDays, creditBalance }
+
+            const annualFeeGap = Math.max(0, annualFeeTarget - totalPaid)
+            const dayOfMonth = new Date().getDate()
+            const isOverduePeriod = dayOfMonth > 10
+
+            let pendingGap = 0
+            let overdueGap = 0
+
+            if (isOverduePeriod) {
+                overdueGap = annualFeeGap
+            } else {
+                pendingGap = Math.min(annualFeeGap, monthlyFee)
+                overdueGap = Math.max(0, annualFeeGap - pendingGap)
+            }
+
+            const totalPending = pendingGap + pendingSum
+            const overdueAmount = overdueGap + overdueSum
+            const overdueCount = overdueInvoices.length > 0 
+                ? overdueInvoices.length 
+                : (overdueAmount > 0 ? Math.ceil(overdueAmount / (monthlyFee || 3000)) : 0)
+
+            return { totalPaid, totalPending, overdueCount, overdueAmount, maxDaysOverdue: maxDays, creditBalance, activeMonthlyFee: monthlyFee }
         }
 
         // ── Single-month view (CUMULATIVE) ────────────────────────────────────
-        // Find the first billing month from actual invoice data
-        const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
-        const firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
+        // Find the first billing month from resident register date or invoice data
+        let firstBillingMonth = 0
+        if (residentStartDate) {
+            const startDay = residentStartDate.getDate()
+            firstBillingMonth = startDay > 10
+                ? residentStartDate.getMonth() + 1
+                : residentStartDate.getMonth()
+        } else {
+            const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
+            firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
+        }
+
         const selectedMonthNum = parseInt(selectedMonth)
         const isActiveBillingMonth = selectedMonthNum >= firstBillingMonth
 
         if (!isActiveBillingMonth) {
-            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0 }
+            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0, activeMonthlyFee: 0 }
         }
 
         // All invoices created up to the end of the selected month
@@ -434,12 +464,15 @@ export default function ResidentMovementsPage() {
         return {
             totalPaid,
             totalPending: isOverduePeriod ? 0 : accumulatedDebt,
-            overdueCount: overdueInvoices.length,
+            overdueCount: overdueInvoices.length > 0 
+                ? overdueInvoices.length 
+                : (isOverduePeriod && accumulatedDebt > 0 ? Math.ceil(accumulatedDebt / (monthlyFee || 3000)) : 0),
             overdueAmount: isOverduePeriod ? accumulatedDebt : 0,
             maxDaysOverdue: maxDays,
-            creditBalance
+            creditBalance,
+            activeMonthlyFee: monthlyFee
         }
-    }, [invoices, kpiInvoices, monthlyFee, selectedMonth, annualFeeTarget])
+    }, [invoices, kpiInvoices, monthlyFee, selectedMonth, annualFeeTarget, residentStartDate])
 
     if (loading) {
         return <div className="p-8 text-center text-zinc-500">Cargando información del residente...</div>
@@ -613,13 +646,15 @@ export default function ResidentMovementsPage() {
                                     </span>
                                 </div>
                                 <div className="text-3xl font-bold text-white tracking-tight mt-2">
-                                    {formatMoney(selectedMonth === 'all' ? annualFeeTarget : monthlyFee)}
+                                    {formatMoney(selectedMonth === 'all' ? annualFeeTarget : dynamicStats.activeMonthlyFee)}
                                 </div>
                             </div>
                             <div className="text-xs text-indigo-400 mt-4 flex items-center gap-1 font-medium">
                                 <CheckCircle size={12} /> {selectedMonth === 'all'
                                     ? `Meta acumulada del año${unitNumber ? ` · Unidad ${unitNumber}` : ''}`
-                                    : `Cuota fija asignada${unitNumber ? ` · Unidad ${unitNumber}` : ''}`}
+                                    : dynamicStats.activeMonthlyFee === 0
+                                        ? `Facturación no iniciada${unitNumber ? ` · Unidad ${unitNumber}` : ''}`
+                                        : `Cuota fija asignada${unitNumber ? ` · Unidad ${unitNumber}` : ''}`}
                             </div>
                         </CardContent>
                     </Card>
@@ -713,7 +748,11 @@ export default function ResidentMovementsPage() {
                                 </div>
                             </div>
                             <div className="text-xs text-red-400/80 mt-4 flex items-center gap-1 font-medium">
-                                {dynamicStats.maxDaysOverdue > 0 ? `● ${dynamicStats.maxDaysOverdue} días de atraso` : 'Sin vencimientos'}
+                                {(dynamicStats.overdueAmount > 0 || dynamicStats.overdueCount > 0)
+                                    ? dynamicStats.maxDaysOverdue > 0
+                                        ? `● ${dynamicStats.maxDaysOverdue} días de atraso`
+                                        : '● Pago vencido'
+                                    : '● Sin vencimientos'}
                             </div>
                         </CardContent>
                     </Card>

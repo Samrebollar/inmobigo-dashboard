@@ -296,15 +296,100 @@ export default function ResidentMovementsPage() {
         })
     }, [invoices, selectedMonth])
 
+    const annualFeeTarget = useMemo(() => {
+        const today = new Date()
+        const currentMonthIndex = today.getMonth()
+        if (!resident?.created_at) return monthlyFee * (currentMonthIndex + 1)
+        const residentStartDate = new Date(resident.created_at)
+        const startDay = residentStartDate.getDate()
+        const billingStartMonthIndex = startDay > 10
+            ? residentStartDate.getMonth() + 1
+            : residentStartDate.getMonth()
+        const billingStartYear = residentStartDate.getFullYear()
+        const currentYear = today.getFullYear()
+        const firstMonth = billingStartYear < currentYear ? 0 : Math.min(billingStartMonthIndex, 11)
+        const activeMonths = Math.max(0, currentMonthIndex - firstMonth + 1)
+        return monthlyFee * activeMonths
+    }, [resident, monthlyFee])
+
     // Dynamic stats derived from the period filter — update automatically
     const dynamicStats = useMemo(() => {
+        if (selectedMonth === 'all') {
+            // ── Annual view ───────────────────────────────────────────────────
+            const totalPaid = kpiInvoices
+                .filter(inv => inv.status === 'paid')
+                .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
+            const pendingSum = kpiInvoices
+                .filter(inv => inv.status === 'pending')
+                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
+            const overdueSum = kpiInvoices
+                .filter(inv => inv.status === 'overdue')
+                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
+            const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
+            let maxDays = 0
+            if (overdueInvoices.length > 0) {
+                const oldest = overdueInvoices.reduce((prev, curr) =>
+                    new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
+                )
+                maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
+            }
+            const creditBalance = annualFeeTarget > 0 ? Math.max(0, totalPaid - annualFeeTarget) : 0
+
+            const annualFeeGap = Math.max(0, annualFeeTarget - totalPaid)
+            const dayOfMonth = new Date().getDate()
+            const isOverduePeriod = dayOfMonth > 10
+
+            let pendingGap = 0
+            let overdueGap = 0
+
+            if (isOverduePeriod) {
+                overdueGap = annualFeeGap
+            } else {
+                pendingGap = Math.min(annualFeeGap, monthlyFee)
+                overdueGap = Math.max(0, annualFeeGap - pendingGap)
+            }
+
+            const totalPending = pendingGap + pendingSum
+            const overdueAmount = overdueGap + overdueSum
+            const overdueCount = overdueInvoices.length > 0 
+                ? overdueInvoices.length 
+                : (overdueAmount > 0 ? Math.ceil(overdueAmount / (monthlyFee || 3000)) : 0)
+
+            return { totalPaid, totalPending, overdueCount, overdueAmount, maxDaysOverdue: maxDays, creditBalance }
+        }
+
+        // ── Single-month view (CUMULATIVE) ────────────────────────────────────
+        const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
+        const firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
+        const selectedMonthNum = parseInt(selectedMonth)
+        const isActiveBillingMonth = selectedMonthNum >= firstBillingMonth
+
+        if (!isActiveBillingMonth) {
+            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0 }
+        }
+
+        const currentYear = new Date().getFullYear()
+        const endOfSelectedMonth = new Date(currentYear, selectedMonthNum + 1, 0, 23, 59, 59)
+        const invoicesUpToMonth = invoices.filter(inv => inv.created_at && new Date(inv.created_at) <= endOfSelectedMonth)
+
+        const cumulativePaid = invoicesUpToMonth
+            .filter(inv => inv.status === 'paid')
+            .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
+
         const totalPaid = kpiInvoices
             .filter(inv => inv.status === 'paid')
             .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
-        const totalPending = kpiInvoices
-            .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+
+        const cumulativeInvoiceDebt = invoicesUpToMonth
+            .filter(inv => inv.status === 'overdue' || inv.status === 'pending')
             .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
-        const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
+
+        const billingMonthCount = selectedMonthNum - firstBillingMonth + 1
+        const expectedCumulative = monthlyFee * billingMonthCount
+        const feeGap = Math.max(0, expectedCumulative - cumulativePaid)
+        const accumulatedDebt = feeGap + cumulativeInvoiceDebt
+
+        const overdueInvoices = invoicesUpToMonth.filter(inv => inv.status === 'overdue')
         let maxDays = 0
         if (overdueInvoices.length > 0) {
             const oldest = overdueInvoices.reduce((prev, curr) =>
@@ -312,8 +397,24 @@ export default function ResidentMovementsPage() {
             )
             maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
         }
-        return { totalPaid, totalPending, overdueCount: overdueInvoices.length, maxDaysOverdue: maxDays }
-    }, [kpiInvoices])
+
+        const currentMonth = new Date().getMonth()
+        const isPastMonth = selectedMonthNum < currentMonth
+        const dayOfMonth = new Date().getDate()
+        const isOverduePeriod = isPastMonth || dayOfMonth > 10
+        const creditBalance = cumulativePaid > expectedCumulative ? cumulativePaid - expectedCumulative : 0
+
+        return {
+            totalPaid,
+            totalPending: isOverduePeriod ? 0 : accumulatedDebt,
+            overdueCount: overdueInvoices.length > 0 
+                ? overdueInvoices.length 
+                : (isOverduePeriod && accumulatedDebt > 0 ? Math.ceil(accumulatedDebt / (monthlyFee || 3000)) : 0),
+            overdueAmount: isOverduePeriod ? accumulatedDebt : 0,
+            maxDaysOverdue: maxDays,
+            creditBalance
+        }
+    }, [kpiInvoices, selectedMonth, annualFeeTarget, monthlyFee, invoices])
 
     if (loading) {
         return <div className="p-8 text-center text-zinc-500">Cargando información del residente...</div>
@@ -482,12 +583,20 @@ export default function ResidentMovementsPage() {
                                     <div className="p-1.5 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
                                         <Receipt size={16} />
                                     </div>
-                                    <span className="text-sm font-bold">Total por Recaudar</span>
+                                    <span className="text-sm font-bold">
+                                        {selectedMonth === 'all' ? 'Cuota Anual' : 'Cuota Mensual'}
+                                    </span>
                                 </div>
-                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{formatMoney(monthlyFee)}</div>
+                                <div className="text-3xl font-bold text-white tracking-tight mt-2">
+                                    {formatMoney(selectedMonth === 'all' ? annualFeeTarget : dynamicStats.activeMonthlyFee)}
+                                </div>
                             </div>
                             <div className="text-xs text-indigo-400 mt-4 flex items-center gap-1 font-medium">
-                                <CheckCircle size={12} /> Cuota mensual{unitNumber ? ` · Unidad ${unitNumber}` : ''}
+                                <CheckCircle size={12} /> {selectedMonth === 'all'
+                                    ? `Meta acumulada del año${unitNumber ? ` · Unidad ${unitNumber}` : ''}`
+                                    : dynamicStats.activeMonthlyFee === 0
+                                        ? `Facturación no iniciada${unitNumber ? ` · Unidad ${unitNumber}` : ''}`
+                                        : `Cuota fija asignada${unitNumber ? ` · Unidad ${unitNumber}` : ''}`}
                             </div>
                         </CardContent>
                     </Card>
@@ -571,10 +680,21 @@ export default function ResidentMovementsPage() {
                                     </div>
                                     <span className="text-sm font-bold">Cuotas vencidas</span>
                                 </div>
-                                <div className="text-3xl font-bold text-white tracking-tight mt-2">{dynamicStats.overdueCount}</div>
+                                <div className="text-3xl font-bold text-red-400 tracking-tight mt-2">
+                                    {dynamicStats.overdueAmount > 0
+                                        ? formatMoney(dynamicStats.overdueAmount)
+                                        : dynamicStats.overdueCount > 0
+                                            ? `${dynamicStats.overdueCount} cuota${dynamicStats.overdueCount > 1 ? 's' : ''}`
+                                            : '0'
+                                    }
+                                </div>
                             </div>
                             <div className="text-xs text-red-400/80 mt-4 flex items-center gap-1 font-medium">
-                                {dynamicStats.maxDaysOverdue > 0 ? `● ${dynamicStats.maxDaysOverdue} días de atraso` : 'Sin vencimientos'}
+                                {(dynamicStats.overdueAmount > 0 || dynamicStats.overdueCount > 0)
+                                    ? dynamicStats.maxDaysOverdue > 0
+                                        ? `● ${dynamicStats.maxDaysOverdue} días de atraso`
+                                        : '● Pago vencido'
+                                    : '● Sin vencimientos'}
                             </div>
                         </CardContent>
                     </Card>

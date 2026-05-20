@@ -48,9 +48,10 @@ import { useDemoMode } from '@/hooks/use-demo-mode'
 import { useUserRole } from '@/hooks/use-user-role'
 import { ContractsAdmin } from './servicios/contracts-admin'
 import { InventoryAdmin } from './servicios/inventory-admin'
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, Handshake } from 'lucide-react'
+import { PaymentAgreementsAdmin } from './servicios/payment-agreements-admin'
 
-type TabType = 'announcements' | 'packages' | 'access' | 'amenities' | 'contracts' | 'inventory'
+type TabType = 'announcements' | 'packages' | 'access' | 'amenities' | 'contracts' | 'inventory' | 'agreements'
 
 interface Announcement {
     id: string
@@ -623,7 +624,8 @@ export function AvisosClient({
         { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
         { id: 'packages', label: 'Paquetería', icon: Package, color: 'text-amber-400', bg: 'bg-amber-500/10' },
         { id: 'access', label: 'Accesos', icon: QrCode, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-        { id: 'amenities', label: 'Amenidades', icon: PartyPopper, color: 'text-rose-400', bg: 'bg-rose-500/10' }
+        { id: 'amenities', label: 'Amenidades', icon: PartyPopper, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+        { id: 'agreements', label: 'Convenios', icon: Handshake, color: 'text-violet-400', bg: 'bg-violet-500/10' }
     ]
 
     const propTabs = [
@@ -1116,6 +1118,14 @@ export function AvisosClient({
 
                     {activeTab === 'inventory' && isPropiedades && (
                         <InventoryAdmin admin={admin} />
+                    )}
+
+                    {activeTab === 'agreements' && !isPropiedades && (
+                        <PaymentAgreementsAdmin 
+                            admin={admin} 
+                            selectedCondoId={selectedCondoId} 
+                            availableCondos={availableCondos} 
+                        />
                     )}
                 </motion.div>
             </AnimatePresence>

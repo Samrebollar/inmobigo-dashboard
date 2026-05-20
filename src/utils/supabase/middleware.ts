@@ -185,7 +185,8 @@ export async function updateSession(request: NextRequest) {
 
         if (path.startsWith('/dashboard')) {
             // --- NEW ONBOARDING REDIRECTION ---
-            if (isAdmin && !userType && !path.startsWith('/onboarding')) {
+            // Solo redirigir a onboarding si NO tiene organización ya asociada
+            if (isAdmin && !userType && !orgId && !path.startsWith('/onboarding')) {
                 return NextResponse.redirect(new URL('/onboarding', request.url))
             }
 

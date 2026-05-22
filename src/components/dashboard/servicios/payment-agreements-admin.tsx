@@ -21,6 +21,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { getPaymentAgreementsAction, updatePaymentAgreementStatusAction } from '@/app/actions/payment-agreement-actions'
+import { AgreementDetailsModal } from './agreement-details-modal'
 
 interface PaymentAgreement {
     id: string
@@ -52,6 +53,8 @@ export function PaymentAgreementsAdmin({
     const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
     const [selectedAgreement, setSelectedAgreement] = useState<PaymentAgreement | null>(null)
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
+    const [isRejecting, setIsRejecting] = useState(false)
+    const [rejectionReason, setRejectionReason] = useState('')
 
     const fetchAgreementsAndResidents = async () => {
         try {
@@ -124,6 +127,70 @@ export function PaymentAgreementsAdmin({
         } catch (error: any) {
             console.error('Error updating agreement status:', error)
             toast.error(error.message || 'No se pudo actualizar el estado del convenio')
+        } finally {
+            setActionLoadingId(null)
+        }
+    }
+
+    const handleApproveAgreement = async (id: string) => {
+        try {
+            setActionLoadingId(id)
+            
+            // 1. Send to n8n webhook via our API
+            const res = await fetch('/api/payment-agreements/approved', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agreement_id: id }),
+            })
+            const data = await res.json()
+            if (!data.success) {
+                throw new Error(data.error || 'Error al aprobar el convenio')
+            }
+
+            // 2. Update Supabase via server action
+            await handleUpdateStatus(id, 'approved')
+
+            // 3. Show warning toast if webhook failed
+            if (data.webhook_sent === false) {
+                toast.warning('Convenio aprobado en base de datos, pero la notificación por WhatsApp no se pudo enviar (Webhook n8n inactivo o fallido).')
+            }
+        } catch (error: any) {
+            console.error('Error approving agreement:', error)
+            toast.error(error.message || 'No se pudo aprobar el convenio')
+        } finally {
+            setActionLoadingId(null)
+        }
+    }
+
+    const handleRejectAgreement = async (id: string, reason: string) => {
+        try {
+            setActionLoadingId(id)
+            
+            // 1. Send to n8n webhook via our API
+            const res = await fetch('/api/payment-agreements/rejected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agreement_id: id, reason }),
+            })
+            const data = await res.json()
+            if (!data.success) {
+                throw new Error(data.error || 'Error al rechazar el convenio')
+            }
+
+            // 2. Update Supabase via server action
+            await handleUpdateStatus(id, 'rejected')
+
+            // 3. Show warning toast if webhook failed
+            if (data.webhook_sent === false) {
+                toast.warning('Convenio rechazado en base de datos, pero la notificación por WhatsApp no se pudo enviar (Webhook n8n inactivo o fallido).')
+            }
+
+            // 4. Reset rejection UI state
+            setIsRejecting(false)
+            setRejectionReason('')
+        } catch (error: any) {
+            console.error('Error rejecting agreement:', error)
+            toast.error(error.message || 'No se pudo rechazar el convenio')
         } finally {
             setActionLoadingId(null)
         }
@@ -383,14 +450,14 @@ export function PaymentAgreementsAdmin({
                                                 <>
                                                     <button
                                                         disabled={actionLoadingId === agreement.id}
-                                                        onClick={() => handleUpdateStatus(agreement.id, 'approved')}
+                                                        onClick={() => handleApproveAgreement(agreement.id)}
                                                         className="flex-1 h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(16,185,129,0.25)] active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                                                     >
                                                         <CheckCircle2 size={14} /> Aprobar
                                                     </button>
                                                     <button
                                                         disabled={actionLoadingId === agreement.id}
-                                                        onClick={() => handleUpdateStatus(agreement.id, 'rejected')}
+                                                        onClick={() => { setSelectedAgreement(agreement); setIsRejecting(true) }}
                                                         className="flex-1 h-11 bg-zinc-900/80 hover:bg-rose-500/10 hover:text-rose-450 text-zinc-400 rounded-xl text-[10px] font-black uppercase tracking-wider border border-zinc-800 hover:border-rose-500/35 transition-all active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                                                     >
                                                         <XCircle size={14} /> Rechazar
@@ -421,153 +488,19 @@ export function PaymentAgreementsAdmin({
                         })}
                     </AnimatePresence>
                 </div>
-            )}
- 
-            {/* Premium Details Modal */}
+            )}            {/* Premium Details Modal */}
             <AnimatePresence>
                 {selectedAgreement && (
-                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-zinc-950/80 backdrop-blur-md">
-                        <motion.div
-                            initial={{ scale: 0.96, y: 15 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.96, y: 15 }}                            className="bg-zinc-900 border border-zinc-800/40 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl relative"
-                        >
-                            {/* Decorative background glow */}
-                            <div className={`absolute -top-24 -right-24 w-48 h-48 rounded-full pointer-events-none blur-[100px] opacity-20 ${
-                                selectedAgreement.status === 'approved' 
-                                    ? 'bg-emerald-500' 
-                                    : selectedAgreement.status === 'rejected' 
-                                    ? 'bg-rose-500' 
-                                    : 'bg-amber-500'
-                            }`} />
- 
-                            <div className="p-6 sm:p-8 space-y-6">
-                                <div className="flex justify-between items-center pb-3 border-b border-zinc-800/40">
-                                    <h2 className="text-xl font-bold text-white flex items-center gap-3">
-                                        <div className="h-10 w-10 bg-violet-500/10 text-violet-400 flex items-center justify-center rounded-xl">
-                                            <ClipboardList size={20} />
-                                        </div>
-                                        Detalle de Convenio
-                                    </h2>
-                                    <button 
-                                        onClick={() => setSelectedAgreement(null)}
-                                        className="p-1.5 hover:bg-zinc-800/80 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                </div>
- 
-                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1.5 custom-scrollbar pb-1">
-                                    {/* Resident Name & Status */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 bg-zinc-950/50 border border-zinc-800/40 rounded-2xl">
-                                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Residente</p>
-                                            <p className="text-sm font-bold text-white">{selectedAgreement.resident_name}</p>
-                                        </div>
-                                        <div className="p-4 bg-zinc-950/50 border border-zinc-800/40 rounded-2xl flex flex-col justify-center">
-                                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Estado</p>
-                                            <span className={`w-fit px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${getStatusStyles(selectedAgreement.status).bg}`}>
-                                                {getStatusStyles(selectedAgreement.status).label}
-                                            </span>
-                                        </div>
-                                    </div>
- 
-                                    {/* Debt and Date */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 bg-zinc-950/50 border border-zinc-800/40 rounded-2xl">
-                                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
-                                                <DollarSign size={10} className="text-violet-400" /> Deuda a Financiar
-                                            </p>
-                                            <p className="text-lg font-black text-white">{formatCurrency(selectedAgreement.total_debt)}</p>
-                                        </div>
-                                        <div className="p-4 bg-zinc-950/50 border border-zinc-800/40 rounded-2xl">
-                                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
-                                                <Calendar size={10} className="text-violet-400" /> Solicitado el
-                                            </p>
-                                            <p className="text-sm font-bold text-white">
-                                                {format(new Date(selectedAgreement.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                                            </p>
-                                        </div>
-                                    </div>
- 
-                                    {/* Agreement Details */}
-                                    <div className="p-4 bg-zinc-950/50 border border-zinc-800/40 rounded-2xl space-y-1.5">
-                                        <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-                                            <FileText size={12} className="text-violet-400" /> Detalles del Plan de Pagos Propuesto
-                                        </label>
-                                        <p className="text-xs font-semibold text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                                            {selectedAgreement.agreement_details}
-                                        </p>
-                                    </div>
- 
-                                    {/* Resident Comments */}
-                                    {selectedAgreement.comments && (
-                                        <div className="p-4 bg-zinc-950/50 border border-zinc-800/40 rounded-2xl space-y-1.5">
-                                            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-                                                <MessageSquare size={12} className="text-violet-400" /> Comentarios
-                                            </label>
-                                            <p className="text-xs font-medium text-zinc-400 italic">
-                                                "{selectedAgreement.comments}"
-                                            </p>
-                                        </div>
-                                    )}
- 
-                                    {/* Approved Details (If approved/rejected) */}
-                                    {selectedAgreement.approved_at && (
-                                        <div className="p-4 bg-zinc-950/30 border border-zinc-800/40 rounded-2xl">
-                                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mb-1">
-                                                Procesado el
-                                            </p>
-                                            <p className="text-xs font-bold text-zinc-300">
-                                                {format(new Date(selectedAgreement.approved_at), "d 'de' MMMM, yyyy - h:mm a", { locale: es })}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
- 
-                                {/* Modal Actions */}
-                                <div className="flex gap-3 pt-4 border-t border-zinc-800/40">
-                                    {selectedAgreement.status === 'pending' ? (
-                                        <>
-                                            <button
-                                                disabled={actionLoadingId === selectedAgreement.id}
-                                                onClick={() => handleUpdateStatus(selectedAgreement.id, 'approved')}
-                                                className="flex-1 h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-[0_4px_20px_-2px_rgba(16,185,129,0.25)] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                                            >
-                                                {actionLoadingId === selectedAgreement.id ? (
-                                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                ) : (
-                                                    <>
-                                                        <CheckCircle2 size={16} /> Aprobar Convenio
-                                                    </>
-                                                )}
-                                            </button>
-                                            <button
-                                                disabled={actionLoadingId === selectedAgreement.id}
-                                                onClick={() => handleUpdateStatus(selectedAgreement.id, 'rejected')}
-                                                className="flex-1 h-11 bg-zinc-900/80 hover:bg-rose-500/10 hover:text-rose-450 text-zinc-400 rounded-xl text-xs font-black uppercase tracking-widest border border-zinc-800 hover:border-rose-500/35 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                                            >
-                                                {actionLoadingId === selectedAgreement.id ? (
-                                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                ) : (
-                                                    <>
-                                                        <XCircle size={16} /> Rechazar Convenio
-                                                    </>
-                                                )}
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <button
-                                            onClick={() => setSelectedAgreement(null)}
-                                            className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all cursor-pointer"
-                                        >
-                                            Cerrar
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </motion.div>
-                    </div>
+                    <AgreementDetailsModal
+                        isOpen={!!selectedAgreement}
+                        onClose={() => { setSelectedAgreement(null); setIsRejecting(false); setRejectionReason('') }}
+                        agreement={selectedAgreement}
+                        admin={admin}
+                        onApprove={handleApproveAgreement}
+                        onReject={handleRejectAgreement}
+                        actionLoadingId={actionLoadingId}
+                        initialIsRejecting={isRejecting}
+                    />
                 )}
             </AnimatePresence>
         </div>

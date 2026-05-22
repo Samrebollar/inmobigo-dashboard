@@ -1,0 +1,34 @@
+{
+  "payment_agreements": {
+    "properties": {
+      "id": "string",
+      "resident_id": "string",
+      "resident_name": "string",
+      "total_debt": "number",
+      "agreement_details": "string",
+      "comments": "string",
+      "status": "string",
+      "created_at": "string",
+      "approved_by": "string",
+      "approved_at": "string",
+      "rejection_reason": "string"
+    }
+  },
+  "agreement_installments": {
+    "properties": {
+      "id": "string",
+      "agreement_id": "string",
+      "resident_id": "string",
+      "installment_number": "integer",
+      "amount": "number",
+      "due_date": "string",
+      "status": "string",
+      "paid_at": "string",
+      "payment_method": "string",
+      "payment_reference": "string",
+      "late_fee": "number",
+      "notes": "string",
+      "created_at": "string"
+    }
+  }
+}

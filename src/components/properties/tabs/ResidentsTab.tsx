@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Resident } from '@/types/residents'
 import { residentsService } from '@/services/residents-service'
+import { financeService } from '@/services/finance-service'
+import { unitsService } from '@/services/units-service'
 import { useUserRole } from '@/hooks/use-user-role'
 import { CreateResidentModal } from '@/components/residents/CreateResidentModal'
 import { UnifiedBulkUploadModal } from './UnifiedBulkUploadModal'
@@ -52,8 +54,71 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
     const fetchResidents = async () => {
         try {
             setLoading(true)
-            const data = await residentsService.getByCondominium(condominiumId)
-            setResidents(data)
+            const [residentsData, invoicesData, unitsData] = await Promise.all([
+                residentsService.getByCondominium(condominiumId),
+                financeService.getByCondominium(condominiumId),
+                unitsService.getByCondominium(condominiumId)
+            ])
+
+            // Build a unit map for quick fee lookup
+            const unitMap = new Map<string, any>()
+            unitsData.forEach((u: any) => unitMap.set(u.id, u))
+
+            const today = new Date()
+            const currentMonthIndex = today.getMonth()
+            const dayOfMonth = today.getDate()
+
+            // Combine data and calculate real debt
+            const enrichedResidents = residentsData.map(resident => {
+                // Filter invoices for this resident's unit or resident_id
+                const unitInvoices = invoicesData.filter(inv =>
+                    (resident.unit_id && inv.unit_id === resident.unit_id) ||
+                    ((inv as any).resident_id === resident.id)
+                )
+
+                const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
+                const paidInvoices = unitInvoices.filter(i => i.status === 'paid').sort((a, b) => new Date(b.paid_at || '').getTime() - new Date(a.paid_at || '').getTime())
+
+                // Invoices-based debt (facturas reales en BD)
+                const invoiceDebt = pendingInvoices.reduce((sum, inv) => {
+                    const bd = (inv as any).balance_due
+                    return sum + (bd != null && bd > 0 ? bd : inv.amount)
+                }, 0)
+
+                // Fee-based debt: (meses activos × cuota mensual) − total pagado
+                const unit = unitMap.get(resident.unit_id || '')
+                const monthlyFee = Number(unit?.monto_mensual || 0)
+                let feeBasedDebt = 0
+                if (monthlyFee > 0) {
+                    const createdAt = resident.created_at ? new Date(resident.created_at) : null
+                    let firstBillingMonth = 0
+                    if (createdAt) {
+                        const startMonth = createdAt.getMonth()
+                        firstBillingMonth = startMonth
+                        // If resident started in a prior year, bill from Jan of current year
+                        if (createdAt.getFullYear() < today.getFullYear()) firstBillingMonth = 0
+                    }
+                    // Include current month as overdue if past day 10
+                    const lastBilledMonth = dayOfMonth > 10 ? currentMonthIndex : currentMonthIndex - 1
+                    const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
+                    const annualTarget = monthlyFee * activeMonths
+                    const totalPaid = paidInvoices.reduce((sum, inv) => {
+                        const pa = (inv as any).paid_amount
+                        return sum + (pa != null && pa > 0 ? pa : inv.amount)
+                    }, 0)
+                    feeBasedDebt = Math.max(0, annualTarget - totalPaid)
+                }
+
+                // Use the greater of the two: invoice-based or fee-based debt
+                const debt = Math.max(invoiceDebt, feeBasedDebt) + Number(resident.debt_amount || 0)
+
+                return {
+                    ...resident,
+                    debt_amount: debt
+                }
+            })
+
+            setResidents(enrichedResidents)
         } catch (error: any) {
             console.error('Residents Tab Error (JSON):', JSON.stringify(error, null, 2))
             console.error(error)

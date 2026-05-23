@@ -301,10 +301,7 @@ export default function ResidentMovementsPage() {
         const currentMonthIndex = today.getMonth()
         if (!resident?.created_at) return monthlyFee * (currentMonthIndex + 1)
         const residentStartDate = new Date(resident.created_at)
-        const startDay = residentStartDate.getDate()
-        const billingStartMonthIndex = startDay > 10
-            ? residentStartDate.getMonth() + 1
-            : residentStartDate.getMonth()
+        const billingStartMonthIndex = residentStartDate.getMonth()
         const billingStartYear = residentStartDate.getFullYear()
         const currentYear = today.getFullYear()
         const firstMonth = billingStartYear < currentYear ? 0 : Math.min(billingStartMonthIndex, 11)
@@ -355,44 +352,47 @@ export default function ResidentMovementsPage() {
                 ? overdueInvoices.length 
                 : (overdueAmount > 0 ? Math.ceil(overdueAmount / (monthlyFee || 3000)) : 0)
 
-            return { totalPaid, totalPending, overdueCount, overdueAmount, maxDaysOverdue: maxDays, creditBalance }
+            return { totalPaid, totalPending, overdueCount, overdueAmount, maxDaysOverdue: maxDays, creditBalance, activeMonthlyFee: monthlyFee }
         }
 
-        // ── Single-month view (CUMULATIVE) ────────────────────────────────────
-        const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
-        const firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
+        // ── Single-month view (PER-MONTH) ─────────────────────────────────────
+        // Shows only the debt/overdue for the selected month, not cumulative.
+        let firstBillingMonth = 0
+        if (resident?.created_at) {
+            const residentStartDate = new Date(resident.created_at)
+            firstBillingMonth = residentStartDate.getMonth()
+        } else {
+            const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
+            firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
+        }
         const selectedMonthNum = parseInt(selectedMonth)
         const isActiveBillingMonth = selectedMonthNum >= firstBillingMonth
 
         if (!isActiveBillingMonth) {
-            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0 }
+            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0, activeMonthlyFee: 0 }
         }
 
-        const currentYear = new Date().getFullYear()
-        const endOfSelectedMonth = new Date(currentYear, selectedMonthNum + 1, 0, 23, 59, 59)
-        const invoicesUpToMonth = invoices.filter(inv => inv.created_at && new Date(inv.created_at) <= endOfSelectedMonth)
-
-        const cumulativePaid = invoicesUpToMonth
-            .filter(inv => inv.status === 'paid')
-            .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
-
+        // Paid only in the selected month
         const totalPaid = kpiInvoices
             .filter(inv => inv.status === 'paid')
             .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
 
-        const cumulativeInvoiceDebt = invoicesUpToMonth
+        // Explicit overdue/pending invoices from THIS month only
+        const explicitDebtThisMonth = kpiInvoices
             .filter(inv => inv.status === 'overdue' || inv.status === 'pending')
             .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
 
-        const billingMonthCount = selectedMonthNum - firstBillingMonth + 1
-        const expectedCumulative = monthlyFee * billingMonthCount
-        const feeGap = Math.max(0, expectedCumulative - cumulativePaid)
-        const accumulatedDebt = feeGap + cumulativeInvoiceDebt
+        // Monthly fee gap: only for this month (fee - paid this month)
+        const feeGapForMonth = Math.max(0, monthlyFee - totalPaid)
 
-        const overdueInvoices = invoicesUpToMonth.filter(inv => inv.status === 'overdue')
+        // Take the greater to avoid double-counting (e.g. $3,000 - $2,000 = $1,000)
+        const monthlyDebt = Math.max(feeGapForMonth, explicitDebtThisMonth)
+
+        // Overdue invoices this month only (for maxDays)
+        const overdueInvoicesThisMonth = kpiInvoices.filter(inv => inv.status === 'overdue')
         let maxDays = 0
-        if (overdueInvoices.length > 0) {
-            const oldest = overdueInvoices.reduce((prev, curr) =>
+        if (overdueInvoicesThisMonth.length > 0) {
+            const oldest = overdueInvoicesThisMonth.reduce((prev, curr) =>
                 new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
             )
             maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
@@ -402,17 +402,20 @@ export default function ResidentMovementsPage() {
         const isPastMonth = selectedMonthNum < currentMonth
         const dayOfMonth = new Date().getDate()
         const isOverduePeriod = isPastMonth || dayOfMonth > 10
-        const creditBalance = cumulativePaid > expectedCumulative ? cumulativePaid - expectedCumulative : 0
+
+        // Credit balance: if paid more than the monthly fee this month
+        const creditBalance = totalPaid > monthlyFee ? totalPaid - monthlyFee : 0
 
         return {
             totalPaid,
-            totalPending: isOverduePeriod ? 0 : accumulatedDebt,
-            overdueCount: overdueInvoices.length > 0 
-                ? overdueInvoices.length 
-                : (isOverduePeriod && accumulatedDebt > 0 ? Math.ceil(accumulatedDebt / (monthlyFee || 3000)) : 0),
-            overdueAmount: isOverduePeriod ? accumulatedDebt : 0,
+            totalPending: isOverduePeriod ? 0 : monthlyDebt,
+            overdueCount: overdueInvoicesThisMonth.length > 0
+                ? overdueInvoicesThisMonth.length
+                : (isOverduePeriod && monthlyDebt > 0 ? Math.ceil(monthlyDebt / (monthlyFee || 3000)) : 0),
+            overdueAmount: isOverduePeriod ? monthlyDebt : 0,
             maxDaysOverdue: maxDays,
-            creditBalance
+            creditBalance,
+            activeMonthlyFee: monthlyFee
         }
     }, [kpiInvoices, selectedMonth, annualFeeTarget, monthlyFee, invoices])
 

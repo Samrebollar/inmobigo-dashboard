@@ -111,14 +111,12 @@ export default function CondominiumPage() {
                             const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
                             const currentDay = now.getDate()
 
-                            // 2. Active residents for this condominium (used to filter all invoice metrics)
+                            // 2. Active residents for this condominium (used to resolve resident data in alerts and activity)
                             const { data: activeResidents } = await supabase
                                 .from('residents')
-                                .select('id, first_name, last_name, unit_number, status')
+                                .select('id, first_name, last_name, unit_number, status, unit_id')
                                 .eq('condominium_id', id)
                                 .eq('status', 'active')
-
-                            const activeResidentIds = new Set((activeResidents || []).map(r => r.id))
 
                             // 3. Active units
                             const { data: unitsData } = await supabase
@@ -132,12 +130,9 @@ export default function CondominiumPage() {
                                 .select('id, unit_id, amount, paid_amount, balance_due, resident_id, status, created_at')
                                 .eq('condominium_id', id)
 
-                            // Filter invoices to only those belonging to currently active residents
-                            const invoices = (allInvoices || []).filter(inv =>
-                                inv.resident_id && activeResidentIds.has(inv.resident_id)
-                            )
+                            const invoices = allInvoices || []
 
-                            // 5. Ingresos del mes: paid_amount from invoices created this month (active residents only)
+                            // 5. Ingresos del mes: paid_amount from invoices created this month
                             const totalRecaudado = invoices
                                 .filter(i => i.created_at >= startOfMonth && i.created_at <= endOfMonth)
                                 .reduce((acc, curr) => acc + (Number(curr.paid_amount) || 0), 0)
@@ -169,7 +164,7 @@ export default function CondominiumPage() {
                             }
                             ;(data as any).morosos_count = currentDay > 10 ? morososCount : 0
 
-                            // 9. Morosidad alerts (active residents only)
+                            // 9. Morosidad alerts
                             const residentsList = activeResidents || []
                             const morosidadAlerts: any[] = []
 
@@ -186,10 +181,7 @@ export default function CondominiumPage() {
                                     const paid = paymentsPerUnit[unit.id] || 0
                                     const expected = Number(unit.monto_mensual) || 0
                                     if (currentDay > 10 && paid < expected) {
-                                        const resident = residentsList.find(r => {
-                                            const inv = invoices.find(i => i.unit_id === unit.id)
-                                            return inv ? r.id === inv.resident_id : false
-                                        })
+                                        const resident = residentsList.find(r => r.unit_id === unit.id)
                                         if (resident) {
                                             const residentName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
                                             if (residentName) {
@@ -198,7 +190,7 @@ export default function CondominiumPage() {
                                                     title: residentName,
                                                     amount: expected - paid,
                                                     timeText: 'Mes Actual',
-                                                    name: `Unidad ${resident.unit_number || unit.id.split('-').pop() || 'S/N'}`
+                                                    name: `Unidad ${resident.unit_number || 'S/N'}`
                                                 })
                                             }
                                         }
@@ -206,13 +198,13 @@ export default function CondominiumPage() {
                                 })
                             }
 
-                            // Past overdue invoices (active residents only — already filtered in `invoices`)
+                            // Past overdue invoices
                             const pastOverdueInvoices = invoices.filter(i =>
                                 i.created_at < startOfMonth &&
                                 (i.status === 'overdue' || (i.balance_due && i.balance_due > 0))
                             )
                             pastOverdueInvoices.forEach(inv => {
-                                const resident = residentsList.find(r => r.id === inv.resident_id)
+                                const resident = residentsList.find(r => r.id === inv.resident_id || (inv.unit_id && r.unit_id === inv.unit_id))
                                 if (resident) {
                                     const residentName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
                                     if (residentName) {
@@ -231,10 +223,10 @@ export default function CondominiumPage() {
                             morosidadAlerts.sort((a, b) => b.amount - a.amount)
                             ;(data as any).alerts = morosidadAlerts
 
-                            // 10. Recent activity (paid invoices from active residents only)
+                            // 10. Recent activity (paid invoices)
                             const paidInvoices = invoices.filter(i => i.status === 'paid' || i.status === 'completed')
                             const recentActivity = paidInvoices.map(inv => {
-                                const resident = residentsList.find(r => r.id === inv.resident_id)
+                                const resident = residentsList.find(r => r.id === inv.resident_id || (inv.unit_id && r.unit_id === inv.unit_id))
                                 const unit = resident?.unit_number || 'S/N'
                                 const name = resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Desconocido'
                                 const activityDate = new Date(inv.created_at)

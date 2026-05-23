@@ -166,23 +166,64 @@ export default function ResidentsPage() {
 
             setUnits(unitsData)
 
+            // Build a unit map for quick fee lookup
+            const unitMap = new Map<string, any>()
+            unitsData.forEach((u: any) => unitMap.set(u.id, u))
+
+            const today = new Date()
+            const currentMonthIndex = today.getMonth()
+            const dayOfMonth = today.getDate()
+
             // Combine data
             const enrichedResidents = residentsData.map(resident => {
-                // Filter invoices for this resident's unit
-                // We assume residents are linked to units, and invoices are linked to units
+                // Filter invoices for this resident's unit or resident_id
                 const unitInvoices = invoicesData.filter(inv =>
                     (resident.unit_id && inv.unit_id === resident.unit_id) ||
                     ((inv as any).resident_id === resident.id)
                 )
 
-
                 const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
                 const overdueInvoices = unitInvoices.filter(i => i.status === 'overdue')
                 const paidInvoices = unitInvoices.filter(i => i.status === 'paid').sort((a, b) => new Date(b.paid_at || '').getTime() - new Date(a.paid_at || '').getTime())
 
-                                                                const debt = pendingInvoices.reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0) + Number(resident.debt_amount || 0)
+                // Invoices-based debt (facturas reales en BD)
+                const invoiceDebt = pendingInvoices.reduce((sum, inv) => {
+                    const bd = (inv as any).balance_due
+                    return sum + (bd != null && bd > 0 ? bd : inv.amount)
+                }, 0)
+
+                // Fee-based debt: (meses activos × cuota mensual) − total pagado
+                const unit = unitMap.get(resident.unit_id || '')
+                const monthlyFee = Number(unit?.monto_mensual || 0)
+                let feeBasedDebt = 0
+                if (monthlyFee > 0) {
+                    const createdAt = resident.created_at ? new Date(resident.created_at) : null
+                    let firstBillingMonth = 0
+                    if (createdAt) {
+                        const startMonth = createdAt.getMonth()
+                        firstBillingMonth = startMonth
+                        if (createdAt.getFullYear() < today.getFullYear()) firstBillingMonth = 0
+                    }
+                    const lastBilledMonth = dayOfMonth > 10 ? currentMonthIndex : currentMonthIndex - 1
+                    const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
+                    const annualTarget = monthlyFee * activeMonths
+                    const totalPaid = paidInvoices.reduce((sum, inv) => {
+                        const pa = (inv as any).paid_amount
+                        return sum + (pa != null && pa > 0 ? pa : inv.amount)
+                    }, 0)
+                    feeBasedDebt = Math.max(0, annualTarget - totalPaid)
+                }
+
+                // Use the greater of the two: invoice-based or fee-based debt
+                const debt = Math.max(invoiceDebt, feeBasedDebt) + Number(resident.debt_amount || 0)
 
                 const lastPayment = paidInvoices.length > 0 ? paidInvoices[0].paid_at : undefined
+
+                // Calculate overdue count
+                let overdueCountFinal = overdueInvoices.length
+                if (overdueCountFinal === 0 && feeBasedDebt > 0 && monthlyFee > 0) {
+                    overdueCountFinal = Math.ceil(feeBasedDebt / monthlyFee)
+                }
 
                 let maxDays = 0
                 let oldestPendingInvoiceId = undefined
@@ -207,7 +248,7 @@ export default function ResidentsPage() {
                     ...resident,
                     calculatedDebt: debt,
                     calculatedCredit: resident.credit_amount || 0,
-                    overdueCount: overdueInvoices.length,
+                    overdueCount: overdueCountFinal,
                     lastPaymentDate: lastPayment,
                     maxDaysOverdue: maxDays,
                     oldestPendingInvoiceId,

@@ -9,6 +9,7 @@ import { demoDb } from '@/utils/demo-db'
 import { motion } from 'framer-motion'
 import { useUserRole } from '@/hooks/use-user-role'
 import { createClient } from '@/utils/supabase/client'
+import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
 
 interface SummaryTabProps {
     condo: Condominium
@@ -38,53 +39,44 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
                 const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
 
-                // 1. Fetch expected monthly income (totalPeriodo) from units
+                // 1. Fetch units
                 const { data: unitsData, error: unitsError } = await supabase
                     .from('units')
-                    .select('monto_mensual')
+                    .select('id, monto_mensual')
                     .eq('condominium_id', condo.id)
                     .neq('billing_status', 'suspended')
 
                 if (unitsError) throw unitsError
-                const totalPeriodo = unitsData?.reduce((acc, u) => acc + Number(u.monto_mensual || 0), 0) || 0
 
-                // 2. Fetch invoices of selected month (strictly maintenance type to avoid manual payment duplicates)
-                const { data: currentMonthInvoices, error: invoiceError } = await supabase
-                    .from('resident_invoices')
-                    .select('amount, balance_due, status, resident_id, invoice_type')
+                // 2. Fetch residents
+                const { data: residentsData, error: residentsError } = await supabase
+                    .from('residents')
+                    .select('unit_id, fecha_ingreso, facturacion_activa, status')
                     .eq('condominium_id', condo.id)
-                    .eq('invoice_type', 'maintenance')
-                    .gte('created_at', startOfMonth)
-                    .lte('created_at', endOfMonth)
+
+                if (residentsError) throw residentsError
+
+                // 3. Fetch resident invoices
+                const { data: invoicesData, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id, invoice_type, created_at')
+                    .eq('condominium_id', condo.id)
 
                 if (invoiceError) throw invoiceError
 
-                let totalPendiente = 0
-                let totalVencido = 0
-                const debtorResidents = new Set<string>()
-
-                currentMonthInvoices?.forEach(inv => {
-                    const bal = Number(inv.balance_due || 0)
-                    
-                    if (inv.status === 'pending') {
-                        totalPendiente += bal
-                    } else if (inv.status === 'overdue') {
-                        totalVencido += bal
-                        if (bal > 0 && inv.resident_id) {
-                            debtorResidents.add(inv.resident_id)
-                        }
-                    }
+                const condoFinancials = calculateCondoMonthlyFinancials({
+                    units: unitsData || [],
+                    residents: residentsData || [],
+                    invoices: invoicesData || [],
+                    selectedMonth: now.getMonth(),
+                    selectedYear: now.getFullYear()
                 })
 
-                // Recaudado is the complement of outstanding debt
-                const totalRecaudado = Math.max(0, totalPeriodo - totalPendiente - totalVencido)
-                const morosidad = totalVencido
-
                 setMetrics({
-                    recaudado: totalRecaudado,
-                    porCobrar: totalPendiente,
-                    vencido: morosidad,
-                    morosos: debtorResidents.size
+                    recaudado: condoFinancials.recaudado,
+                    porCobrar: condoFinancials.porCobrar,
+                    vencido: condoFinancials.vencido,
+                    morosos: condoFinancials.morososCount
                 })
             } catch (error) {
                 console.error('[SummaryTab] fetchMetrics error:', error)

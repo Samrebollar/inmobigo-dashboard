@@ -23,6 +23,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/utils/supabase/client'
+import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
 
 const MONTHS = [
     { value: 'all', label: 'Este Año' },
@@ -84,8 +85,9 @@ export default function ResidentMovementsPage() {
             setResident(residentData)
 
             // Store resident start date for month validation
-            if (residentData?.created_at) {
-                setResidentStartDate(new Date(residentData.created_at))
+            const startD = residentData?.fecha_ingreso || residentData?.created_at
+            if (startD) {
+                setResidentStartDate(new Date(startD))
             }
 
             // Fetch logs
@@ -184,7 +186,7 @@ export default function ResidentMovementsPage() {
                 inv.folio || 'N/A',
                 inv.description || 'Sin concepto',
                 statusLabel,
-                formatMoney(inv.amount),
+                formatMoney(inv.status === 'paid' ? (inv.amount - (inv.balance_due ?? 0)) : (inv.balance_due ?? inv.amount)),
                 formatDate(inv.due_date),
                 daysOverdue
             ]
@@ -213,7 +215,7 @@ export default function ResidentMovementsPage() {
                 'Folio': inv.folio,
                 'Concepto': inv.description,
                 'Estado': statusLabel,
-                'Monto': inv.amount,
+                'Monto': inv.status === 'paid' ? (inv.amount - (inv.balance_due ?? 0)) : (inv.balance_due ?? inv.amount),
                 'Vencimiento': formatDate(inv.due_date),
                 'Días de atraso': daysOverdue
             }
@@ -298,161 +300,23 @@ export default function ResidentMovementsPage() {
         return selectedDate >= billingStartMonth
     }, [selectedMonth, residentStartDate])
 
-    const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
-            (inv.description || '').toLowerCase().includes(search.toLowerCase())
-            
-        if (!matchesSearch) return false
-        
-        if (selectedMonth === 'all') return true
-
-        const monthNum = parseInt(selectedMonth)
-
-        // Always filter by created_at — this is the "Fecha de Movimiento" shown in the table
-        if (!inv.created_at) return false
-        return new Date(inv.created_at).getMonth() === monthNum
-    })
-
-    // ── Annual billing target ─────────────────────────────────────────────────
-    // Total cuota for the year = monthlyFee × number of active billing months.
-    // Active billing starts after the resident's first full billing month.
-    const annualFeeTarget = useMemo(() => {
-        const today = new Date()
-        const currentMonthIndex = today.getMonth()
-        if (!residentStartDate) return monthlyFee * (currentMonthIndex + 1)
-        const billingStartMonthIndex = residentStartDate.getMonth()
-        const billingStartYear = residentStartDate.getFullYear()
-        const currentYear = today.getFullYear()
-        // If billing started in a prior year, count from January of current year
-        const firstMonth = billingStartYear < currentYear ? 0 : Math.min(billingStartMonthIndex, 11)
-        const activeMonths = Math.max(0, currentMonthIndex - firstMonth + 1)
-        return monthlyFee * activeMonths
-    }, [residentStartDate, monthlyFee])
-
-    // KPI invoices: same month filter but includes ALL statuses for card metrics
-    // Data-driven: shows any month that has real invoices with created_at in that month
-    const kpiInvoices = useMemo(() => {
-        if (selectedMonth === 'all') return invoices
-        const monthNum = parseInt(selectedMonth)
-        return invoices.filter(inv => {
-            if (!inv.created_at) return false
-            return new Date(inv.created_at).getMonth() === monthNum
+    const financials = useMemo(() => {
+        return calculateResidentMonthlyFinancials({
+            resident,
+            invoices,
+            selectedMonth,
+            monthlyFee
         })
-    }, [invoices, selectedMonth])
+    }, [resident, invoices, selectedMonth, monthlyFee])
 
-    // Dynamic stats derived from the period filter — update automatically
-    const dynamicStats = useMemo(() => {
-        if (selectedMonth === 'all') {
-            // ── Annual view ───────────────────────────────────────────────────
-            const totalPaid = kpiInvoices
-                .filter(inv => inv.status === 'paid')
-                .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
-            const pendingSum = kpiInvoices
-                .filter(inv => inv.status === 'pending')
-                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
-            const overdueSum = kpiInvoices
-                .filter(inv => inv.status === 'overdue')
-                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
-            const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
-            let maxDays = 0
-            if (overdueInvoices.length > 0) {
-                const oldest = overdueInvoices.reduce((prev, curr) =>
-                    new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
-                )
-                maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
-            }
-            const creditBalance = annualFeeTarget > 0 ? Math.max(0, totalPaid - annualFeeTarget) : 0
-
-            const annualFeeGap = Math.max(0, annualFeeTarget - totalPaid)
-            const dayOfMonth = new Date().getDate()
-            const isOverduePeriod = dayOfMonth > 10
-
-            let pendingGap = 0
-            let overdueGap = 0
-
-            if (isOverduePeriod) {
-                overdueGap = annualFeeGap
-            } else {
-                pendingGap = Math.min(annualFeeGap, monthlyFee)
-                overdueGap = Math.max(0, annualFeeGap - pendingGap)
-            }
-
-            const totalPending = pendingGap + pendingSum
-            const overdueAmount = overdueGap + overdueSum
-            const overdueCount = overdueInvoices.length > 0 
-                ? overdueInvoices.length 
-                : (overdueAmount > 0 ? Math.ceil(overdueAmount / (monthlyFee || 3000)) : 0)
-
-            return { totalPaid, totalPending, overdueCount, overdueAmount, maxDaysOverdue: maxDays, creditBalance, activeMonthlyFee: monthlyFee }
-        }
-
-        // ── Single-month view (PER-MONTH) ─────────────────────────────────────
-        // Shows only the debt/overdue for the selected month, not cumulative.
-        // Find the first billing month to guard against pre-billing periods.
-        let firstBillingMonth = 0
-        if (residentStartDate) {
-            firstBillingMonth = residentStartDate.getMonth()
-        } else {
-            const allMonths = invoices.filter(inv => inv.created_at).map(inv => new Date(inv.created_at).getMonth())
-            firstBillingMonth = allMonths.length > 0 ? Math.min(...allMonths) : parseInt(selectedMonth)
-        }
-
-        const selectedMonthNum = parseInt(selectedMonth)
-        const isActiveBillingMonth = selectedMonthNum >= firstBillingMonth
-
-        if (!isActiveBillingMonth) {
-            return { totalPaid: 0, totalPending: 0, overdueCount: 0, overdueAmount: 0, maxDaysOverdue: 0, creditBalance: 0, activeMonthlyFee: 0 }
-        }
-
-        // Paid only in the selected month (for this month's card display)
-        const totalPaid = kpiInvoices
-            .filter(inv => inv.status === 'paid')
-            .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
-
-        // ── Monthly-only debt: compare this month's fee vs this month's payments ──
-        // This avoids the cumulative multi-month inflation bug.
-        // If there are explicit overdue/pending invoices for this month, use those.
-        // Otherwise fall back to: max(0, monthlyFee - totalPaidThisMonth).
-        const explicitDebtThisMonth = kpiInvoices
-            .filter(inv => inv.status === 'overdue' || inv.status === 'pending')
-            .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0)
-
-        const feeGapForMonth = Math.max(0, monthlyFee - totalPaid)
-
-        // Take the greater of the two to avoid double-counting, but ensure the
-        // correct amount is reflected (e.g. $3,000 fee - $2,000 paid = $1,000).
-        const monthlyDebt = Math.max(feeGapForMonth, explicitDebtThisMonth)
-
-        // Overdue invoices this month only (for maxDays)
-        const overdueInvoicesThisMonth = kpiInvoices.filter(inv => inv.status === 'overdue')
-        let maxDays = 0
-        if (overdueInvoicesThisMonth.length > 0) {
-            const oldest = overdueInvoicesThisMonth.reduce((prev, curr) =>
-                new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
-            )
-            maxDays = differenceInDays(new Date(), parseISO(oldest.due_date))
-        }
-
-        const currentMonth = new Date().getMonth()
-        const isPastMonth = selectedMonthNum < currentMonth
-        const dayOfMonth = new Date().getDate()
-        const isOverduePeriod = isPastMonth || dayOfMonth > 10
-
-        // Credit balance: if paid more than the monthly fee this month
-        const creditBalance = totalPaid > monthlyFee ? totalPaid - monthlyFee : 0
-
-        return {
-            totalPaid,
-            totalPending: isOverduePeriod ? 0 : monthlyDebt,
-            overdueCount: overdueInvoicesThisMonth.length > 0
-                ? overdueInvoicesThisMonth.length
-                : (isOverduePeriod && monthlyDebt > 0 ? Math.ceil(monthlyDebt / (monthlyFee || 3000)) : 0),
-            overdueAmount: isOverduePeriod ? monthlyDebt : 0,
-            maxDaysOverdue: maxDays,
-            creditBalance,
-            activeMonthlyFee: monthlyFee
-        }
-    }, [invoices, kpiInvoices, monthlyFee, selectedMonth, annualFeeTarget, residentStartDate])
+    const dynamicStats = financials
+    const filteredInvoices = useMemo(() => {
+        return financials.filteredInvoices.filter(inv => {
+            const matchesSearch = (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
+                (inv.description || '').toLowerCase().includes(search.toLowerCase())
+            return matchesSearch
+        })
+    }, [financials.filteredInvoices, search])
 
     if (loading) {
         return <div className="p-8 text-center text-zinc-500">Cargando información del residente...</div>
@@ -626,7 +490,7 @@ export default function ResidentMovementsPage() {
                                     </span>
                                 </div>
                                 <div className="text-3xl font-bold text-white tracking-tight mt-2">
-                                    {formatMoney(selectedMonth === 'all' ? annualFeeTarget : dynamicStats.activeMonthlyFee)}
+                                    {formatMoney(financials.cuotaMensual)}
                                 </div>
                             </div>
                             <div className="text-xs text-indigo-400 mt-4 flex items-center gap-1 font-medium">
@@ -925,7 +789,9 @@ export default function ResidentMovementsPage() {
                                                 inv.status === 'overdue' ? 'Vencida' : 'Pendiente'}
                                         </Badge>
                                     </td>
-                                    <td className="px-6 py-4 text-white font-medium">{formatMoney(inv.amount)}</td>
+                                    <td className="px-6 py-4 text-white font-medium">
+                                        {formatMoney(inv.status === 'paid' ? (inv.amount - (inv.balance_due ?? 0)) : (inv.balance_due ?? inv.amount))}
+                                    </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
                                     <td className="px-6 py-4 text-zinc-400">
                                         {inv.status === 'paid' ? (inv.updated_at ? formatDate(inv.updated_at) : formatDate(inv.created_at)) : '-'}

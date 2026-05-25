@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
 import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -209,84 +210,45 @@ export function FinanceTab() {
                 return
             }
 
-            let totalPeriodo = 0
-            let recaudado = 0
-            let porCobrar = 0
-            let vencido = 0
-            const debtorResidents = new Set<string>()
+            // 1. Fetch units
+            const { data: unitsData, error: unitsError } = await supabase
+                .from('units')
+                .select('id, monto_mensual')
+                .eq('condominium_id', condoId)
+                .neq('billing_status', 'suspended')
 
-            if (selectedPeriod.month !== -1) {
-                // Fetch expected monthly income (totalPeriodo) from units (active only)
-                const { data: unitsData, error: unitsError } = await supabase
-                    .from('units')
-                    .select('monto_mensual')
-                    .eq('condominium_id', condoId)
-                    .neq('billing_status', 'suspended')
-                
-                if (unitsError) throw unitsError
-                totalPeriodo = unitsData?.reduce((acc, u) => acc + Number(u.monto_mensual || 0), 0) || 0
+            if (unitsError) throw unitsError
 
-                // Fetch invoices of selected month (strictly maintenance type to avoid manual payment duplicates)
-                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
-                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
-                
-                const { data: invoices, error: invoiceError } = await supabase
-                    .from('resident_invoices')
-                    .select('amount, balance_due, status, resident_id, invoice_type')
-                    .eq('condominium_id', condoId)
-                    .eq('invoice_type', 'maintenance')
-                    .gte('created_at', startOfPeriod)
-                    .lte('created_at', endOfPeriod)
+            // 2. Fetch residents
+            const { data: residentsData, error: residentsError } = await supabase
+                .from('residents')
+                .select('unit_id, fecha_ingreso, facturacion_activa, status')
+                .eq('condominium_id', condoId)
 
-                if (invoiceError) throw invoiceError
+            if (residentsError) throw residentsError
 
-                invoices?.forEach(inv => {
-                    const bal = Number(inv.balance_due || 0)
-                    
-                    if (inv.status === 'pending') {
-                        porCobrar += bal
-                    } else if (inv.status === 'overdue') {
-                        vencido += bal
-                        if (bal > 0 && inv.resident_id) {
-                            debtorResidents.add(inv.resident_id)
-                        }
-                    }
-                })
+            // 3. Fetch resident invoices
+            const { data: invoicesData, error: invoiceError } = await supabase
+                .from('resident_invoices')
+                .select('amount, balance_due, status, resident_id, invoice_type, created_at')
+                .eq('condominium_id', condoId)
 
-                // Recaudado is the complement of outstanding debt
-                recaudado = Math.max(0, totalPeriodo - porCobrar - vencido)
-            } else {
-                // All time aggregation (Todos los meses)
-                const { data: invoices, error: invoiceError } = await supabase
-                    .from('resident_invoices')
-                    .select('amount, balance_due, status, resident_id')
-                    .eq('condominium_id', condoId)
+            if (invoiceError) throw invoiceError
 
-                if (invoiceError) throw invoiceError
-
-                invoices?.forEach(inv => {
-                    const amt = Number(inv.amount || 0)
-                    const bal = Number(inv.balance_due || 0)
-                    
-                    totalPeriodo += amt
-                    recaudado += Math.max(0, amt - bal)
-                    
-                    if (inv.status === 'overdue') {
-                        vencido += bal
-                        if (bal > 0 && inv.resident_id) debtorResidents.add(inv.resident_id)
-                    } else if (inv.status === 'pending') {
-                        porCobrar += bal
-                        if (bal > 0 && inv.resident_id) debtorResidents.add(inv.resident_id)
-                    }
-                })
-            }
+            const condoFinancials = calculateCondoMonthlyFinancials({
+                units: unitsData || [],
+                residents: residentsData || [],
+                invoices: invoicesData || [],
+                selectedMonth: selectedPeriod.month,
+                selectedYear: selectedPeriod.year
+            })
 
             setMetrics({
-                facturado: totalPeriodo,
-                recaudado,
-                porCobrar,
-                vencido,
-                morosos: debtorResidents.size
+                facturado: condoFinancials.totalPeriodo,
+                recaudado: condoFinancials.recaudado,
+                porCobrar: condoFinancials.porCobrar,
+                vencido: condoFinancials.vencido,
+                morosos: condoFinancials.morososCount
             })
         } catch (err) {
             console.error('Fetch billing error:', err)

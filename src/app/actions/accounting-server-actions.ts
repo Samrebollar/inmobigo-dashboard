@@ -122,7 +122,7 @@ export async function getAccountingData(condominiumId: string = 'all') {
             id, amount, balance_due, status, created_at, description,
             condominium_id, invoice_type,
             condominiums (name),
-            residents (unit_number)
+            units (unit_number)
         `)
 
     // Fetch Expected Income from Units
@@ -148,7 +148,7 @@ export async function getAccountingData(condominiumId: string = 'all') {
     const billing = (billingData || []).map((inv: any) => ({
         ...inv,
         folio: `FAC-${inv.id.substring(0, 8).toUpperCase()}`,
-        unit_number: (inv.residents as any)?.unit_number,
+        unit_number: (inv.units as any)?.unit_number,
     }))
 
     if (billingError) console.error('[AccountingAction] Error fetching billing:', billingError)
@@ -381,7 +381,7 @@ export async function getTransparencyData(condominiumId: string) {
             id, amount, balance_due, status, created_at, description,
             condominium_id, invoice_type,
             condominiums (name),
-            residents (unit_number)
+            units (unit_number)
         `)
         .eq('condominium_id', condominiumId)
         .gte('created_at', monthStart)
@@ -390,7 +390,7 @@ export async function getTransparencyData(condominiumId: string) {
     const billing = (billingRaw || []).map((inv: any) => ({
         ...inv,
         folio: `FAC-${inv.id.substring(0, 8).toUpperCase()}`,
-        unit_number: (inv.residents as any)?.unit_number,
+        unit_number: (inv.units as any)?.unit_number,
     }))
 
     if (billingError) console.error('[TransparencyAction] Error fetching billing:', billingError)

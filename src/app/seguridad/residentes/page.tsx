@@ -196,13 +196,14 @@ export default function ResidentsPage() {
                 const unit = unitMap.get(resident.unit_id || '')
                 const monthlyFee = Number(unit?.monto_mensual || 0)
                 let feeBasedDebt = 0
-                if (monthlyFee > 0) {
-                    const createdAt = resident.created_at ? new Date(resident.created_at) : null
+                if (monthlyFee > 0 && resident.status === 'active' && resident.facturacion_activa !== false) {
+                    const startDateStr = resident.fecha_ingreso ?? resident.created_at
+                    const startDate = startDateStr ? new Date(startDateStr) : null
                     let firstBillingMonth = 0
-                    if (createdAt) {
-                        const startMonth = createdAt.getMonth()
+                    if (startDate) {
+                        const startMonth = startDate.getMonth()
                         firstBillingMonth = startMonth
-                        if (createdAt.getFullYear() < today.getFullYear()) firstBillingMonth = 0
+                        if (startDate.getFullYear() < today.getFullYear()) firstBillingMonth = 0
                     }
                     const lastBilledMonth = dayOfMonth > 10 ? currentMonthIndex : currentMonthIndex - 1
                     const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)

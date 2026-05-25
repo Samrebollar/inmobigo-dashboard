@@ -13,6 +13,8 @@ export interface Resident {
     debt_amount: number
     credit_amount?: number
     created_at?: string
+    fecha_ingreso?: string
+    facturacion_activa?: boolean
     // Linked data (optional for joins)
     unit_number?: string
     vehicles?: Vehicle[]

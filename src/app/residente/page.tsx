@@ -62,7 +62,7 @@ export default async function ResidentePage() {
 
     if (resident?.id) {
         const { data: invoices } = await supabase
-            .from('invoices')
+            .from('resident_invoices')
             .select('*')
             .eq('resident_id', resident.id)
             .order('created_at', { ascending: false })
@@ -72,13 +72,17 @@ export default async function ResidentePage() {
             const montoCuota = resident?.units?.monto_mensual || 2500
             const paymentDeadline = resident?.units?.payment_deadline || 10
 
-            // Agrupar pagados por año-mes para calcular déficits
+            // Agrupar por mes para calcular déficits
             const monthlyPaid: Record<string, { paid: number; year: number; monthIndex: number }> = {}
             invoices.forEach((inv: any) => {
                 const d = new Date(inv.due_date || inv.created_at)
                 const key = `${d.getFullYear()}-${d.getMonth()}`
                 if (!monthlyPaid[key]) monthlyPaid[key] = { paid: 0, year: d.getFullYear(), monthIndex: d.getMonth() }
-                if (inv.status === 'paid') monthlyPaid[key].paid += inv.amount || 0
+                if (inv.status === 'paid') {
+                    // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
+                    const paidAmt = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
+                    monthlyPaid[key].paid += paidAmt
+                }
             })
 
             // Sumar déficit de todos los meses vencidos
@@ -92,11 +96,12 @@ export default async function ResidentePage() {
             })
             financialData.saldoPendiente = saldoAcumulado
 
-            // Último pago: la factura paid más reciente
+            // Último pago: la factura paid más reciente (usa balance_due=0 como indicador de pago)
             const lastPaid = invoices.find((inv: any) => inv.status === 'paid')
             if (lastPaid) {
                 financialData.ultimoPago = lastPaid.amount || 0
-                financialData.ultimaFechaPago = lastPaid.paid_at || lastPaid.created_at
+                // resident_invoices no tiene paid_at, usamos updated_at
+                financialData.ultimaFechaPago = lastPaid.updated_at || lastPaid.created_at
                 const lastDate = new Date(financialData.ultimaFechaPago!)
                 financialData.diasDesdeUltimoPago = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
             }

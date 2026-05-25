@@ -174,7 +174,7 @@ export default function BillingPage() {
         doc.text('Historial de Facturación', 14, 20)
         
         const tableData = filteredInvoices.map(inv => [
-            inv.folio,
+            inv.folio || 'N/A',
             inv.condominium_name || '-',
             inv.unit_number || 'N/A',
             inv.resident_name || 'Sin asignar',
@@ -380,7 +380,7 @@ export default function BillingPage() {
 
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch =
-            inv.folio.toLowerCase().includes(search.toLowerCase()) ||
+            (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
             (inv.condominium_name || '').toLowerCase().includes(search.toLowerCase()) ||
             (inv.unit_number || '').toLowerCase().includes(search.toLowerCase())
 

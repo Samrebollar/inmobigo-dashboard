@@ -173,24 +173,26 @@ export default function ResidentsPage() {
 
             // Combine data
             const enrichedResidents = residentsData.map(resident => {
-                // Filter invoices for this resident's unit or resident_id
+                // resident_invoices does NOT have unit_id — filter only by resident_id
                 const unitInvoices = invoicesData.filter(inv =>
-                    (resident.unit_id && inv.unit_id === resident.unit_id) ||
-                    ((inv as any).resident_id === resident.id)
+                    (inv as any).resident_id === resident.id
                 )
 
                 const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
                 const overdueInvoices = unitInvoices.filter(i => i.status === 'overdue')
-                const paidInvoices = unitInvoices.filter(i => i.status === 'paid').sort((a, b) => new Date(b.paid_at || '').getTime() - new Date(a.paid_at || '').getTime())
+                // Sort paid invoices by updated_at (no paid_at in resident_invoices)
+                const paidInvoices = unitInvoices.filter(i => i.status === 'paid').sort((a, b) =>
+                    new Date((b as any).updated_at || b.created_at || '').getTime() -
+                    new Date((a as any).updated_at || a.created_at || '').getTime()
+                )
 
                 // Invoices-based debt (facturas reales en BD)
                 const invoiceDebt = pendingInvoices.reduce((sum, inv) => {
                     const bd = (inv as any).balance_due
-                    return sum + (bd != null && bd > 0 ? bd : inv.amount)
+                    return sum + (bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0)
                 }, 0)
 
                 // Fee-based debt: (meses activos × cuota mensual) − total pagado
-                // This covers residents who have no explicit pending invoices generated yet
                 const unit = unitMap.get(resident.unit_id || '')
                 const monthlyFee = Number(unit?.monto_mensual || 0)
                 let feeBasedDebt = 0
@@ -200,16 +202,15 @@ export default function ResidentsPage() {
                     if (createdAt) {
                         const startMonth = createdAt.getMonth()
                         firstBillingMonth = startMonth
-                        // If resident started in a prior year, bill from Jan of current year
                         if (createdAt.getFullYear() < today.getFullYear()) firstBillingMonth = 0
                     }
-                    // Include current month as overdue if past day 10
                     const lastBilledMonth = dayOfMonth > 10 ? currentMonthIndex : currentMonthIndex - 1
                     const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
                     const annualTarget = monthlyFee * activeMonths
+                    // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
                     const totalPaid = paidInvoices.reduce((sum, inv) => {
-                        const pa = (inv as any).paid_amount
-                        return sum + (pa != null && pa > 0 ? pa : inv.amount)
+                        const paidAmt = Math.max(0, Number(inv.amount || 0) - Number((inv as any).balance_due || 0))
+                        return sum + paidAmt
                     }, 0)
                     feeBasedDebt = Math.max(0, annualTarget - totalPaid)
                 }
@@ -217,7 +218,10 @@ export default function ResidentsPage() {
                 // Use the greater of the two: invoice-based or fee-based debt
                 const debt = Math.max(invoiceDebt, feeBasedDebt) + Number(resident.debt_amount || 0)
 
-                const lastPayment = paidInvoices.length > 0 ? paidInvoices[0].paid_at : undefined
+                // Last payment date: use updated_at of the most recent paid invoice
+                const lastPayment = paidInvoices.length > 0
+                    ? ((paidInvoices[0] as any).updated_at || paidInvoices[0].created_at)
+                    : undefined
 
                 // Calculate overdue count: if fee-based shows debt but no explicit overdue invoices, estimate
                 let overdueCountFinal = overdueInvoices.length
@@ -289,23 +293,20 @@ export default function ResidentsPage() {
                 // Si el residente tiene saldo pendiente pero no tiene factura en base de datos,
                 // creamos dinámicamente la factura de "Saldo inicial" en Supabase para poder recordarlo.
                 if (!invoiceId && resident.calculatedDebt > 0 && !isDemo) {
-                    const folio = `INV-${Date.now().toString().slice(-6)}`
                     const invoicePayload = {
                         organization_id: organizationId,
                         condominium_id: selectedCondo,
                         resident_id: resident.id,
-                        unit_id: resident.unit_id || null,
                         amount: resident.calculatedDebt,
-                        paid_amount: 0,
                         balance_due: resident.calculatedDebt,
                         status: 'pending',
+                        invoice_type: 'initial_balance',
                         description: 'Saldo inicial',
                         due_date: new Date().toISOString(),
-                        folio
                     }
                     
                     const { data: newInv, error: invError } = await supabase
-                        .from('invoices')
+                        .from('resident_invoices')
                         .insert(invoicePayload)
                         .select('id')
                         .single()
@@ -382,8 +383,6 @@ export default function ResidentsPage() {
             </AnimatePresence>
 
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                {/* Forced recompile console log */}
-                {console.log('Rendering residents page (cache busted)')}
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">{isPropiedades ? 'Inquilinos' : 'Residentes'}</h1>
                     <p className="text-sm md:text-base text-zinc-400">

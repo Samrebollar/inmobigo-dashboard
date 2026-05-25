@@ -177,9 +177,9 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
                             last_name: lastName || '',
                             email: email,
                             phone: normalizeMexicanPhone(phone || ''),
-                            status: status,
-                            unit_id: unitId,
-                            debt_amount: debtAmount,
+                            status: (statusRaw?.toLowerCase() === 'inactivo' ? 'inactive' : statusRaw?.toLowerCase() === 'moroso' ? 'delinquent' : 'active') as any,
+                            unit_id: unitRaw ? (unitMap.get(unitRaw.toLowerCase()) ?? undefined) : undefined,
+                            debt_amount: parseFloat(debtRaw) || 0,
                             vehicles: vehicles
                         })
                     })

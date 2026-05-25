@@ -22,6 +22,10 @@ export interface FinancialRecord {
     created_at: string;
     receipt_url?: string;
     iva_amount?: number;
+    condominium_id?: string;
+    condominium_name?: string;
+    unit_number?: string;
+    is_invoice?: boolean;
 }
 
 export type CategoryMap = Record<string, { ingresos: string[], egresos: string[] }>;

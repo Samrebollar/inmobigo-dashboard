@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight, CheckCircle2, Eye, X, Loader2, FileSpreadsheet } from 'lucide-react'
+import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight, CheckCircle2, Eye, X, Loader2, FileSpreadsheet, Calendar, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 import Papa from 'papaparse'
@@ -37,15 +38,32 @@ export function FinanceTab() {
         morosos: 0
     })
 
-    // Menú de Exportación
+    // Menú de Exportación y Periodo
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+    const [isPeriodMenuOpen, setIsPeriodMenuOpen] = useState(false)
+    const [selectedPeriod, setSelectedPeriod] = useState(() => {
+        const monthNames = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ]
+        const currentMonth = new Date().getMonth()
+        return {
+            month: currentMonth,
+            year: new Date().getFullYear(),
+            label: monthNames[currentMonth]
+        }
+    })
     const exportMenuRef = useRef<HTMLDivElement>(null)
+    const periodMenuRef = useRef<HTMLDivElement>(null)
 
     // Cierra el menú al hacer clic fuera
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
                 setIsExportMenuOpen(false)
+            }
+            if (periodMenuRef.current && !periodMenuRef.current.contains(event.target as Node)) {
+                setIsPeriodMenuOpen(false)
             }
         }
         document.addEventListener('mousedown', handleClickOutside)
@@ -76,7 +94,7 @@ export function FinanceTab() {
         
         const link = document.createElement('a')
         link.href = url
-        link.setAttribute('download', `Facturas_InmobiGo_${new Date().toISOString().split('T')[0]}.csv`)
+        link.setAttribute('download', `Movimientos_InmobiGo_${new Date().toISOString().split('T')[0]}.csv`)
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -96,7 +114,7 @@ export function FinanceTab() {
         // Cabecera Reporte
         doc.setFontSize(18)
         doc.setTextColor(40, 40, 40)
-        doc.text('Reporte de Facturación y Cobranza', 14, 22)
+        doc.text('Reporte de Gestión de Cobranza', 14, 22)
         
         doc.setFontSize(10)
         doc.setTextColor(100, 100, 100)
@@ -106,8 +124,8 @@ export function FinanceTab() {
         doc.setFontSize(11)
         doc.setTextColor(60, 60, 60)
         doc.text(`Total Recaudado: $${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 40)
-        doc.text(`Por Cobrar: $${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 46)
-        doc.text(`Vencido: $${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 52)
+        doc.text(`Pendiente: $${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 46)
+        doc.text(`Morosidad: $${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 52)
 
         const tableColumn = ["Folio", "Unidad", "Concepto", "Monto", "Estado", "Atraso", "Vence"]
         const tableRows: any[] = []
@@ -135,7 +153,7 @@ export function FinanceTab() {
             alternateRowStyles: { fillColor: [245, 245, 245] },
         })
 
-        doc.save(`Facturas_InmobiGo_${new Date().toISOString().split('T')[0]}.pdf`)
+        doc.save(`Movimientos_InmobiGo_${new Date().toISOString().split('T')[0]}.pdf`)
         showToast('Reporte PDF descargado')
     }
 
@@ -144,89 +162,131 @@ export function FinanceTab() {
         setTimeout(() => setToastMessage(null), 3500)
     }
 
+    const periods = [
+        { label: 'Todos los meses', month: -1, year: new Date().getFullYear() },
+        { label: 'Enero', month: 0, year: new Date().getFullYear() },
+        { label: 'Febrero', month: 1, year: new Date().getFullYear() },
+        { label: 'Marzo', month: 2, year: new Date().getFullYear() },
+        { label: 'Abril', month: 3, year: new Date().getFullYear() },
+        { label: 'Mayo', month: 4, year: new Date().getFullYear() },
+        { label: 'Junio', month: 5, year: new Date().getFullYear() },
+        { label: 'Julio', month: 6, year: new Date().getFullYear() },
+        { label: 'Agosto', month: 7, year: new Date().getFullYear() },
+        { label: 'Septiembre', month: 8, year: new Date().getFullYear() },
+        { label: 'Octubre', month: 9, year: new Date().getFullYear() },
+        { label: 'Noviembre', month: 10, year: new Date().getFullYear() },
+        { label: 'Diciembre', month: 11, year: new Date().getFullYear() },
+    ]
+
     const fetchBillingData = async () => {
         try {
             if (condoId.startsWith('demo-')) {
-                setMetrics({ facturado: 124500, recaudado: 98200, porCobrar: 26300, vencido: 4500, morosos: 3 })
+                const demoUnits = demoDb.getUnits(condoId)
+                const demoSum = demoUnits.reduce((acc, u) => acc + (u.monto_mensual || 0), 0)
+                
+                let demoRecaudado = 98200
+                let unpaid = Math.max(0, demoSum - demoRecaudado)
+                let morosos = 3
+
+                if (selectedPeriod.month === -1) {
+                    demoRecaudado = 284500
+                    unpaid = 45000
+                    morosos = 5
+                } else {
+                    const monthFactor = (selectedPeriod.month + 1) / 12
+                    demoRecaudado = Math.floor(98200 * monthFactor)
+                    unpaid = Math.floor(unpaid * monthFactor)
+                    morosos = Math.max(1, Math.floor(3 * monthFactor))
+                }
+
+                setMetrics({
+                    facturado: (demoRecaudado + unpaid),
+                    recaudado: demoRecaudado,
+                    porCobrar: Math.floor(unpaid * 0.3),
+                    vencido: Math.floor(unpaid * 0.7),
+                    morosos: morosos
+                })
                 return
             }
 
-            // Para seguridad, calculamos el periodo actual (mes en curso)
-            const now = new Date()
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-            const currentDay = now.getDate()
+            let totalPeriodo = 0
+            let recaudado = 0
+            let porCobrar = 0
+            let vencido = 0
+            const debtorResidents = new Set<string>()
 
-            // 1. Obtener unidades y sus montos esperados
-            const { data: unitsData } = await supabase
-                .from('units')
-                .select('id, monto_mensual')
-                .eq('condominium_id', condoId)
-            
-            // Obtener residentes para mapear resident_id a unit_id
-            const { data: residentsData } = await supabase
-                .from('residents')
-                .select('id, unit_id')
-                .eq('condominium_id', condoId)
-            
-            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
-
-            // 2. Obtener facturas/pagos del mes actual
-            const { data: currentMonthInvoices } = await supabase
-                .from('invoices')
-                .select('unit_id, resident_id, paid_amount')
-                .eq('condominium_id', condoId)
-                .gte('created_at', startOfMonth)
-                .lte('created_at', endOfMonth)
-
-            const totalRecaudado = currentMonthInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
-
-            // 3. Calcular deuda individual por unidad
-            let totalPendiente = 0
-            let totalMorosidad = 0
-            let morososCount = 0
-
-            if (unitsData) {
-                const paymentsPerUnit: Record<string, number> = {}
+            if (selectedPeriod.month !== -1) {
+                // Fetch expected monthly income (totalPeriodo) from units (active only)
+                const { data: unitsData, error: unitsError } = await supabase
+                    .from('units')
+                    .select('monto_mensual')
+                    .eq('condominium_id', condoId)
+                    .neq('billing_status', 'suspended')
                 
-                // Mapa de residente a unidad
-                const residentToUnit: Record<string, string> = {}
-                residentsData?.forEach(res => {
-                    if (res.id && res.unit_id) residentToUnit[res.id] = res.unit_id
-                })
+                if (unitsError) throw unitsError
+                totalPeriodo = unitsData?.reduce((acc, u) => acc + Number(u.monto_mensual || 0), 0) || 0
 
-                currentMonthInvoices?.forEach(inv => {
-                    // Si no tiene unit_id, intentamos obtenerlo a través del resident_id
-                    const unitId = inv.unit_id || (inv.resident_id ? residentToUnit[inv.resident_id] : null)
+                // Fetch invoices of selected month (strictly maintenance type to avoid manual payment duplicates)
+                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
+                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
+                
+                const { data: invoices, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id, invoice_type')
+                    .eq('condominium_id', condoId)
+                    .eq('invoice_type', 'maintenance')
+                    .gte('created_at', startOfPeriod)
+                    .lte('created_at', endOfPeriod)
+
+                if (invoiceError) throw invoiceError
+
+                invoices?.forEach(inv => {
+                    const bal = Number(inv.balance_due || 0)
                     
-                    if (unitId) {
-                        paymentsPerUnit[unitId] = (paymentsPerUnit[unitId] || 0) + (Number(inv.paid_amount) || 0)
+                    if (inv.status === 'pending') {
+                        porCobrar += bal
+                    } else if (inv.status === 'overdue') {
+                        vencido += bal
+                        if (bal > 0 && inv.resident_id) {
+                            debtorResidents.add(inv.resident_id)
+                        }
                     }
                 })
 
-                unitsData.forEach(unit => {
-                    const paid = paymentsPerUnit[unit.id] || 0
-                    const expected = Number(unit.monto_mensual) || 0
+                // Recaudado is the complement of outstanding debt
+                recaudado = Math.max(0, totalPeriodo - porCobrar - vencido)
+            } else {
+                // All time aggregation (Todos los meses)
+                const { data: invoices, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id')
+                    .eq('condominium_id', condoId)
+
+                if (invoiceError) throw invoiceError
+
+                invoices?.forEach(inv => {
+                    const amt = Number(inv.amount || 0)
+                    const bal = Number(inv.balance_due || 0)
                     
-                    if (paid < expected) {
-                        const debt = expected - paid
-                        morososCount++
-                        
-                        if (currentDay <= 10) {
-                            totalPendiente += debt
-                        } else {
-                            totalMorosidad += debt
-                        }
+                    totalPeriodo += amt
+                    recaudado += Math.max(0, amt - bal)
+                    
+                    if (inv.status === 'overdue') {
+                        vencido += bal
+                        if (bal > 0 && inv.resident_id) debtorResidents.add(inv.resident_id)
+                    } else if (inv.status === 'pending') {
+                        porCobrar += bal
+                        if (bal > 0 && inv.resident_id) debtorResidents.add(inv.resident_id)
                     }
                 })
             }
 
             setMetrics({
-                facturado: expectedTotal,
-                recaudado: totalRecaudado,
-                porCobrar: totalPendiente,
-                vencido: totalMorosidad,
-                morosos: morososCount
+                facturado: totalPeriodo,
+                recaudado,
+                porCobrar,
+                vencido,
+                morosos: debtorResidents.size
             })
         } catch (err) {
             console.error('Fetch billing error:', err)
@@ -236,45 +296,65 @@ export function FinanceTab() {
     const fetchInvoices = async () => {
         try {
             if (condoId.startsWith('demo-')) {
-                setRecentInvoices([
-                    { id: '1', folio: 'INV-2024001', unidad: 'A-101', concepto: 'Mantenimiento Marzo 2024', monto: 2500, estado: 'pending', telefono: '5551234567', atraso: 2, reminder_sent: false, due_date: '2024-03-01' },
-                    { id: '2', folio: 'INV-2024002', unidad: 'A-102', concepto: 'Mantenimiento Marzo 2024', monto: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2024-03-01' },
-                    { id: '3', folio: 'INV-2024003', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2024', monto: 2800, estado: 'overdue', telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2024-03-01' },
-                    { id: '4', folio: 'INV-2024004', unidad: 'C-201', concepto: 'Mantenimiento Marzo 2024', monto: 3100, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2024-03-01' }
-                ])
+                const allDemoInvoices = [
+                    { id: '1', folio: 'FAC-DEMO0001', unidad: 'A-101', concepto: 'Mantenimiento Enero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-01-10', fecha: '2026-01-01T08:00:00.000Z' },
+                    { id: '2', folio: 'FAC-DEMO0002', unidad: 'A-102', concepto: 'Mantenimiento Febrero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-02-10', fecha: '2026-02-01T08:00:00.000Z' },
+                    { id: '3', folio: 'FAC-DEMO0003', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2026', monto: 2800, paid_amount: 0, estado: 'overdue', telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2026-03-10', fecha: '2026-03-01T08:00:00.000Z' },
+                    { id: '4', folio: 'FAC-DEMO0004', unidad: 'C-201', concepto: 'Mantenimiento Abril 2026', monto: 3100, paid_amount: 3100, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-04-10', fecha: '2026-04-01T08:00:00.000Z' },
+                    { id: '5', folio: 'FAC-DEMO0005', unidad: 'D-404', concepto: 'Mantenimiento Mayo 2026', monto: 3500, paid_amount: 1500, estado: 'pending', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-05-10', fecha: '2026-05-01T08:00:00.000Z' },
+                ]
+
+                if (selectedPeriod.month === -1) {
+                    setRecentInvoices(allDemoInvoices)
+                } else {
+                    const filtered = allDemoInvoices.filter(inv => {
+                        const date = new Date(inv.fecha)
+                        return date.getMonth() === selectedPeriod.month && date.getFullYear() === selectedPeriod.year
+                    })
+                    setRecentInvoices(filtered)
+                }
                 setLoading(false)
                 return
             }
 
-            const { data: invoicesData, error: invoiceError } = await supabase.from('invoices').select('*').eq('condominium_id', condoId).order('created_at', { ascending: false }).limit(10)
+            // Real DB query
+            let query = supabase
+                .from('resident_invoices')
+                .select(`
+                    id, amount, balance_due, status, created_at, due_date, description, invoice_type,
+                    residents (
+                        first_name, last_name, phone,
+                        units (unit_number)
+                    )
+                `)
+                .eq('condominium_id', condoId)
+
+            if (selectedPeriod.month !== -1) {
+                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
+                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
+                query = query.gte('created_at', startOfPeriod).lte('created_at', endOfPeriod)
+                query = query.eq('invoice_type', 'maintenance')
+            }
+
+            const { data: invoicesData, error: invoiceError } = await query
+                .order('created_at', { ascending: false })
+                .limit(100)
 
             if (invoiceError) {
-                console.error('Error fetching recent invoices details:', JSON.stringify(invoiceError, null, 2))
+                console.error('Error fetching resident_invoices details:', JSON.stringify(invoiceError, null, 2))
                 return
             }
 
-            const { data: unitsData } = await supabase.from('units').select('*').eq('condominium_id', condoId)
-            const { data: residentsData } = await supabase.from('residents').select('*').eq('condominium_id', condoId)
-
             if (invoicesData) {
                 const mappedInvoices = invoicesData.map((inv: any) => {
-                    let unitName = 'S/N'
-                    let phone = ''
-                    
-                    if (inv.unit_id && unitsData) {
-                        const unit = unitsData.find(u => u.id === inv.unit_id)
-                        unitName = unit?.name || unit?.number || unit?.unit_number || 'S/N'
-                        const res = residentsData?.find(r => r.unit_number === unitName || r.unit_id === unit?.id)
-                        if (res) phone = res.phone || res.whatsapp || ''
-                    } else if (inv.resident_id && residentsData) {
-                        const res = residentsData.find(r => r.id === inv.resident_id)
-                        unitName = res?.unit_number || res?.unit_name || 'S/N'
-                        phone = res?.phone || res?.whatsapp || ''
-                    }
+                    const resident = inv.residents
+                    const unitName = resident?.units?.unit_number || 'S/N'
+                    const phone = resident?.phone || ''
+                    const folio = `FAC-${inv.id.substring(0, 8).toUpperCase()}`
+                    const concept = inv.description || 'Cuota de mantenimiento'
 
-                    const rawFolio = inv.folio || inv.id || ''
-                    const mappedFolio = rawFolio.length > 15 ? rawFolio.substring(0,8).toUpperCase() : rawFolio
-                    const mappedConcept = inv.description || inv.concept || 'Sin concepto'
+                    // paid_amount calculated from amount - balance_due
+                    const paidAmount = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
 
                     const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.created_at)
                     const today = new Date()
@@ -285,18 +365,26 @@ export function FinanceTab() {
                         delayDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
                     }
 
+                    const isPaid = inv.status === 'paid'
+                    const isPartiallyPaid = inv.status !== 'paid' && Number(inv.balance_due) > 0 && Number(inv.balance_due) < Number(inv.amount)
+                    const monto = isPaid 
+                        ? inv.amount 
+                        : (isPartiallyPaid ? (Number(inv.amount) - Number(inv.balance_due)) : (inv.balance_due ?? inv.amount))
+
                     return {
                         id: inv.id,
-                        folio: mappedFolio,
+                        folio,
                         unidad: unitName,
-                        concepto: mappedConcept,
-                        monto: inv.amount,
-                        paid_amount: Number(inv.paid_amount) || 0,
+                        concepto: concept,
+                        monto: monto,
+                        paid_amount: paidAmount,
                         estado: inv.status,
                         telefono: phone,
                         atraso: delayDays,
-                        reminder_sent: inv.reminder_sent,
-                        due_date: dueDate.toISOString()
+                        reminder_sent: false,
+                        due_date: dueDate.toISOString(),
+                        fecha: inv.created_at,
+                        resident_name: resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente',
                     }
                 })
                 
@@ -311,17 +399,71 @@ export function FinanceTab() {
 
     useEffect(() => {
         if (!condoId) return
+        setLoading(true)
         fetchBillingData().then(() => fetchInvoices())
-    }, [condoId])
+    }, [condoId, selectedPeriod])
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <h3 className="text-lg font-medium text-white">Facturación y Cobranza</h3>
+                <h3 className="text-lg font-medium text-white">Gestión de Cobranza</h3>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
-                        <Filter className="mr-2 h-4 w-4" /> Periodo: Este Mes
-                    </Button>
+                    <div className="relative" ref={periodMenuRef}>
+                        <Button 
+                            variant="outline" 
+                            className="border-zinc-700/80 bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-white transition-all duration-200 shadow-md flex items-center gap-2"
+                            onClick={() => setIsPeriodMenuOpen(!isPeriodMenuOpen)}
+                        >
+                            <Calendar className="h-4 w-4 text-indigo-400" />
+                            <span>Periodo: {selectedPeriod.label}</span>
+                            <ChevronDown className={`h-3.5 w-3.5 text-zinc-500 transition-transform duration-200 ${isPeriodMenuOpen ? 'rotate-180 text-white' : ''}`} />
+                        </Button>
+                        <AnimatePresence>
+                            {isPeriodMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                                    className="absolute left-0 mt-2 w-64 rounded-2xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-2 shadow-2xl z-50 ring-1 ring-white/5"
+                                >
+                                    {/* Option: Todos los meses */}
+                                    <button 
+                                        onClick={() => {
+                                            setSelectedPeriod({ month: -1, year: new Date().getFullYear(), label: 'Todos los meses' })
+                                            setIsPeriodMenuOpen(false)
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150 ${selectedPeriod.month === -1 ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-500/20' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'}`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className={`h-1.5 w-1.5 rounded-full ${selectedPeriod.month === -1 ? 'bg-white' : 'bg-zinc-500'}`} />
+                                            <span>Todos los meses</span>
+                                        </div>
+                                        <span className="text-xs opacity-60">Anual</span>
+                                    </button>
+
+                                    <div className="h-px bg-zinc-800/60 my-1.5" />
+
+                                    {/* Monthly Grid */}
+                                    <div className="grid grid-cols-2 gap-1 px-1 pb-1">
+                                        {periods.filter(p => p.month !== -1).map((p) => (
+                                            <button 
+                                                key={p.label}
+                                                onClick={() => {
+                                                    setSelectedPeriod(p)
+                                                    setIsPeriodMenuOpen(false)
+                                                }}
+                                                className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-all duration-150 ${selectedPeriod.month === p.month ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-500/20' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'}`}
+                                            >
+                                                <div className={`h-1.5 w-1.5 rounded-full ${selectedPeriod.month === p.month ? 'bg-white' : 'bg-indigo-400'}`} />
+                                                <span>{p.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <div className="relative" ref={exportMenuRef}>
                         <Button 
                             variant="outline" 
@@ -363,7 +505,7 @@ export function FinanceTab() {
             <div className="grid gap-4 md:grid-cols-4">
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Total por Cobrar del Periodo</CardTitle>
+                        <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
@@ -389,7 +531,7 @@ export function FinanceTab() {
                                     ${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
                                 <p className="text-xs text-zinc-500 mt-1">
-                                    {metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}% del total
+                                    Pagada ({metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}%)
                                 </p>
                             </>
                         )}
@@ -397,7 +539,7 @@ export function FinanceTab() {
                 </Card>
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Por Cobrar</CardTitle>
+                        <CardTitle className="text-sm font-medium text-zinc-400">Pendiente</CardTitle>
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
@@ -412,7 +554,7 @@ export function FinanceTab() {
                 </Card>
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Vencido (Morosidad)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-zinc-400">Morosidad</CardTitle>
                     </CardHeader>
                     <CardContent>
                         {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
@@ -421,7 +563,7 @@ export function FinanceTab() {
                                     ${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-rose-500 mt-1">
-                                    <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en mora' : 'residentes en mora'}
+                                    <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso'}
                                 </div>
                             </>
                         )}
@@ -432,7 +574,7 @@ export function FinanceTab() {
             {/* Invoices Table */}
             <Card className="bg-zinc-900/50 border-zinc-800">
                 <CardHeader>
-                    <CardTitle>Facturas Recientes</CardTitle>
+                    <CardTitle>Movimientos recientes</CardTitle>
                     <CardDescription>Últimos movimientos registrados en el condominio.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -442,6 +584,7 @@ export function FinanceTab() {
                                 <tr>
                                     <th className="px-4 py-3 font-medium">Folio</th>
                                     <th className="px-4 py-3 font-medium">Unidad</th>
+                                    <th className="px-4 py-3 font-medium">Fecha</th>
                                     <th className="px-4 py-3 font-medium">Concepto</th>
                                     <th className="px-4 py-3 font-medium">Monto</th>
                                     <th className="px-4 py-3 font-medium">Atraso</th>
@@ -464,6 +607,9 @@ export function FinanceTab() {
                                                 {inv.folio?.length > 15 ? inv.folio.substring(0, 8) : inv.folio}
                                             </td>
                                             <td className="px-4 py-3 text-zinc-300 font-medium">{inv.unidad}</td>
+                                            <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
+                                                {new Date(inv.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                            </td>
                                             <td className="px-4 py-3 text-zinc-400">{inv.concepto}</td>
                                             <td className="px-4 py-3 text-white font-bold">
                                                 ${Number(inv.monto).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -516,11 +662,11 @@ export function FinanceTab() {
 
                                                                     const payload = {
                                                                         "tipo": "recordatorio",
-                                                                        "first_name": "Residente", // Name not directly in inv object, could be improved
+                                                                        "resident_name": inv.resident_name || 'Residente',
                                                                         "phone": inv.telefono || '',
                                                                         "amount": inv.monto - inv.paid_amount, // Saldo real pendiente
                                                                         "due_date": inv.due_date,
-                                                                        "payment_link": null, // Not easily available here
+                                                                        "payment_link": `${window.location.origin}/residente/payments/${inv.id}`,
                                                                         "condominium": "", // Not easily available here
                                                                         "unit": inv.unidad || 'S/N'
                                                                     }
@@ -532,9 +678,6 @@ export function FinanceTab() {
                                                                     })
                                                                     
                                                                     if (res.ok) {
-                                                                        if (!condoId.startsWith('demo-')) {
-                                                                            await supabase.from('invoices').update({ reminder_sent: true }).eq('id', inv.id)
-                                                                        }
                                                                         setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, reminder_sent: true} : p))
                                                                         showToast('Recordatorio de Whatsapp enviado')
                                                                     } else {
@@ -567,7 +710,10 @@ export function FinanceTab() {
                                                                     setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
                                                                     return
                                                                 }
-                                                                const { error } = await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString(), paid_amount: inv.monto }).eq('id', inv.id)
+                                                                const { error } = await supabase
+                                                                    .from('resident_invoices')
+                                                                    .update({ status: 'paid', balance_due: 0 })
+                                                                    .eq('id', inv.id)
                                                                 if (!error) {
                                                                     setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
                                                                     fetchBillingData() // Actualiza KPIs arrriba
@@ -617,7 +763,7 @@ export function FinanceTab() {
                             <X className="h-4 w-4" />
                             <span className="sr-only">Cerrar</span>
                         </Button>
-                        <h3 className="text-xl font-semibold text-white mb-6">Detalle de Factura</h3>
+                        <h3 className="text-xl font-semibold text-white mb-6">Detalle de Movimiento</h3>
                         <div className="space-y-4">
                             <div>
                                 <p className="text-xs text-zinc-500">Folio / ID</p>
@@ -687,4 +833,3 @@ export function FinanceTab() {
         </div>
     )
 }
-

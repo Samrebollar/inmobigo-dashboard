@@ -103,8 +103,12 @@ export function FinancialSummary({
             amount: metrics.isrEstimado,
             icon: Percent,
             color: 'text-zinc-500',
+            iconBg: 'bg-zinc-500/10',
             bg: 'bg-zinc-800/10',
-            border: 'border-white/5'
+            border: 'border-white/5',
+            glow: '',
+            subtext: 'Retención fiscal estimada',
+            subtextColor: 'text-zinc-500'
         })
     }
 

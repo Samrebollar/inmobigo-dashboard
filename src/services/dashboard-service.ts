@@ -58,6 +58,6 @@ export const dashboardService = {
             throw error
         }
 
-        return { total_deuda: Number(data?.total_deuda || 0) }
+        return { total_deuda: Number((data as any)?.total_deuda || 0) }
     }
 }

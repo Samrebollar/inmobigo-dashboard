@@ -74,7 +74,7 @@ export function ResidentFinanceView({ condominiumId }: ResidentFinanceViewProps)
     return (
         <div className="space-y-12">
             {/* NEW TRANSPARENCY DASHBOARD */}
-            <TransparencyClient data={transparencyData} isAdmin={false} />
+            <TransparencyClient data={transparencyData} isAdmin={false} condominiumId={condominiumId ?? ''} />
             
             {/* PERSONAL ACTIONS (Optional but kept for functionality) */}
             <motion.div

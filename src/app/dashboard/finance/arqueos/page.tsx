@@ -229,9 +229,9 @@ export default function ArqueosHistoryPage() {
 
         if (arq.notes) {
             doc.text('Observaciones:', 14, (doc as any).lastAutoTable.finalY + 15)
-            doc.setFont(undefined, 'italic')
+            doc.setFont('helvetica', 'italic')
             doc.text(arq.notes, 14, (doc as any).lastAutoTable.finalY + 22)
-            doc.setFont(undefined, 'normal')
+            doc.setFont('helvetica', 'normal')
         }
 
         doc.save(`Arqueo_${arq.condominium_name}_${format(parseISO(arq.created_at), 'yyyy-MM-dd')}.pdf`)

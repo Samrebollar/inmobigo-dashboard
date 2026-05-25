@@ -130,7 +130,7 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                     throw new Error(resAction.error)
                 }
                 
-                result = resAction.data
+                result = resAction.data as unknown as Resident
             }
             onSuccess(result)
             onClose()

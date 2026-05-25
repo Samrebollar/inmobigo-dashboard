@@ -259,7 +259,8 @@ export default function SecurityDashboardAdminClient({
             house: p.unit_name || 'S/N',
             details: `Visitante: ${p.visitor_name}`,
             time: p.created_at ? new Date(p.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: (p.status === 'registrado' || p.status === 'used') ? 'success' : 'pending'
+            status: (p.status === 'registrado' || p.status === 'used') ? 'success' : 'pending',
+            created_at: p.created_at
         })),
         ...filteredPackages.slice(0, 2).map(pkg => ({
             id: pkg.id,

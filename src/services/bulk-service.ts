@@ -19,6 +19,7 @@ export interface UnifiedBulkRow {
     debt_amount?: number
     credit_amount?: number
     vehicle_plate?: string
+    vehicle_brand?: string
     billing_status?: 'active' | 'suspended'
     payment_deadline?: number
 }

@@ -114,22 +114,22 @@ export async function getAccountingData(condominiumId: string = 'all') {
         regime = (orgData?.fiscal_regime || null) as FiscalRegime
     }
 
-    // 2. DISCOVERY PHASE: Fetch all accessible Invoices (Incomes/Billing)
+    // 2. DISCOVERY PHASE: Fetch all accessible Invoices — MIGRADO: usa resident_invoices
+    // folio se construye dinámicamente: FAC-{id[0..8].toUpperCase()}
     let billingQuery = supabase
-        .from('invoices')
+        .from('resident_invoices')
         .select(`
-            id, amount, status, created_at, folio, description,
-            condominium_id,
+            id, amount, balance_due, status, created_at, description,
+            condominium_id, invoice_type,
             condominiums (name),
-            units (unit_number, payment_deadline)
+            residents (unit_number)
         `)
-    
+
     // Fetch Expected Income from Units
     let unitsQuery = supabase.from('units').select('monto_mensual, billing_status')
     if (condominiumId && condominiumId !== 'all') {
         unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
     } else {
-        // For 'all', we need to filter by condominiums belonging to the organization
         const condoIds = condominiums.map(c => c.id)
         unitsQuery = unitsQuery.in('condominium_id', condoIds)
     }
@@ -139,13 +139,17 @@ export async function getAccountingData(condominiumId: string = 'all') {
         .filter(u => u.billing_status !== 'suspended')
         .reduce((sum, u) => sum + (Number(u.monto_mensual) || 0), 0)
 
-    // Only filter by condo if one is selected, otherwise fetch all accessible
     if (condominiumId && condominiumId !== 'all') {
         billingQuery = billingQuery.eq('condominium_id', condominiumId)
     }
 
     const { data: billingData, error: billingError } = await billingQuery.order('created_at', { ascending: false })
-    const billing = billingData || []
+    // Normalizar: agregar folio dinámico
+    const billing = (billingData || []).map((inv: any) => ({
+        ...inv,
+        folio: `FAC-${inv.id.substring(0, 8).toUpperCase()}`,
+        unit_number: (inv.residents as any)?.unit_number,
+    }))
 
     if (billingError) console.error('[AccountingAction] Error fetching billing:', billingError)
 
@@ -370,19 +374,24 @@ export async function getTransparencyData(condominiumId: string) {
     const monthName = now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
     // ──────────────────────────────────────────────────────────────────────────
 
-    // 2.a Invoices (Income) — solo del mes en curso
-    const { data: billing, error: billingError } = await adminClient
-        .from('invoices')
+    // 2.a Invoices (Income) — MIGRADO: usa resident_invoices, solo del mes en curso
+    const { data: billingRaw, error: billingError } = await adminClient
+        .from('resident_invoices')
         .select(`
-            id, amount, status, created_at, folio, description,
-            condominium_id,
+            id, amount, balance_due, status, created_at, description,
+            condominium_id, invoice_type,
             condominiums (name),
-            units (unit_number)
+            residents (unit_number)
         `)
         .eq('condominium_id', condominiumId)
         .gte('created_at', monthStart)
         .lt('created_at', monthEnd)
         .order('created_at', { ascending: false })
+    const billing = (billingRaw || []).map((inv: any) => ({
+        ...inv,
+        folio: `FAC-${inv.id.substring(0, 8).toUpperCase()}`,
+        unit_number: (inv.residents as any)?.unit_number,
+    }))
 
     if (billingError) console.error('[TransparencyAction] Error fetching billing:', billingError)
 

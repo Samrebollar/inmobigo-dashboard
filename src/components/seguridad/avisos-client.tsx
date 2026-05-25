@@ -174,6 +174,7 @@ export function AvisosClient({
     const [newTargetUnit, setNewTargetUnit] = useState('')
     const [isPublishing, setIsPublishing] = useState(false)
     const [loadingAmenities, setLoadingAmenities] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const [managedCondos, setManagedCondos] = useState<string[]>([])
     const { isDemo } = useDemoMode()

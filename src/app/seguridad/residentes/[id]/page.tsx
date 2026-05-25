@@ -175,18 +175,17 @@ export default function ResidentMovementsPage() {
                 : '-'
                 
             return [
-                inv.folio,
-                inv.description,
+                inv.folio ?? '',
+                inv.description ?? '',
                 statusLabel,
                 formatMoney(inv.amount),
-                inv.status === 'paid' ? formatMoney(inv.amount) : '-',
                 formatDate(inv.due_date),
                 daysOverdue
             ]
         })
         
         autoTable(doc, {
-            head: [['Folio', 'Concepto', 'Estado', 'Monto', 'Pago', 'Vencimiento', 'Días de atraso']],
+            head: [['Folio', 'Concepto', 'Estado', 'Monto', 'Vencimiento', 'Días de atraso']],
             body: tableData,
             startY: 45,
             theme: 'striped',
@@ -209,7 +208,6 @@ export default function ResidentMovementsPage() {
                 'Concepto': inv.description,
                 'Estado': statusLabel,
                 'Monto': inv.amount,
-                'Pago': inv.status === 'paid' ? inv.amount : 0,
                 'Vencimiento': formatDate(inv.due_date),
                 'Días de atraso': daysOverdue
             }
@@ -273,8 +271,8 @@ export default function ResidentMovementsPage() {
     }
 
     const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = inv.folio.toLowerCase().includes(search.toLowerCase()) ||
-            inv.description.toLowerCase().includes(search.toLowerCase())
+        const matchesSearch = (inv.folio ?? '').toLowerCase().includes(search.toLowerCase()) ||
+            (inv.description ?? '').toLowerCase().includes(search.toLowerCase())
             
         if (!matchesSearch) return false
         
@@ -828,7 +826,6 @@ export default function ResidentMovementsPage() {
                                 <th className="px-6 py-4">Concepto</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4">Monto</th>
-                                <th className="px-6 py-4">Pago</th>
                                 <th className="px-6 py-4">Vencimiento</th>
                                 <th className="px-6 py-4">Fecha Pago</th>
                                 <th className="px-6 py-4">Días de atraso</th>
@@ -859,9 +856,6 @@ export default function ResidentMovementsPage() {
                                         </Badge>
                                     </td>
                                     <td className="px-6 py-4 text-white font-medium">{formatMoney(inv.amount)}</td>
-                                    <td className="px-6 py-4 text-white font-medium">
-                                        {inv.status === 'paid' ? formatMoney(inv.amount) : '-'}
-                                    </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
                                     <td className="px-6 py-4 text-zinc-400">
                                         {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
@@ -898,7 +892,7 @@ export default function ResidentMovementsPage() {
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={10} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { syncToLegacy, syncPaymentToLegacy, buildFolio } from '@/services/legacy-sync-service'
 
 export async function getValidations() {
     try {
@@ -20,11 +21,16 @@ export async function getValidations() {
     }
 }
 
-export async function updateValidationStatus(id: string, status: 'aprobado' | 'rechazado', observacion?: string, periodMonth?: string) {
+export async function updateValidationStatus(
+    id: string,
+    status: 'aprobado' | 'rechazado',
+    observacion?: string,
+    periodMonth?: string
+) {
     try {
         const supabase = await createClient()
-        
-        // 1. Get current validation
+
+        // 1. Obtener la validación actual
         const { data: validation, error: fetchErr } = await supabase
             .from('payment_validations')
             .select('*')
@@ -32,231 +38,238 @@ export async function updateValidationStatus(id: string, status: 'aprobado' | 'r
             .single()
 
         if (fetchErr || !validation) return { success: false, error: 'Registro no encontrado' }
-        
+
         if (validation.status === 'aprobado' && status === 'aprobado') {
             return { success: true }
         }
 
-        // 2. Update status in database
+        // 2. Actualizar estado de la validación
         const { error: updateStatusErr } = await supabase
             .from('payment_validations')
-            .update({ 
-                status, 
-                observacion: observacion || validation.observacion 
+            .update({
+                status,
+                observacion: observacion || validation.observacion,
             })
             .eq('id', id)
 
         if (updateStatusErr) throw updateStatusErr
-        
-        // 3. Side Effects for Approval
+
+        // 3. Efectos secundarios al APROBAR
         if (status === 'aprobado') {
             try {
                 const adminClient = createAdminClient(
                     process.env.NEXT_PUBLIC_SUPABASE_URL!,
                     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
                 )
-                
-                // Evitar duplicados revisando si ya existe una factura con este ID de validación
-                const { data: existingInv } = await adminClient
-                    .from('invoices')
+
+                // ── Prevenir duplicados ───────────────────────────────────────────
+                // Chequeamos si ya procesamos esta validación en resident_invoices
+                const { data: existingRI } = await adminClient
+                    .from('resident_invoices')
                     .select('id')
-                    .eq('external_payment_id', id)
+                    .eq('notes', `validation:${id}`)
                     .limit(1)
                     .maybeSingle()
-                    
-                if (existingInv) {
+
+                if (existingRI) {
                     revalidatePath('/dashboard/validacion-pagos')
                     return { success: true }
                 }
 
-                let resData = null
+                // ── Resolver el residente ─────────────────────────────────────────
+                let resData: {
+                    id: string
+                    condominium_id: string
+                    organization_id?: string
+                } | null = null
+
                 if (validation.resident_id) {
                     const { data } = await adminClient
                         .from('residents')
-                        .select('id, condominium_id, unit_id, debt_amount')
+                        .select('id, condominium_id, debt_amount')
                         .eq('id', validation.resident_id)
                         .maybeSingle()
-                    resData = data
+                    if (data) resData = data
                 }
-                
+
                 if (!resData && validation.resident_name) {
                     const nameParts = validation.resident_name.split(' ')
-                    const firstName = nameParts[0]
                     const { data } = await adminClient
                         .from('residents')
-                        .select('id, condominium_id, unit_id, debt_amount')
-                        .ilike('first_name', `%${firstName}%`)
+                        .select('id, condominium_id, debt_amount')
+                        .ilike('first_name', `%${nameParts[0]}%`)
                         .limit(1)
                         .maybeSingle()
-                    resData = data
+                    if (data) resData = data
                 }
-                
-                if (!resData) {
+
+                if (!resData && validation.unit) {
                     const { data: unitData } = await adminClient
                         .from('units')
                         .select('id, condominium_id')
                         .eq('unit_number', validation.unit)
                         .maybeSingle()
-                    
                     if (unitData) {
                         const { data: resident } = await adminClient
                             .from('residents')
-                            .select('id, condominium_id, unit_id, debt_amount')
+                            .select('id, condominium_id, debt_amount')
                             .eq('unit_id', unitData.id)
                             .maybeSingle()
-                        resData = resident
+                        if (resident) resData = resident
                     }
                 }
-                
-                if (resData) {
-                    const { data: condoData } = await adminClient
-                        .from('condominiums')
-                        .select('organization_id')
-                        .eq('id', resData.condominium_id)
-                        .maybeSingle()
-                    
-                    resData = {
-                        ...resData,
-                        organization_id: condoData?.organization_id
-                    }
+
+                if (!resData) {
+                    console.warn('[Validation] No se encontró residente para la validación', id)
+                    revalidatePath('/dashboard/validacion-pagos')
+                    return { success: true }
                 }
-                
-                if (resData) {
-                    // Buscar deudas pendientes
-                    let invoiceQuery = adminClient
-                        .from('invoices')
-                        .select('*')
-                        .in('status', ['pending', 'overdue'])
-                        
-                    if (resData.unit_id) {
-                        invoiceQuery = invoiceQuery.or(`resident_id.eq.${resData.id},unit_id.eq.${resData.unit_id}`)
-                    } else {
-                        invoiceQuery = invoiceQuery.eq('resident_id', resData.id)
-                    }
-                    
-                    const { data: pendingInvoices } = await invoiceQuery.order('due_date', { ascending: true })
-                    let remainingPayment = validation.amount
-                    
-                    if (pendingInvoices && pendingInvoices.length > 0) {
-                        for (const invoice of pendingInvoices) {
-                            if (remainingPayment <= 0) break
-                            
-                            const currentBalance = invoice.balance_due !== null && invoice.balance_due !== undefined 
-                                ? invoice.balance_due 
-                                : invoice.amount
-                                
-                            const amountToApply = Math.min(remainingPayment, currentBalance)
-                            remainingPayment -= amountToApply
-                            
-                            const newPaidAmount = (invoice.paid_amount || 0) + amountToApply
-                            const newBalanceDue = Math.max(0, currentBalance - amountToApply)
-                            const newStatus = newBalanceDue <= 0 ? 'paid' : invoice.status
-                            
-                            await adminClient
-                                .from('invoices')
-                                .update({
-                                    paid_amount: newPaidAmount,
-                                    balance_due: newBalanceDue,
-                                    status: newStatus,
-                                    paid_at: newBalanceDue <= 0 ? new Date().toISOString() : invoice.paid_at,
-                                    payment_provider: 'Manual',
-                                    external_payment_id: id,
-                                    description: invoice.description.includes('Pago manual validado') 
-                                        ? invoice.description 
-                                        : `${invoice.description} (Pago manual validado)`,
-                                    resident_id: invoice.resident_id || resData.id
-                                })
-                                .eq('id', invoice.id)
-                        }
-                    }
-                    
-                    // Registrar el excedente como nueva factura (saldo a favor o pago parcial)
-                    if (remainingPayment > 0) {
-                        const folio = `INV-${Math.floor(100000 + Math.random() * 900000)}`
 
-                        // Calcular el due_date correcto:
-                        // Si el admin indicó el período (YYYY-MM), usamos el día paymentDeadline de ese mes.
-                        // Si no, usamos la fecha en que se registró el comprobante.
-                        let dueDateStr = validation.date || new Date().toISOString().split('T')[0]
+                // Resolver organization_id
+                const { data: condoData } = await adminClient
+                    .from('condominiums')
+                    .select('organization_id')
+                    .eq('id', resData.condominium_id)
+                    .maybeSingle()
 
-                        if (periodMonth) {
-                            // Obtener el payment_deadline de la unidad del residente
-                            let deadlineDay = 10 // default
-                            if (resData.unit_id) {
-                                const { data: unitInfo } = await adminClient
-                                    .from('units')
-                                    .select('payment_deadline')
-                                    .eq('id', resData.unit_id)
-                                    .maybeSingle()
-                                if (unitInfo?.payment_deadline) {
-                                    deadlineDay = unitInfo.payment_deadline
-                                }
-                            }
-                            const [year, month] = periodMonth.split('-').map(Number)
-                            // due_date = día límite oficial de ese mes
-                            const dueDate = new Date(year, month - 1, deadlineDay)
-                            dueDateStr = dueDate.toISOString().split('T')[0]
-                        }
+                const organizationId = condoData?.organization_id || null
 
+                // ── Buscar deudas pendientes en resident_invoices ─────────────────
+                const { data: pendingInvoices } = await adminClient
+                    .from('resident_invoices')
+                    .select('id, amount, balance_due, status, due_date, description, created_at')
+                    .eq('resident_id', resData.id)
+                    .in('status', ['pending', 'overdue'])
+                    .order('due_date', { ascending: true })
+
+                let remainingPayment = Number(validation.amount) || 0
+
+                // ── Aplicar pago a facturas existentes ────────────────────────────
+                if (pendingInvoices && pendingInvoices.length > 0) {
+                    for (const invoice of pendingInvoices) {
+                        if (remainingPayment <= 0) break
+
+                        const currentBalance = Number(invoice.balance_due ?? invoice.amount)
+                        const amountToApply = Math.min(remainingPayment, currentBalance)
+                        remainingPayment -= amountToApply
+
+                        const newBalanceDue = Math.max(0, currentBalance - amountToApply)
+                        const newStatus = newBalanceDue <= 0 ? 'paid' : invoice.status
+                        const paidAmount = Math.max(0, Number(invoice.amount) - newBalanceDue)
+
+                        // Actualizar resident_invoices (fuente de verdad)
                         await adminClient
-                            .from('invoices')
-                            .insert({
-                                organization_id: resData.organization_id,
-                                condominium_id: resData.condominium_id,
-                                unit_id: resData.unit_id,
-                                resident_id: resData.id,
-                                folio,
-                                amount: remainingPayment,
-                                paid_amount: remainingPayment,
-                                balance_due: 0,
-                                status: 'paid',
-                                due_date: dueDateStr,
-                                description: validation.nota ? `Pago manual validado - ${validation.nota}` : 'Pago manual validado',
-                                created_at: new Date().toISOString(),
-                                paid_at: new Date().toISOString(),
-                                payment_provider: 'Manual',
-                                external_payment_id: id
+                            .from('resident_invoices')
+                            .update({
+                                balance_due: newBalanceDue,
+                                status: newStatus,
+                                updated_at: new Date().toISOString(),
+                                notes: `validation:${id}`,
                             })
+                            .eq('id', invoice.id)
+
+                        // Sync al legacy invoices para n8n
+                        await syncPaymentToLegacy(adminClient as any, invoice.id, {
+                            paidAmount,
+                            newBalanceDue,
+                            newStatus,
+                            paymentProvider: 'Manual',
+                            externalPaymentId: id,
+                        })
                     }
-                    
-                    // Recalcular deuda real
-                    let finalInvoiceQuery = adminClient
-                        .from('invoices')
-                        .select('amount, balance_due')
-                        .in('status', ['pending', 'overdue'])
-                        
-                    if (resData.unit_id) {
-                        finalInvoiceQuery = finalInvoiceQuery.or(`resident_id.eq.${resData.id},unit_id.eq.${resData.unit_id}`)
-                    } else {
-                        finalInvoiceQuery = finalInvoiceQuery.eq('resident_id', resData.id)
-                    }
-                    
-                    const { data: finalInvoices } = await finalInvoiceQuery
-                    
-                    let newDebt = 0
-                    if (finalInvoices) {
-                        newDebt = finalInvoices.reduce((sum, inv) => {
-                            const balance = inv.balance_due !== null && inv.balance_due !== undefined 
-                                ? inv.balance_due 
-                                : inv.amount
-                            return sum + balance
-                        }, 0)
-                    }
-                    
-                    await adminClient
-                        .from('residents')
-                        .update({ debt_amount: newDebt })
-                        .eq('id', resData.id)
-                        
-                    revalidatePath('/dashboard/finance/billing')
-                    revalidatePath(`/dashboard/residentes/${resData.id}`)
                 }
+
+                // ── Registrar excedente como nueva factura pagada ─────────────────
+                if (remainingPayment > 0) {
+                    // Calcular due_date correcto
+                    let dueDateStr = validation.date || new Date().toISOString().split('T')[0]
+
+                    if (periodMonth) {
+                        let deadlineDay = 10
+                        const { data: unitInfo } = await adminClient
+                            .from('units')
+                            .select('payment_deadline')
+                            .eq('resident_id', resData.id)
+                            .maybeSingle()
+                        if (unitInfo?.payment_deadline) deadlineDay = unitInfo.payment_deadline
+
+                        const [year, month] = periodMonth.split('-').map(Number)
+                        dueDateStr = new Date(year, month - 1, deadlineDay).toISOString().split('T')[0]
+                    }
+
+                    const description = validation.nota
+                        ? `Pago manual validado - ${validation.nota}`
+                        : 'Pago manual validado'
+
+                    // Insertar en resident_invoices (fuente de verdad)
+                    const { data: newRI, error: insertRIErr } = await adminClient
+                        .from('resident_invoices')
+                        .insert({
+                            organization_id: organizationId,
+                            condominium_id: resData.condominium_id,
+                            resident_id: resData.id,
+                            amount: remainingPayment,
+                            balance_due: 0,
+                            status: 'paid',
+                            invoice_type: 'manual_payment',
+                            due_date: dueDateStr,
+                            description,
+                            notes: `validation:${id}`,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                        })
+                        .select()
+                        .single()
+
+                    if (!insertRIErr && newRI) {
+                        // Sync al legacy invoices para n8n
+                        await syncToLegacy(adminClient as any, {
+                            id: newRI.id,
+                            organization_id: organizationId || '',
+                            condominium_id: resData.condominium_id,
+                            resident_id: resData.id,
+                            amount: remainingPayment,
+                            balance_due: 0,
+                            status: 'paid',
+                            due_date: dueDateStr,
+                            description,
+                            created_at: newRI.created_at,
+                            updated_at: newRI.updated_at,
+                        }, {
+                            paid_amount: remainingPayment,
+                            paid_at: new Date().toISOString(),
+                            payment_provider: 'Manual',
+                            external_payment_id: id,
+                            folio: buildFolio(newRI.id),
+                        })
+                    }
+                }
+
+                // ── Recalcular deuda real del residente ───────────────────────────
+                const { data: finalInvoices } = await adminClient
+                    .from('resident_invoices')
+                    .select('balance_due')
+                    .eq('resident_id', resData.id)
+                    .in('status', ['pending', 'overdue'])
+
+                const newDebt = (finalInvoices || []).reduce(
+                    (sum, inv) => sum + Number(inv.balance_due ?? 0),
+                    0
+                )
+
+                await adminClient
+                    .from('residents')
+                    .update({ debt_amount: newDebt })
+                    .eq('id', resData.id)
+
+                revalidatePath('/dashboard/finance/billing')
+                revalidatePath(`/dashboard/residentes/${resData.id}`)
             } catch (e: any) {
-                console.error('Failed to execute side effects in Supabase:', e)
+                console.error('[Validation] Side effect error:', e)
                 return { success: false, error: 'Error en base de datos: ' + e.message }
             }
         }
-        
+
         revalidatePath('/dashboard/validacion-pagos')
         return { success: true }
     } catch (error: any) {
@@ -269,28 +282,35 @@ export async function submitValidation(data: {
     nota?: string
     resident_id?: string
     condominium_id?: string
+    resident_name?: string
+    unit?: string
+    amount?: number
+    date?: string
+    comprobante_url?: string
 }) {
     try {
         const supabase = await createClient()
-        
+
         const { data: newValidation, error } = await supabase
             .from('payment_validations')
             .insert({
-                resident_name: data.resident_name,
-                unit: data.unit,
-                amount: Number(data.amount),
-                date: data.date,
-                comprobante_url: data.comprobante_url || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=800&q=80",
-                status: "pendiente",
-                nota: data.nota || "",
-                resident_id: data.resident_id,
-                condominium_id: data.condominium_id
+                resident_name: data.resident_name || '',
+                unit: data.unit || '',
+                amount: Number(data.amount) || 0,
+                date: data.date || new Date().toISOString().split('T')[0],
+                comprobante_url:
+                    data.comprobante_url ||
+                    'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=800&q=80',
+                status: 'pendiente',
+                nota: data.nota || '',
+                resident_id: data.resident_id || null,
+                condominium_id: data.condominium_id || null,
             })
             .select()
             .single()
-        
+
         if (error) throw error
-        
+
         revalidatePath('/dashboard/validacion-pagos')
         revalidatePath('/residente/subir-comprobante')
         return { success: true, data: newValidation }
@@ -307,9 +327,9 @@ export async function deleteValidation(id: string) {
             .from('payment_validations')
             .delete()
             .eq('id', id)
-        
+
         if (error) throw error
-        
+
         revalidatePath('/dashboard/validacion-pagos')
         revalidatePath('/residente/subir-comprobante')
         return { success: true }
@@ -320,7 +340,5 @@ export async function deleteValidation(id: string) {
 }
 
 export async function syncApprovedValidations() {
-    // This function can be kept as a no-op or removed if the migration handles everything real-time
-    // For safety, let's keep it but make it work with Supabase
     return { success: true, count: 0 }
 }

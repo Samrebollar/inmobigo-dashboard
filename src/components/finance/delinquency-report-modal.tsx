@@ -82,7 +82,10 @@ export function DelinquencyReportModal({
             phone: resident.phone || '',
             amount: resident.calculatedDebt,
             due_date: oldestInvoice?.due_date || '',
-            payment_link: oldestInvoice?.payment_link || null,
+            // payment_link generado dinámicamente — no existe columna en BD
+            payment_link: oldestInvoice?.id
+                ? `${typeof window !== 'undefined' ? window.location.origin : ''}/residente/payments/${oldestInvoice.id}`
+                : null,
             condominium: availableCondos.find(c => c.id === resident.condominium_id)?.name || '',
             unit: resident.unit_number || 'S/N'
         }
@@ -602,7 +605,7 @@ export function DelinquencyReportModal({
                                                                                                 </div>
                                                                                                 <div className="flex gap-4">
                                                                                                     <span className="text-rose-400 font-medium">Vence: {format(parseISO(inv.due_date), 'dd MMM yyyy', { locale: es })}</span>
-                                                                                                    <span className="text-white font-bold">${inv.amount.toLocaleString()}</span>
+                                                                                                    <span className="text-white font-bold">${(inv.balance_due ?? inv.amount).toLocaleString()}</span>
                                                                                                 </div>
                                                                                             </div>
                                                                                         ))}

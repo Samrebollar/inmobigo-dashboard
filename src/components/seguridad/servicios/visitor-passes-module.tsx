@@ -238,6 +238,21 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         }
     }
 
+    const handleCancelPass = async (passId: string) => {
+        try {
+            const { error } = await supabase
+                .from('visitor_passes')
+                .update({ status: 'cancelled' })
+                .eq('id', passId)
+            if (error) throw error
+            toast.success('Pase cancelado')
+            setSelectedPass(null)
+            fetchPasses()
+        } catch (error: any) {
+            toast.error('Error al cancelar el pase')
+        }
+    }
+
     const activePasses = passes.filter(p => p.status === 'pending' || p.status === 'used')
     const historyPasses = passes.filter(p => p.status !== 'pending' && p.status !== 'used')
 
@@ -667,11 +682,11 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                             </p>
                                         </div>
 
-                                    <div className="relative flex items-center justify-between">
-                                        <div style={{ width: '32px', height: '32px', borderRadius: '9999px', backgroundColor: '#000000', absolute: 'absolute', left: '-16px', border: '1px solid rgba(255,255,255,0.1)' }} className="absolute" />
-                                        <div style={{ width: '100%', height: '1px', borderTop: '1px dashed #3f3f46', margin: '0 16px' }} />
-                                        <div style={{ width: '32px', height: '32px', borderRadius: '9999px', backgroundColor: '#000000', absolute: 'absolute', right: '-16px', border: '1px solid rgba(255,255,255,0.1)' }} className="absolute" />
-                                    </div>
+                    <div className="relative flex items-center justify-between">
+                        <div style={{ width: '32px', height: '32px', borderRadius: '9999px', backgroundColor: '#000000', position: 'absolute', left: '-16px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                        <div style={{ width: '100%', height: '1px', borderTop: '1px dashed #3f3f46', margin: '0 16px' }} />
+                        <div style={{ width: '32px', height: '32px', borderRadius: '9999px', backgroundColor: '#000000', position: 'absolute', right: '-16px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                    </div>
 
                                     <div className="p-10 flex flex-col items-center relative">
                                         <div 

@@ -34,7 +34,7 @@ export async function GET() {
             .single()
 
         // 3. Get Current Usage (Total Units)
-        const { data: unitsCountRes } = await adminSupabase
+        const { count } = await adminSupabase
             .from('units')
             .select('id', { count: 'exact', head: true })
             .eq('organization_id', orgId)
@@ -62,7 +62,7 @@ export async function GET() {
             organizationName: org?.name,
             businessType: org?.business_type,
             currentPlan: org?.plan || 'FREE',
-            unitUsage: unitsCountRes?.count || 0,
+            unitUsage: count || 0,
             unitLimit: org?.units_limit || 0,
             subscriptionStatus: sub?.subscription_status || 'none',
             daysRemaining: daysRemaining,

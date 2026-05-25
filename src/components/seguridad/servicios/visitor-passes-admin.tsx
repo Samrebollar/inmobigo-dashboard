@@ -205,6 +205,20 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
         }
     }
 
+    const handleCancelPass = async (passId: string) => {
+        try {
+            const { error } = await supabase
+                .from('visitor_passes')
+                .update({ status: 'cancelled' })
+                .eq('id', passId)
+            if (error) throw error
+            toast.success('Pase cancelado')
+            fetchPasses(admin.organization_id)
+        } catch (error: any) {
+            toast.error('Error al cancelar el pase')
+        }
+    }
+
     const getStatusConfig = (status: string) => {
         switch(status) {
             case 'pending': return { label: 'PENDIENTE', color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20', icon: Clock }

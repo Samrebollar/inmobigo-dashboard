@@ -78,7 +78,7 @@ export default async function DashboardPage({
         paid_installments_count: 10,
       }),
       user_id: user.id,
-      organization_id: resident?.organization_id || (resident?.condominiums as any)?.organization_id || orgUser?.organization?.id || user.user_metadata?.organization_id
+      organization_id: resident?.organization_id || (resident?.condominiums as any)?.organization_id || (orgUser?.organization as any)?.id || user.user_metadata?.organization_id
     }
     
     return (
@@ -121,7 +121,7 @@ export default async function DashboardPage({
 
   // --- UNAUTHENTICATED / UNCONFIGURED STATE ---
   if (!organization) {
-    const userRole = user.user_metadata?.role || user.user_metadata?.user_type || profile?.role
+    const userRole = user.user_metadata?.role || user.user_metadata?.user_type || (profile as any)?.role
     const isIntendedAdmin = ['admin', 'owner', 'admin_condominio', 'admin_propiedad', 'admin_propiedades'].includes(userRole)
 
     const isPropertyManager = userRole === 'admin_propiedad' || userRole === 'admin_propiedades'
@@ -255,9 +255,9 @@ export default async function DashboardPage({
         id: `inv_${inv.id}`,
         type: inv.status === 'paid' ? 'payment' : 'overdue',
         title: inv.status === 'paid' 
-          ? `Pago recibido de ${inv.residents?.first_name || 'Residente'} ${(inv.residents as any)?.last_name || ''}` 
-          : `Pago vencido de ${inv.units?.unit_number || 'Unidad'}`,
-        subtitle: `${inv.condominiums?.name || 'Condominio'} - ${inv.units?.unit_number || 'Unidad'}`,
+          ? `Pago recibido de ${(inv.residents as any)?.first_name || 'Residente'} ${(inv.residents as any)?.last_name || ''}` 
+          : `Pago vencido de ${(inv.units as any)?.unit_number || 'Unidad'}`,
+        subtitle: `${(inv.condominiums as any)?.name || 'Condominio'} - ${(inv.units as any)?.unit_number || 'Unidad'}`,
         amount: inv.amount,
         date: new Date(inv.updated_at),
         status: inv.status
@@ -267,7 +267,7 @@ export default async function DashboardPage({
       id: `tkt_${t.id}`,
       type: 'incident',
       title: `Nueva incidencia: ${t.title}`,
-      subtitle: `${t.condominiums?.name || 'Condominio'} - ${t.units?.unit_number || 'Unidad'}`,
+      subtitle: `${(t.condominiums as any)?.name || 'Condominio'} - ${(t.units as any)?.unit_number || 'Unidad'}`,
       date: new Date(t.created_at),
       status: t.status
     }))
@@ -276,7 +276,7 @@ export default async function DashboardPage({
       id: `res_${r.id}`,
       type: 'resident',
       title: `Nuevo residente agregado: ${r.first_name} ${r.last_name}`,
-      subtitle: `${r.condominiums?.name || 'Condominio'} - ${r.units?.unit_number || 'Unidad'}`,
+      subtitle: `${(r.condominiums as any)?.name || 'Condominio'} - ${(r.units as any)?.unit_number || 'Unidad'}`,
       date: new Date(r.created_at),
       status: 'active'
     }))

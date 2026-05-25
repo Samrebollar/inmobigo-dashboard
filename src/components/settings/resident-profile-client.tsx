@@ -23,7 +23,8 @@ import {
     Car, 
     MessageSquare, 
     Bell,
-    Camera
+    Camera,
+    ShieldCheck
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'

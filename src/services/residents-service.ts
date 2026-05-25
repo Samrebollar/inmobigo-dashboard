@@ -94,9 +94,18 @@ export const residentsService = {
 
     async create(resident: CreateResidentDTO): Promise<Resident> {
         if (resident.condominium_id.startsWith('demo-')) {
+            const residentId = `demo-res-${Math.random().toString(36).substr(2, 9)}`
             const newResident: Resident = {
-                id: `demo-res-${Math.random().toString(36).substr(2, 9)}`,
+                id: residentId,
                 ...resident,
+                debt_amount: resident.debt_amount ?? 0,
+                vehicles: resident.vehicles?.map((v, i) => ({
+                    id: `demo-veh-${i}-${Math.random().toString(36).substr(2, 9)}`,
+                    resident_id: residentId,
+                    plate: v.plate,
+                    brand: v.brand,
+                    color: v.color
+                })),
                 created_at: new Date().toISOString()
             }
             demoDb.saveResident(newResident)
@@ -124,8 +133,9 @@ export const residentsService = {
         }
 
         // Automatic Invoice Creation for Initial Balance (Saldo Inicial)
+        // Uses resident_invoices (new financial architecture)
         if (newResident.debt_amount && newResident.debt_amount > 0) {
-            // First, get the correct organization_id for this condominium
+            // Get the correct organization_id for this condominium
             const { data: condo } = await supabase
                 .from('condominiums')
                 .select('organization_id')
@@ -135,27 +145,24 @@ export const residentsService = {
             const orgId = condo?.organization_id
 
             if (orgId) {
-                const folio = `INV-${Date.now().toString().slice(-6)}`
                 const invoicePayload = {
                     organization_id: orgId,
                     condominium_id: newResident.condominium_id,
                     resident_id: newResident.id,
-                    unit_id: newResident.unit_id || null, // Handle optionally empty string vs null
                     amount: newResident.debt_amount,
-                    paid_amount: 0,
                     balance_due: newResident.debt_amount,
                     status: 'pending',
+                    invoice_type: 'initial_balance',
                     description: 'Saldo inicial',
                     due_date: new Date().toISOString(),
-                    folio
                 }
 
                 const { error: invoiceError } = await supabase
-                    .from('invoices')
+                    .from('resident_invoices')
                     .insert(invoicePayload)
 
                 if (invoiceError) {
-                    console.error('Error creating initial balance invoice:', invoiceError)
+                    console.error('Error creating initial balance invoice in resident_invoices:', invoiceError)
                 }
             }
         }

@@ -14,12 +14,13 @@ import { differenceInDays, parseISO, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Eye, Pencil, CreditCard, Trash2, MoreHorizontal, FileSpreadsheet } from 'lucide-react'
+import { Eye, Pencil, CreditCard, Trash2, MoreHorizontal, FileSpreadsheet, Calculator, History, ChevronDown } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Label } from '@/components/ui/label'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import Papa from 'papaparse'
 import { motion } from 'framer-motion'
+import { CashRegisterArqueoModal } from '@/components/finance/CashRegisterArqueoModal'
 
 // Helper to format date
 const formatDate = (dateStr?: string) => {
@@ -39,6 +40,8 @@ const formatCurrency = (amount: number) => {
 }
 
 const getPaymentMethod = (inv: any) => {
+    if (inv.payment_method) return inv.payment_method
+    
     const desc = (inv.description || '').toLowerCase()
     const resident = (inv.resident_name || '').toLowerCase()
     
@@ -48,12 +51,7 @@ const getPaymentMethod = (inv: any) => {
     if (desc.includes('tarjeta')) return 'Tarjeta'
     if (desc.includes('pago en linea') || desc.includes('en línea')) return 'Pago en línea'
     
-    // Fallback deterministic rules for demo
-    const lastDigit = parseInt(inv.folio?.slice(-1)) || 0
-    if (lastDigit % 4 === 0) return 'Efectivo'
-    if (lastDigit % 4 === 1) return 'Transferencia bancaria'
-    if (lastDigit % 4 === 2) return 'Tarjeta'
-    return 'Pago en línea'
+    return 'Pendiente'
 }
 
 
@@ -74,6 +72,9 @@ export default function BillingPage() {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
+
+    const [isArqueoOpen, setIsArqueoOpen] = useState(false)
+    const [isArqueoMenuOpen, setIsArqueoMenuOpen] = useState(false)
 
     useEffect(() => {
         if (!demoLoading) {
@@ -173,7 +174,7 @@ export default function BillingPage() {
         doc.text('Historial de Facturación', 14, 20)
         
         const tableData = filteredInvoices.map(inv => [
-            inv.folio,
+            inv.folio || 'N/A',
             inv.condominium_name || '-',
             inv.unit_number || 'N/A',
             inv.resident_name || 'Sin asignar',
@@ -379,7 +380,7 @@ export default function BillingPage() {
 
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch =
-            inv.folio.toLowerCase().includes(search.toLowerCase()) ||
+            (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
             (inv.condominium_name || '').toLowerCase().includes(search.toLowerCase()) ||
             (inv.unit_number || '').toLowerCase().includes(search.toLowerCase())
 
@@ -393,7 +394,7 @@ export default function BillingPage() {
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6">
             <div className="flex items-center gap-4">
-                <Link href="/seguridad/finance" className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+                <Link href="/dashboard/finance" className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
                     <ArrowLeft size={20} />
                 </Link>
                 <div>
@@ -431,14 +432,53 @@ export default function BillingPage() {
                         <span className="text-sm text-zinc-400">Total en vista:</span>
                         <span className="font-medium text-white">${totalAmount.toLocaleString()}</span>
                     </div>
-                    <div className="relative">
-                        <Button 
-                            variant="outline" 
-                            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-                            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                        >
-                            <Download className="mr-2 h-4 w-4" /> Exportar
-                        </Button>
+                        <div className="relative mr-2">
+                            <Button 
+                                variant="outline" 
+                                className="border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors"
+                                onClick={() => setIsArqueoMenuOpen(!isArqueoMenuOpen)}
+                            >
+                                <Calculator className="mr-2 h-4 w-4" /> Arqueo Diario <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
+                            </Button>
+                            
+                            {isArqueoMenuOpen && (
+                                <>
+                                    <div 
+                                        className="fixed inset-0 z-40" 
+                                        onClick={() => setIsArqueoMenuOpen(false)} 
+                                    />
+                                    <div className="absolute right-0 mt-2 w-56 rounded-md shadow-[0_0_15px_rgba(79,70,229,0.15)] bg-zinc-900 ring-1 ring-black ring-opacity-5 border border-indigo-500/20 z-50 overflow-hidden">
+                                        <div className="py-1" role="menu">
+                                            <button
+                                                onClick={() => { setIsArqueoMenuOpen(false); setIsArqueoOpen(true); }}
+                                                className="w-full text-left flex items-center px-4 py-2 text-sm text-indigo-300 hover:bg-indigo-500/10 hover:text-indigo-200 transition-colors"
+                                                role="menuitem"
+                                            >
+                                                <Calculator className="mr-3 h-4 w-4" />
+                                                Realizar Arqueo
+                                            </button>
+                                            <Link
+                                                href="/dashboard/finance/arqueos"
+                                                onClick={() => setIsArqueoMenuOpen(false)}
+                                                className="w-full text-left flex items-center px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                                                role="menuitem"
+                                            >
+                                                <History className="mr-3 h-4 w-4 text-emerald-500" />
+                                                Historial de Arqueos
+                                            </Link>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <Button 
+                                variant="outline" 
+                                className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                            >
+                                <Download className="mr-2 h-4 w-4" /> Exportar
+                            </Button>
                         
                         {isExportMenuOpen && (
                             <>
@@ -695,7 +735,13 @@ export default function BillingPage() {
                     </div>
                 </div>
             </Modal>
+
+            <CashRegisterArqueoModal 
+                isOpen={isArqueoOpen}
+                onClose={() => setIsArqueoOpen(false)}
+                invoices={invoices}
+                getPaymentMethod={getPaymentMethod}
+            />
         </div>
     )
 }
-

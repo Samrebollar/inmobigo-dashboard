@@ -40,7 +40,7 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
             if (resident.condominium_id) {
                 const res = await getBankAccounts(resident.condominium_id)
                 if (res.success) {
-                    setBankAccounts(res.data)
+                    setBankAccounts(res.data ?? [])
                 }
             }
         }
@@ -193,7 +193,7 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
         const res = await getValidations()
         if (res.success) {
             // Filter validations for this resident (by name or unit to be safe in the demo)
-            const filtered = res.data.filter((v: any) => 
+            const filtered = (res.data ?? []).filter((v: any) => 
                 v.resident_name === `${resident.first_name} ${resident.last_name}`.trim() || 
                 v.unit === resident.units?.unit_number
             )

@@ -32,53 +32,63 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         const fetchMetrics = async () => {
             const supabase = createClient()
             
-            const { data: unitsData } = await supabase
-                .from('units')
-                .select('id, monto_mensual')
-                .eq('condominium_id', condo.id)
-            
-            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
+            try {
+                // Calculate current month's dynamic metrics
+                const now = new Date()
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
 
-            const now = new Date()
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-            const currentDay = now.getDate()
-            
-            const { data: currentMonthInvoices } = await supabase
-                .from('invoices')
-                .select('unit_id, resident_id, paid_amount, status')
-                .eq('condominium_id', condo.id)
-                .gte('created_at', startOfMonth)
+                // 1. Fetch expected monthly income (totalPeriodo) from units
+                const { data: unitsData, error: unitsError } = await supabase
+                    .from('units')
+                    .select('monto_mensual')
+                    .eq('condominium_id', condo.id)
+                    .neq('billing_status', 'suspended')
 
-            const totalRecaudado = currentMonthInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
-            
-            const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
-            
-            // Deterministic logic: only "vencido" after day 10
-            let morosidad = 0
-            if (currentDay > 10) {
-                morosidad = unpaidBalance
-            }
+                if (unitsError) throw unitsError
+                const totalPeriodo = unitsData?.reduce((acc, u) => acc + Number(u.monto_mensual || 0), 0) || 0
 
-            let morososCount = 0
-            if (unitsData && currentMonthInvoices) {
-                const paymentsPerUnit: Record<string, number> = {}
-                currentMonthInvoices.forEach(inv => {
-                    const id = inv.unit_id || inv.resident_id
-                    if (id) paymentsPerUnit[id] = (paymentsPerUnit[id] || 0) + (Number(inv.paid_amount) || 0)
+                // 2. Fetch invoices of selected month (strictly maintenance type to avoid manual payment duplicates)
+                const { data: currentMonthInvoices, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id, invoice_type')
+                    .eq('condominium_id', condo.id)
+                    .eq('invoice_type', 'maintenance')
+                    .gte('created_at', startOfMonth)
+                    .lte('created_at', endOfMonth)
+
+                if (invoiceError) throw invoiceError
+
+                let totalPendiente = 0
+                let totalVencido = 0
+                const debtorResidents = new Set<string>()
+
+                currentMonthInvoices?.forEach(inv => {
+                    const bal = Number(inv.balance_due || 0)
+                    
+                    if (inv.status === 'pending') {
+                        totalPendiente += bal
+                    } else if (inv.status === 'overdue') {
+                        totalVencido += bal
+                        if (bal > 0 && inv.resident_id) {
+                            debtorResidents.add(inv.resident_id)
+                        }
+                    }
                 })
 
-                unitsData.forEach(unit => {
-                    const paid = paymentsPerUnit[unit.id] || 0
-                    if (paid < Number(unit.monto_mensual)) morososCount++
-                })
-            }
+                // Recaudado is the complement of outstanding debt
+                const totalRecaudado = Math.max(0, totalPeriodo - totalPendiente - totalVencido)
+                const morosidad = totalVencido
 
-            setMetrics({
-                recaudado: totalRecaudado,
-                porCobrar: currentDay > 10 ? 0 : unpaidBalance,
-                vencido: morosidad,
-                morosos: currentDay > 10 ? morososCount : 0
-            })
+                setMetrics({
+                    recaudado: totalRecaudado,
+                    porCobrar: totalPendiente,
+                    vencido: morosidad,
+                    morosos: debtorResidents.size
+                })
+            } catch (error) {
+                console.error('[SummaryTab] fetchMetrics error:', error)
+            }
         }
         
         fetchMetrics()

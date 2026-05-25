@@ -49,7 +49,16 @@ export default async function InquilinoLayout({
     const { createAdminClient } = await import('@/utils/supabase/admin')
     const adminSupabase = createAdminClient()
 
-    const organizationId = (resident?.condominiums as any)?.organization_id
+    // Resolver organization_id desde condominium_id (no existe .condominiums en el select)
+    let organizationId: string | undefined
+    if (resident?.condominium_id) {
+        const { data: condoData } = await adminSupabase
+            .from('condominiums')
+            .select('organization_id')
+            .eq('id', resident.condominium_id)
+            .maybeSingle()
+        organizationId = condoData?.organization_id
+    }
 
     const { data: activeSub } = await adminSupabase
         .from('subscriptions')

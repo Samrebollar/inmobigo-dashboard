@@ -6,88 +6,85 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url)
         const condominiumId = searchParams.get('condominium_id')
         const organizationId = searchParams.get('organization_id')
-        
+
         const supabase = await createClient()
-        
+
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        let query = supabase.from('invoices').select('amount, status, created_at, paid_at, due_date, balance_due, paid_amount')
-        
-        // Priority: condominium_id, fallback to organization_id
-        if (condominiumId) {
-            query = query.eq('condominium_id', condominiumId)
-        } else if (organizationId) {
-            query = query.eq('organization_id', organizationId)
-        } else {
-            // If neither is provided, we might be fetching everything the user has access to,
-            // but for Finance, we should probably require at least organization_id.
-            // For now, let's keep it flexible but safe.
-        }
-        
-        const { data: invoices, error } = await query
-        
-        if (error) throw error
-
+        // Calculate current month's dynamic metrics
         const now = new Date()
-        const currentMonth = now.getMonth()
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+
+        // 1. Fetch expected monthly income (total_periodo) from units
+        let unitsQuery = supabase
+            .from('units')
+            .select('monto_mensual')
+            .neq('billing_status', 'suspended')
+
+        if (condominiumId) {
+            unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
+        } else if (organizationId) {
+            unitsQuery = unitsQuery.eq('organization_id', organizationId)
+        }
+
+        const { data: units, error: unitsError } = await unitsQuery
+        if (unitsError) throw unitsError
         
-        let ingresos_mes = 0
-        let total_facturado = 0
+        const total_periodo = units?.reduce((sum, u) => sum + Number(u.monto_mensual || 0), 0) || 0
+
+        // 2. Fetch current month's invoices (strictly maintenance type to avoid manual payment duplicates)
+        let invoiceQuery = supabase
+            .from('resident_invoices')
+            .select('amount, balance_due, status, resident_id, invoice_type')
+            .eq('invoice_type', 'maintenance')
+            .gte('created_at', startOfMonth)
+            .lte('created_at', endOfMonth)
+
+        if (condominiumId) {
+            invoiceQuery = invoiceQuery.eq('condominium_id', condominiumId)
+        } else if (organizationId) {
+            invoiceQuery = invoiceQuery.eq('organization_id', organizationId)
+        }
+
+        const { data: invoices, error: invoiceError } = await invoiceQuery
+        if (invoiceError) throw invoiceError
+
         let total_por_cobrar = 0
-        let cartera_vencida = 0
-        let total_cobrado_historico = 0
-        let total_facturado_historico = 0
+        let total_vencido = 0
+        const debtorResidents = new Set<string>()
 
         invoices?.forEach(inv => {
-            const createdAt = new Date(inv.created_at)
-            const dueDate = new Date(inv.due_date)
-            
-            // Helper robusto para el monto que falta por pagar
-            const amountDue = (inv.balance_due && inv.balance_due > 0) ? Number(inv.balance_due) : Number(inv.amount || 0)
-            
-            // 1. ingresos_mes: Los últimos 60 días para cubrir pruebas de marzo/abril
-            const sixtyDaysAgo = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000))
-            const paidAt = inv.paid_at ? new Date(inv.paid_at) : (inv.status === 'paid' ? createdAt : null)
+            const bal = Number(inv.balance_due || 0)
 
-            if (inv.status === 'paid' && paidAt && paidAt >= sixtyDaysAgo) {
-                ingresos_mes += Number(inv.amount || 0)
-            }
-            
-            // 2. total_por_cobrar: ACUMULADO (Todas las facturas pendientes/vencidas de la historia)
-            if (inv.status === 'pending' || inv.status === 'overdue') {
-                total_por_cobrar += amountDue
-            }
-
-            // Histórico para eficacia
-            total_facturado_historico += Number(inv.amount || 0)
-            if (inv.status === 'paid') {
-                total_cobrado_historico += Number(inv.amount || 0)
-            }
-            
-            // 3. cartera_vencida (Todas las vencidas)
-            const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-            const isOverdue = inv.status === 'overdue' || (inv.status === 'pending' && dueDate < todayMidnight)
-            
-            if (isOverdue) {
-                cartera_vencida += amountDue
+            if (inv.status === 'pending') {
+                total_por_cobrar += bal
+            } else if (inv.status === 'overdue') {
+                total_vencido += bal
+                if (bal > 0 && inv.resident_id) {
+                    debtorResidents.add(inv.resident_id)
+                }
             }
         })
 
-        // 5. eficacia_cobro: Basada en el total histórico para mayor precisión en la demo
-        let eficacia_cobro = 0
-        if (total_facturado_historico > 0) {
-            eficacia_cobro = Math.round((total_cobrado_historico / total_facturado_historico) * 100 * 100) / 100
-        }
+        // ingresos_mes is the complement of outstanding debt
+        const ingresos_mes = Math.max(0, total_periodo - total_por_cobrar - total_vencido)
+        const cartera_vencida = total_vencido
+        
+        const eficacia_cobro = total_periodo > 0
+            ? Math.round((ingresos_mes / total_periodo) * 100 * 100) / 100
+            : 0
 
         return NextResponse.json({
             ingresos_mes,
-            total_facturado,
+            total_facturado: total_periodo,
             total_por_cobrar,
             cartera_vencida,
-            eficacia_cobro
+            eficacia_cobro,
+            residentes_morosos: debtorResidents.size,
         })
     } catch (error: any) {
         console.error('Metrics API Error:', error)

@@ -101,22 +101,22 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
         return () => { supabase.removeChannel(ch) }
     }, [unit?.id])
 
-    // Suscripción a cambios de facturas del residente
+    // Suscripción a cambios de facturas del residente (usando resident_invoices)
     useEffect(() => {
         if (!resident?.id) return
         const supabase = createClient()
         const ch = supabase
-            .channel(`invoices-${resident.id}`)
+            .channel(`resident-invoices-${resident.id}`)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
-                table: 'invoices',
+                table: 'resident_invoices',
                 filter: `resident_id=eq.${resident.id}`
             }, async () => {
                 // Re-fetch al detectar cualquier cambio
                 const now = new Date()
                 const { data } = await supabase
-                    .from('invoices')
+                    .from('resident_invoices')
                     .select('*')
                     .eq('resident_id', resident.id)
                     .order('created_at', { ascending: false })
@@ -125,15 +125,13 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                         const baseDate = new Date(inv.due_date || inv.created_at)
                         const limitDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), paymentDeadline, 23, 59, 59)
                         
-                        const referenceDate = inv.status === 'paid' 
-                            ? (inv.paid_at ? new Date(inv.paid_at) : new Date(inv.updated_at || inv.created_at)) 
-                            : now
-                        
                         let atraso = 0
-                        if (referenceDate > limitDate) {
-                            atraso = Math.floor((referenceDate.getTime() - limitDate.getTime()) / (1000 * 60 * 60 * 24))
+                        if (inv.status !== 'paid' && now > limitDate) {
+                            atraso = Math.floor((now.getTime() - limitDate.getTime()) / (1000 * 60 * 60 * 24))
                         }
-                        return { ...inv, atraso }
+                        // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
+                        const paid_amount = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
+                        return { ...inv, atraso, paid_amount }
                     }))
                 }
             })
@@ -537,11 +535,11 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                                         <td className="px-10 py-8">
                                             <Badge className={cn(
                                                 "px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest border",
-                                                (payment.rawStatus === 'paid' || payment.status === 'Pagado')
+                                                ((payment as any).rawStatus === 'paid' || payment.status === 'Pagado')
                                                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                    : (payment.rawStatus === 'overdue' || payment.status === 'Vencido')
+                                                    : ((payment as any).rawStatus === 'overdue' || payment.status === 'Vencido')
                                                         ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                                        : (payment.rawStatus === 'pending' || payment.status === 'Pendiente')
+                                                        : ((payment as any).rawStatus === 'pending' || payment.status === 'Pendiente')
                                                             ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                                                             : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
                                             )}>

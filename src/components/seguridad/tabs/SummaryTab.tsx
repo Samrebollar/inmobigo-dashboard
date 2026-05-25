@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { RevenueChart } from '@/components/seguridad/revenue-chart'
+import { RevenueChart } from '@/components/finance/revenue-chart'
 import { Activity, AlertTriangle, CheckCircle2, TrendingUp, Users } from 'lucide-react'
 import { Condominium } from '@/types/properties'
 import { demoDb } from '@/utils/demo-db'
@@ -15,23 +15,10 @@ interface SummaryTabProps {
     revenueData?: any[]
 }
 
-// Mock Data for Charts
-
-
-const revenueData = [
-    { name: 'Ene', value: 12000 },
-    { name: 'Feb', value: 15000 },
-    { name: 'Mar', value: 18000 },
-    { name: 'Abr', value: 16000 },
-    { name: 'May', value: 21000 },
-    { name: 'Jun', value: 25000 },
-]
-
 export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
     const { isPropiedades } = useUserRole()
     const isDemo = condo.id.startsWith('demo-')
     
-    // Real State for Metrics
     const [metrics, setMetrics] = useState({
         recaudado: 0,
         porCobrar: 0,
@@ -45,63 +32,71 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         const fetchMetrics = async () => {
             const supabase = createClient()
             
-            const { data: unitsData } = await supabase
-                .from('units')
-                .select('id, monto_mensual')
-                .eq('condominium_id', condo.id)
-            
-            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
+            try {
+                // Calculate current month's dynamic metrics
+                const now = new Date()
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
 
-            const now = new Date()
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-            const currentDay = now.getDate()
-            
-            const { data: currentMonthInvoices } = await supabase
-                .from('invoices')
-                .select('unit_id, resident_id, paid_amount, status')
-                .eq('condominium_id', condo.id)
-                .gte('created_at', startOfMonth)
+                // 1. Fetch expected monthly income (totalPeriodo) from units
+                const { data: unitsData, error: unitsError } = await supabase
+                    .from('units')
+                    .select('monto_mensual')
+                    .eq('condominium_id', condo.id)
+                    .neq('billing_status', 'suspended')
 
-            const totalRecaudado = currentMonthInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
-            
-            const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
-            
-            // Deterministic logic: only "vencido" after day 10
-            let morosidad = 0
-            if (currentDay > 10) {
-                morosidad = unpaidBalance
-            }
+                if (unitsError) throw unitsError
+                const totalPeriodo = unitsData?.reduce((acc, u) => acc + Number(u.monto_mensual || 0), 0) || 0
 
-            let morososCount = 0
-            if (unitsData && currentMonthInvoices) {
-                const paymentsPerUnit: Record<string, number> = {}
-                currentMonthInvoices.forEach(inv => {
-                    const id = inv.unit_id || inv.resident_id
-                    if (id) paymentsPerUnit[id] = (paymentsPerUnit[id] || 0) + (Number(inv.paid_amount) || 0)
+                // 2. Fetch invoices of selected month (strictly maintenance type to avoid manual payment duplicates)
+                const { data: currentMonthInvoices, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id, invoice_type')
+                    .eq('condominium_id', condo.id)
+                    .eq('invoice_type', 'maintenance')
+                    .gte('created_at', startOfMonth)
+                    .lte('created_at', endOfMonth)
+
+                if (invoiceError) throw invoiceError
+
+                let totalPendiente = 0
+                let totalVencido = 0
+                const debtorResidents = new Set<string>()
+
+                currentMonthInvoices?.forEach(inv => {
+                    const bal = Number(inv.balance_due || 0)
+                    
+                    if (inv.status === 'pending') {
+                        totalPendiente += bal
+                    } else if (inv.status === 'overdue') {
+                        totalVencido += bal
+                        if (bal > 0 && inv.resident_id) {
+                            debtorResidents.add(inv.resident_id)
+                        }
+                    }
                 })
 
-                unitsData.forEach(unit => {
-                    const paid = paymentsPerUnit[unit.id] || 0
-                    if (paid < Number(unit.monto_mensual)) morososCount++
-                })
-            }
+                // Recaudado is the complement of outstanding debt
+                const totalRecaudado = Math.max(0, totalPeriodo - totalPendiente - totalVencido)
+                const morosidad = totalVencido
 
-            setMetrics({
-                recaudado: totalRecaudado,
-                porCobrar: currentDay > 10 ? 0 : unpaidBalance,
-                vencido: morosidad,
-                morosos: currentDay > 10 ? morososCount : 0
-            })
+                setMetrics({
+                    recaudado: totalRecaudado,
+                    porCobrar: totalPendiente,
+                    vencido: morosidad,
+                    morosos: debtorResidents.size
+                })
+            } catch (error) {
+                console.error('[SummaryTab] fetchMetrics error:', error)
+            }
         }
         
         fetchMetrics()
     }, [condo.id, isDemo])
     
-    // Calculate Occupancy
     const residentsCount = isDemo ? demoDb.getResidents(condo.id).length : ((condo as any).residents_count || 0)
     const occRate = condo.units_total > 0 ? Math.min(100, Math.round((residentsCount / condo.units_total) * 100)) : 0
 
-    // Metrics Values
     const ingresos = isDemo 
         ? "$45,231.89" 
         : `$${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
@@ -112,13 +107,12 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         : `$${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
     const morosidadSubtext = isDemo 
         ? `${isPropiedades ? '3 inquilinos con deuda' : '3 residentes con deuda'}` 
-        : `${metrics.morosos} ${isPropiedades ? (metrics.morosos === 1 ? 'inquilino con deuda' : 'inquilinos con deuda') : (metrics.morosos === 1 ? 'residente con deuda' : 'residentes con deuda')}`
+        : `${metrics.morosos} ${isPropiedades ? (metrics.morosos === 1 ? 'inquilino en atraso' : 'inquilinos en atraso') : (metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso')}`
     
     const occChange = isDemo ? "+2% vs mes anterior" : "Actualizado"
 
     return (
         <div className="space-y-6">
-            {/* KPI Grid */}
             <div className="grid gap-4 md:grid-cols-3">
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
                     <Card className="bg-zinc-900 border-zinc-800 transition-all duration-300 hover:border-indigo-500/50 hover:shadow-[0_0_15px_rgba(99,102,241,0.1)] relative overflow-hidden group">
@@ -162,15 +156,14 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
-                            <div className={`text-2xl font-bold ${isDemo ? 'text-white' : 'text-zinc-300'}`}>{morosidad}</div>
-                            <p className={`text-xs mt-1 ${isDemo ? 'text-zinc-500' : 'text-zinc-600'}`}>{morosidadSubtext}</p>
+                            <div className={`text-2xl font-bold ${isDemo ? 'text-white' : 'text-rose-500'}`}>{morosidad}</div>
+                            <p className={`text-xs mt-1 ${isDemo ? 'text-zinc-500' : 'text-zinc-500'}`}>{morosidadSubtext}</p>
                         </CardContent>
                     </Card>
                 </motion.div>
             </div>
 
             <div className="w-full">
-                {/* Revenue Chart */}
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader>
                         <CardTitle className="text-lg font-medium text-white">Histórico de Ingresos</CardTitle>
@@ -181,7 +174,6 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 </Card>
             </div>
 
-            {/* Recent Activity / Alerts */}
             <div className="grid gap-6 md:grid-cols-2">
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader>
@@ -280,4 +272,3 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         </div>
     )
 }
-

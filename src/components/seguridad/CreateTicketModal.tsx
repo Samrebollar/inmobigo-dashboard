@@ -114,7 +114,7 @@ export function CreateTicketModal({
             if (finalId) {
                 const { data } = await supabase
                     .from('residents')
-                    .select('unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
+                    .select('id, unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
                     .eq('id', finalId)
                     .maybeSingle()
                 if (data) resData = data
@@ -139,20 +139,21 @@ export function CreateTicketModal({
             }
 
             if (resData) {
-                setResolvedResidentId(resData.id)
+                const anyResData = resData as any
+                setResolvedResidentId(anyResData.id)
                 setFormData(prev => ({
                     ...prev,
-                    unit_id: resData.unit_id || '',
-                    unit_number: resData.units?.unit_number || 'N/A',
-                    condominium_id: resData.condominium_id || prev.condominium_id
+                    unit_id: anyResData.unit_id || '',
+                    unit_number: anyResData.units?.unit_number || 'N/A',
+                    condominium_id: anyResData.condominium_id || prev.condominium_id
                 }))
                 
-                if (resData.condominiums) {
-                    if (resData.condominiums.organization_id) {
-                        setOrgId(resData.condominiums.organization_id)
+                if (anyResData.condominiums) {
+                    if (anyResData.condominiums.organization_id) {
+                        setOrgId(anyResData.condominiums.organization_id)
                     }
-                    if (resData.condominium_id) {
-                        setCondominiums([{ id: resData.condominium_id, name: resData.condominiums.name }])
+                    if (anyResData.condominium_id) {
+                        setCondominiums([{ id: anyResData.condominium_id, name: anyResData.condominiums.name }])
                     }
                 }
             }

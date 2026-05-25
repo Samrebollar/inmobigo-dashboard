@@ -59,7 +59,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             // Load Bank Accounts
             const accountsRes = await getBankAccounts()
             if (accountsRes.success) {
-                setBankAccounts(accountsRes.data)
+                setBankAccounts(accountsRes.data || [])
             }
             
             await fetchData()
@@ -73,7 +73,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_validations' }, () => fetchData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'bank_accounts' }, async () => {
                 const res = await getBankAccounts()
-                if (res.success) setBankAccounts(res.data)
+                if (res.success) setBankAccounts(res.data || [])
             })
             .subscribe()
 
@@ -85,7 +85,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
     const fetchData = async () => {
         const res = await getValidations()
         if (res.success) {
-            setValidations(res.data)
+            setValidations(res.data || [])
         } else {
             toast.error(res.error)
         }
@@ -109,7 +109,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             setEditingAccount(null)
             setBankForm({ condominium_id: '', bank_name: '', account_number: '', reference: '' })
             const accountsRes = await getBankAccounts()
-            if (accountsRes.success) setBankAccounts(accountsRes.data)
+            if (accountsRes.success) setBankAccounts(accountsRes.data || [])
         } else {
             toast.error(res.error)
         }
@@ -121,7 +121,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
         if (res.success) {
             toast.success('Cuenta eliminada')
             const accountsRes = await getBankAccounts()
-            if (accountsRes.success) setBankAccounts(accountsRes.data)
+            if (accountsRes.success) setBankAccounts(accountsRes.data || [])
         } else {
             toast.error(res.error)
         }

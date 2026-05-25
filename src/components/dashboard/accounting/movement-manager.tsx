@@ -198,7 +198,8 @@ export function MovementManager({
                 fecha_inicio: new Date().toISOString().split('T')[0],
                 fecha_fin: '',
                 use_reserve_fund: false,
-                reserve_reason: 'emergencia'
+                reserve_reason: 'emergencia',
+                iva_amount: '0'
             })
         } catch (error: any) {
             console.error('Error creating record:', error)

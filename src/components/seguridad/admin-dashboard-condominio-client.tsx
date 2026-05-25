@@ -138,19 +138,6 @@ export default function AdminDashboardCondominioClient({
                 if (isMounted) setIsLoadingMorosidad(false)
             }
         }
-        const fetchIncome = async () => {
-            try {
-                setIsLoadingIncome(true)
-                setIncomeError(null)
-                const data = await financeService.getIncomeSummary()
-                if (isMounted) setIncomeSummary(data)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setIncomeError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingIncome(false)
-            }
-        }
         const fetchCondos = async () => {
             const supabase = createClient()
             const { data } = await supabase.from('condominiums').select('id, name')

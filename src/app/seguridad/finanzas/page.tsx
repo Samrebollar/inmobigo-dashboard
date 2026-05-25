@@ -92,7 +92,7 @@ export default async function TransparencyPage() {
 
     return (
         <div className="max-w-[1400px] mx-auto p-4 md:p-8">
-            <TransparencyClient data={data} isAdmin={isAdmin} />
+            <TransparencyClient data={data} condominiumId={targetCondoId} isAdmin={isAdmin} />
         </div>
     )
 }

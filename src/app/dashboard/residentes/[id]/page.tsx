@@ -181,18 +181,17 @@ export default function ResidentMovementsPage() {
                 : '-'
                 
             return [
-                inv.folio,
-                inv.description,
+                inv.folio || 'N/A',
+                inv.description || 'Sin concepto',
                 statusLabel,
                 formatMoney(inv.amount),
-                inv.status === 'paid' ? formatMoney(inv.amount) : '-',
                 formatDate(inv.due_date),
                 daysOverdue
             ]
         })
         
         autoTable(doc, {
-            head: [['Folio', 'Concepto', 'Estado', 'Monto', 'Pago', 'Vencimiento', 'Días de atraso']],
+            head: [['Folio', 'Concepto', 'Estado', 'Monto', 'Vencimiento', 'Días de atraso']],
             body: tableData,
             startY: 45,
             theme: 'striped',
@@ -215,7 +214,6 @@ export default function ResidentMovementsPage() {
                 'Concepto': inv.description,
                 'Estado': statusLabel,
                 'Monto': inv.amount,
-                'Pago': inv.status === 'paid' ? inv.amount : 0,
                 'Vencimiento': formatDate(inv.due_date),
                 'Días de atraso': daysOverdue
             }
@@ -301,8 +299,8 @@ export default function ResidentMovementsPage() {
     }, [selectedMonth, residentStartDate])
 
     const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = inv.folio.toLowerCase().includes(search.toLowerCase()) ||
-            inv.description.toLowerCase().includes(search.toLowerCase())
+        const matchesSearch = (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
+            (inv.description || '').toLowerCase().includes(search.toLowerCase())
             
         if (!matchesSearch) return false
         
@@ -488,12 +486,12 @@ export default function ResidentMovementsPage() {
                 amount: inv.amount
             })
 
-            // Event: Payment
-            if (inv.status === 'paid' && inv.paid_at) {
+            // Event: Payment (resident_invoices has no paid_at - use updated_at as payment date proxy)
+            if (inv.status === 'paid') {
                 events.push({
-                    date: inv.paid_at,
+                    date: inv.updated_at || inv.created_at,
                     type: 'payment',
-                    description: `Pago registrado correctamente del recibo ${inv.folio}`,
+                    description: `Pago registrado correctamente del recibo ${inv.folio || 'S/N'}`,
                     amount: inv.amount
                 })
             }
@@ -898,7 +896,6 @@ export default function ResidentMovementsPage() {
                                 <th className="px-6 py-4">Concepto</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4">Monto</th>
-                                <th className="px-6 py-4">Pago</th>
                                 <th className="px-6 py-4">Vencimiento</th>
                                 <th className="px-6 py-4">Fecha Pago</th>
                                 <th className="px-6 py-4">Días de atraso</th>
@@ -929,12 +926,9 @@ export default function ResidentMovementsPage() {
                                         </Badge>
                                     </td>
                                     <td className="px-6 py-4 text-white font-medium">{formatMoney(inv.amount)}</td>
-                                    <td className="px-6 py-4 text-white font-medium">
-                                        {inv.status === 'paid' ? formatMoney(inv.amount) : '-'}
-                                    </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
                                     <td className="px-6 py-4 text-zinc-400">
-                                        {inv.status === 'paid' ? (inv.paid_at ? formatDate(inv.paid_at) : formatDate(inv.created_at)) : '-'}
+                                        {inv.status === 'paid' ? (inv.updated_at ? formatDate(inv.updated_at) : formatDate(inv.created_at)) : '-'}
                                     </td>
                                     <td className="px-6 py-4">
                                         {(inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
@@ -968,7 +962,7 @@ export default function ResidentMovementsPage() {
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={10} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>

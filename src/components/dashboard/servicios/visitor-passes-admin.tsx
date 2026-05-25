@@ -183,6 +183,20 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
         }
     }
 
+    const handleCancelPass = async (passId: string) => {
+        try {
+            const { error } = await supabase
+                .from('visitor_passes')
+                .update({ status: 'cancelled' })
+                .eq('id', passId)
+            if (error) throw error
+            toast.success('Pase cancelado')
+            fetchPasses(admin.organization_id)
+        } catch (error) {
+            toast.error('Error al cancelar el pase')
+        }
+    }
+
     const handleDeletePass = async () => {
         if (!passToDelete) return
         

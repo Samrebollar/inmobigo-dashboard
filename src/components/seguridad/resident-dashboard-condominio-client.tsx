@@ -99,7 +99,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName }
         async function fetchMovements() {
             const res = await getValidations()
             if (res.success && isMounted) {
-                const myApproved = res.data.filter((v: any) => 
+                const myApproved = (res.data ?? []).filter((v: any) => 
                     v.status === 'aprobado' && 
                     (v.resident_name === `${resident.first_name} ${resident.last_name}`.trim() || 
                      v.unit === resident.units?.unit_number)

@@ -18,7 +18,8 @@ import {
     ArrowRight,
     CreditCard,
     FileText,
-    DownloadCloud
+    DownloadCloud,
+    Zap
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -54,6 +55,8 @@ interface Amenity {
     rules: string
     color: string
     status?: string
+    capacity?: number
+    rules_pdf_url?: string
 }
 
 const DEFAULT_AMENITIES = [

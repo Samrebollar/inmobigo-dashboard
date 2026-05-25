@@ -7,7 +7,7 @@ import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight, CheckCircle2, Eye, X, Loader2, FileSpreadsheet } from 'lucide-react'
+import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight, CheckCircle2, Eye, X, Loader2, FileSpreadsheet, Calendar, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 import Papa from 'papaparse'
@@ -41,10 +41,17 @@ export function FinanceTab() {
     // Menú de Exportación y Periodo
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
     const [isPeriodMenuOpen, setIsPeriodMenuOpen] = useState(false)
-    const [selectedPeriod, setSelectedPeriod] = useState({ 
-        month: new Date().getMonth(), 
-        year: new Date().getFullYear(),
-        label: 'Este Mes'
+    const [selectedPeriod, setSelectedPeriod] = useState(() => {
+        const monthNames = [
+            'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+        ]
+        const currentMonth = new Date().getMonth()
+        return {
+            month: currentMonth,
+            year: new Date().getFullYear(),
+            label: monthNames[currentMonth]
+        }
     })
     const exportMenuRef = useRef<HTMLDivElement>(null)
     const periodMenuRef = useRef<HTMLDivElement>(null)
@@ -156,117 +163,130 @@ export function FinanceTab() {
     }
 
     const periods = [
-        { label: 'Este Mes', month: new Date().getMonth(), year: new Date().getFullYear() },
-        { label: 'Mes Pasado', month: new Date().getMonth() - 1 < 0 ? 11 : new Date().getMonth() - 1, year: new Date().getMonth() - 1 < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear() },
-        { label: 'Hace 2 Meses', month: new Date().getMonth() - 2 < 0 ? (new Date().getMonth() - 2 + 12) : new Date().getMonth() - 2, year: new Date().getMonth() - 2 < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear() },
-        { label: 'Hace 3 Meses', month: new Date().getMonth() - 3 < 0 ? (new Date().getMonth() - 3 + 12) : new Date().getMonth() - 3, year: new Date().getMonth() - 3 < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear() },
+        { label: 'Todos los meses', month: -1, year: new Date().getFullYear() },
+        { label: 'Enero', month: 0, year: new Date().getFullYear() },
+        { label: 'Febrero', month: 1, year: new Date().getFullYear() },
+        { label: 'Marzo', month: 2, year: new Date().getFullYear() },
+        { label: 'Abril', month: 3, year: new Date().getFullYear() },
+        { label: 'Mayo', month: 4, year: new Date().getFullYear() },
+        { label: 'Junio', month: 5, year: new Date().getFullYear() },
+        { label: 'Julio', month: 6, year: new Date().getFullYear() },
+        { label: 'Agosto', month: 7, year: new Date().getFullYear() },
+        { label: 'Septiembre', month: 8, year: new Date().getFullYear() },
+        { label: 'Octubre', month: 9, year: new Date().getFullYear() },
+        { label: 'Noviembre', month: 10, year: new Date().getFullYear() },
+        { label: 'Diciembre', month: 11, year: new Date().getFullYear() },
     ]
 
     const fetchBillingData = async () => {
         try {
             if (condoId.startsWith('demo-')) {
-                // In demo mode, we can still calculate it if we have demo units
                 const demoUnits = demoDb.getUnits(condoId)
                 const demoSum = demoUnits.reduce((acc, u) => acc + (u.monto_mensual || 0), 0)
                 
-                const currentDay = new Date().getDate()
-                const demoRecaudado = 98200
-                const unpaid = Math.max(0, demoSum - demoRecaudado)
-                
+                let demoRecaudado = 98200
+                let unpaid = Math.max(0, demoSum - demoRecaudado)
+                let morosos = 3
+
+                if (selectedPeriod.month === -1) {
+                    demoRecaudado = 284500
+                    unpaid = 45000
+                    morosos = 5
+                } else {
+                    const monthFactor = (selectedPeriod.month + 1) / 12
+                    demoRecaudado = Math.floor(98200 * monthFactor)
+                    unpaid = Math.floor(unpaid * monthFactor)
+                    morosos = Math.max(1, Math.floor(3 * monthFactor))
+                }
+
                 setMetrics({
-                    facturado: demoSum || 124500,
+                    facturado: (demoRecaudado + unpaid),
                     recaudado: demoRecaudado,
-                    porCobrar: currentDay <= 10 ? unpaid : 0,
-                    vencido: currentDay > 10 ? unpaid : 0,
-                    morosos: 3
+                    porCobrar: Math.floor(unpaid * 0.3),
+                    vencido: Math.floor(unpaid * 0.7),
+                    morosos: morosos
                 })
                 return
             }
 
-            // 1. Calculate Expected Total (Sum of all units' monthly fees)
-            const { data: unitsData } = await supabase
-                .from('units')
-                .select('id, monto_mensual')
-                .eq('condominium_id', condoId)
-            
-            const { data: residentsData } = await supabase
-                .from('residents')
-                .select('id, unit_id')
-                .eq('condominium_id', condoId)
-            
-            const expectedTotal = unitsData?.reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0) || 0
+            let totalPeriodo = 0
+            let recaudado = 0
+            let porCobrar = 0
+            let vencido = 0
+            const debtorResidents = new Set<string>()
 
-            // 2. Fetch real payments for the SELECTED period
-            const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
-            const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
-            
-            const { data: periodInvoices } = await supabase
-                .from('invoices')
-                .select('paid_amount, balance_due, amount, status, unit_id, resident_id')
-                .eq('condominium_id', condoId)
-                .gte('created_at', startOfPeriod)
-                .lte('created_at', endOfPeriod)
-
-            const totalRecaudado = periodInvoices?.reduce((acc, inv) => acc + (Number(inv.paid_amount) || 0), 0) || 0
-            
-            // 3. Logic for Pendiente vs Morosidad (Calculate individual debts)
-            const now = new Date()
-            const isCurrentMonth = now.getMonth() === selectedPeriod.month && now.getFullYear() === selectedPeriod.year
-            const currentDay = now.getDate()
-            
-            let totalPendiente = 0
-            let totalMorosidad = 0
-            let morososCount = 0
-
-            if (unitsData && periodInvoices) {
-                const paymentsPerUnit: Record<string, number> = {}
+            if (selectedPeriod.month !== -1) {
+                // Fetch expected monthly income (totalPeriodo) from units (active only)
+                const { data: unitsData, error: unitsError } = await supabase
+                    .from('units')
+                    .select('monto_mensual')
+                    .eq('condominium_id', condoId)
+                    .neq('billing_status', 'suspended')
                 
-                // Mapa de residente a unidad
-                const residentToUnit: Record<string, string> = {}
-                residentsData?.forEach(res => {
-                    if (res.id && res.unit_id) residentToUnit[res.id] = res.unit_id
-                })
+                if (unitsError) throw unitsError
+                totalPeriodo = unitsData?.reduce((acc, u) => acc + Number(u.monto_mensual || 0), 0) || 0
 
-                periodInvoices.forEach(inv => {
-                    // Si no tiene unit_id, intentamos obtenerlo a través del resident_id
-                    const unitId = inv.unit_id || (inv.resident_id ? residentToUnit[inv.resident_id] : null)
-                    
-                    if (unitId) {
-                        paymentsPerUnit[unitId] = (paymentsPerUnit[unitId] || 0) + (Number(inv.paid_amount) || 0)
-                    }
-                })
+                // Fetch invoices of selected month (strictly maintenance type to avoid manual payment duplicates)
+                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
+                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
+                
+                const { data: invoices, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id, invoice_type')
+                    .eq('condominium_id', condoId)
+                    .eq('invoice_type', 'maintenance')
+                    .gte('created_at', startOfPeriod)
+                    .lte('created_at', endOfPeriod)
 
-                unitsData.forEach(unit => {
-                    const paid = paymentsPerUnit[unit.id] || 0
-                    const expected = Number(unit.monto_mensual) || 0
+                if (invoiceError) throw invoiceError
+
+                invoices?.forEach(inv => {
+                    const bal = Number(inv.balance_due || 0)
                     
-                    if (paid < expected) {
-                        const debt = expected - paid
-                        morososCount++
-                        
-                        if (isCurrentMonth && currentDay <= 10) {
-                            totalPendiente += debt
-                        } else {
-                            // Si es mes pasado o si es mes actual después del día 10
-                            totalMorosidad += debt
+                    if (inv.status === 'pending') {
+                        porCobrar += bal
+                    } else if (inv.status === 'overdue') {
+                        vencido += bal
+                        if (bal > 0 && inv.resident_id) {
+                            debtorResidents.add(inv.resident_id)
                         }
                     }
                 })
+
+                // Recaudado is the complement of outstanding debt
+                recaudado = Math.max(0, totalPeriodo - porCobrar - vencido)
             } else {
-                const unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
-                if (isCurrentMonth && currentDay <= 10) {
-                    totalPendiente = unpaidBalance
-                } else {
-                    totalMorosidad = unpaidBalance
-                }
+                // All time aggregation (Todos los meses)
+                const { data: invoices, error: invoiceError } = await supabase
+                    .from('resident_invoices')
+                    .select('amount, balance_due, status, resident_id')
+                    .eq('condominium_id', condoId)
+
+                if (invoiceError) throw invoiceError
+
+                invoices?.forEach(inv => {
+                    const amt = Number(inv.amount || 0)
+                    const bal = Number(inv.balance_due || 0)
+                    
+                    totalPeriodo += amt
+                    recaudado += Math.max(0, amt - bal)
+                    
+                    if (inv.status === 'overdue') {
+                        vencido += bal
+                        if (bal > 0 && inv.resident_id) debtorResidents.add(inv.resident_id)
+                    } else if (inv.status === 'pending') {
+                        porCobrar += bal
+                        if (bal > 0 && inv.resident_id) debtorResidents.add(inv.resident_id)
+                    }
+                })
             }
 
             setMetrics({
-                facturado: expectedTotal,
-                recaudado: totalRecaudado,
-                porCobrar: totalPendiente,
-                vencido: totalMorosidad,
-                morosos: morososCount
+                facturado: totalPeriodo,
+                recaudado,
+                porCobrar,
+                vencido,
+                morosos: debtorResidents.size
             })
         } catch (err) {
             console.error('Fetch billing error:', err)
@@ -276,52 +296,65 @@ export function FinanceTab() {
     const fetchInvoices = async () => {
         try {
             if (condoId.startsWith('demo-')) {
-                setRecentInvoices([
-                    { id: '1', folio: 'INV-2024001', unidad: 'A-101', concepto: 'Mantenimiento Marzo 2024', monto: 2500, estado: 'pending', telefono: '5551234567', atraso: 2, reminder_sent: false, due_date: '2024-03-01' },
-                    { id: '2', folio: 'INV-2024002', unidad: 'A-102', concepto: 'Mantenimiento Marzo 2024', monto: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2024-03-01' },
-                    { id: '3', folio: 'INV-2024003', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2024', monto: 2800, estado: 'overdue', telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2024-03-01' },
-                    { id: '4', folio: 'INV-2024004', unidad: 'C-201', concepto: 'Mantenimiento Marzo 2024', monto: 3100, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2024-03-01' }
-                ])
+                const allDemoInvoices = [
+                    { id: '1', folio: 'FAC-DEMO0001', unidad: 'A-101', concepto: 'Mantenimiento Enero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-01-10', fecha: '2026-01-01T08:00:00.000Z' },
+                    { id: '2', folio: 'FAC-DEMO0002', unidad: 'A-102', concepto: 'Mantenimiento Febrero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-02-10', fecha: '2026-02-01T08:00:00.000Z' },
+                    { id: '3', folio: 'FAC-DEMO0003', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2026', monto: 2800, paid_amount: 0, estado: 'overdue', telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2026-03-10', fecha: '2026-03-01T08:00:00.000Z' },
+                    { id: '4', folio: 'FAC-DEMO0004', unidad: 'C-201', concepto: 'Mantenimiento Abril 2026', monto: 3100, paid_amount: 3100, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-04-10', fecha: '2026-04-01T08:00:00.000Z' },
+                    { id: '5', folio: 'FAC-DEMO0005', unidad: 'D-404', concepto: 'Mantenimiento Mayo 2026', monto: 3500, paid_amount: 1500, estado: 'pending', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-05-10', fecha: '2026-05-01T08:00:00.000Z' },
+                ]
+
+                if (selectedPeriod.month === -1) {
+                    setRecentInvoices(allDemoInvoices)
+                } else {
+                    const filtered = allDemoInvoices.filter(inv => {
+                        const date = new Date(inv.fecha)
+                        return date.getMonth() === selectedPeriod.month && date.getFullYear() === selectedPeriod.year
+                    })
+                    setRecentInvoices(filtered)
+                }
                 setLoading(false)
                 return
             }
 
-            const { data: invoicesData, error: invoiceError } = await supabase
-                .from('invoices')
-                .select('*')
+            // Real DB query
+            let query = supabase
+                .from('resident_invoices')
+                .select(`
+                    id, amount, balance_due, status, created_at, due_date, description, invoice_type,
+                    residents (
+                        first_name, last_name, phone,
+                        units (unit_number)
+                    )
+                `)
                 .eq('condominium_id', condoId)
-                .gte('created_at', new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString())
-                .lte('created_at', new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString())
+
+            if (selectedPeriod.month !== -1) {
+                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
+                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
+                query = query.gte('created_at', startOfPeriod).lte('created_at', endOfPeriod)
+                query = query.eq('invoice_type', 'maintenance')
+            }
+
+            const { data: invoicesData, error: invoiceError } = await query
                 .order('created_at', { ascending: false })
-                .limit(50)
+                .limit(100)
 
             if (invoiceError) {
-                console.error('Error fetching recent invoices details:', JSON.stringify(invoiceError, null, 2))
+                console.error('Error fetching resident_invoices details:', JSON.stringify(invoiceError, null, 2))
                 return
             }
 
-            const { data: unitsData } = await supabase.from('units').select('*').eq('condominium_id', condoId)
-            const { data: residentsData } = await supabase.from('residents').select('*').eq('condominium_id', condoId)
-
             if (invoicesData) {
                 const mappedInvoices = invoicesData.map((inv: any) => {
-                    let unitName = 'S/N'
-                    let phone = ''
-                    
-                    if (inv.unit_id && unitsData) {
-                        const unit = unitsData.find(u => u.id === inv.unit_id)
-                        unitName = unit?.name || unit?.number || unit?.unit_number || 'S/N'
-                        const res = residentsData?.find(r => r.unit_number === unitName || r.unit_id === unit?.id)
-                        if (res) phone = res.phone || res.whatsapp || ''
-                    } else if (inv.resident_id && residentsData) {
-                        const res = residentsData.find(r => r.id === inv.resident_id)
-                        unitName = res?.unit_number || res?.unit_name || 'S/N'
-                        phone = res?.phone || res?.whatsapp || ''
-                    }
+                    const resident = inv.residents
+                    const unitName = resident?.units?.unit_number || 'S/N'
+                    const phone = resident?.phone || ''
+                    const folio = `FAC-${inv.id.substring(0, 8).toUpperCase()}`
+                    const concept = inv.description || 'Cuota de mantenimiento'
 
-                    const rawFolio = inv.folio || inv.id || ''
-                    const mappedFolio = rawFolio.length > 15 ? rawFolio.substring(0,8).toUpperCase() : rawFolio
-                    const mappedConcept = inv.description || inv.concept || 'Sin concepto'
+                    // paid_amount calculated from amount - balance_due
+                    const paidAmount = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
 
                     const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.created_at)
                     const today = new Date()
@@ -332,19 +365,26 @@ export function FinanceTab() {
                         delayDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
                     }
 
+                    const isPaid = inv.status === 'paid'
+                    const isPartiallyPaid = inv.status !== 'paid' && Number(inv.balance_due) > 0 && Number(inv.balance_due) < Number(inv.amount)
+                    const monto = isPaid 
+                        ? inv.amount 
+                        : (isPartiallyPaid ? (Number(inv.amount) - Number(inv.balance_due)) : (inv.balance_due ?? inv.amount))
+
                     return {
                         id: inv.id,
-                        folio: mappedFolio,
+                        folio,
                         unidad: unitName,
-                        concepto: mappedConcept,
-                        monto: inv.amount,
-                        paid_amount: Number(inv.paid_amount) || 0,
+                        concepto: concept,
+                        monto: monto,
+                        paid_amount: paidAmount,
                         estado: inv.status,
                         telefono: phone,
                         atraso: delayDays,
-                        reminder_sent: inv.reminder_sent,
+                        reminder_sent: false,
                         due_date: dueDate.toISOString(),
-                        fecha: inv.created_at
+                        fecha: inv.created_at,
+                        resident_name: resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente',
                     }
                 })
                 
@@ -371,10 +411,12 @@ export function FinanceTab() {
                     <div className="relative" ref={periodMenuRef}>
                         <Button 
                             variant="outline" 
-                            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                            className="border-zinc-700/80 bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-white transition-all duration-200 shadow-md flex items-center gap-2"
                             onClick={() => setIsPeriodMenuOpen(!isPeriodMenuOpen)}
                         >
-                            <Filter className="mr-2 h-4 w-4" /> Periodo: {selectedPeriod.label}
+                            <Calendar className="h-4 w-4 text-indigo-400" />
+                            <span>Periodo: {selectedPeriod.label}</span>
+                            <ChevronDown className={`h-3.5 w-3.5 text-zinc-500 transition-transform duration-200 ${isPeriodMenuOpen ? 'rotate-180 text-white' : ''}`} />
                         </Button>
                         <AnimatePresence>
                             {isPeriodMenuOpen && (
@@ -382,21 +424,42 @@ export function FinanceTab() {
                                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    transition={{ duration: 0.15 }}
-                                    className="absolute left-0 mt-2 w-48 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-2xl z-50 ring-1 ring-white/5"
+                                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                                    className="absolute left-0 mt-2 w-64 rounded-2xl border border-zinc-800 bg-zinc-950/95 backdrop-blur-md p-2 shadow-2xl z-50 ring-1 ring-white/5"
                                 >
-                                    {periods.map((p) => (
-                                        <button 
-                                            key={p.label}
-                                            onClick={() => {
-                                                setSelectedPeriod(p)
-                                                setIsPeriodMenuOpen(false)
-                                            }}
-                                            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-zinc-900 hover:text-white ${selectedPeriod.label === p.label ? 'bg-zinc-900 text-white' : 'text-zinc-300'}`}
-                                        >
-                                            {p.label}
-                                        </button>
-                                    ))}
+                                    {/* Option: Todos los meses */}
+                                    <button 
+                                        onClick={() => {
+                                            setSelectedPeriod({ month: -1, year: new Date().getFullYear(), label: 'Todos los meses' })
+                                            setIsPeriodMenuOpen(false)
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150 ${selectedPeriod.month === -1 ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-500/20' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'}`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className={`h-1.5 w-1.5 rounded-full ${selectedPeriod.month === -1 ? 'bg-white' : 'bg-zinc-500'}`} />
+                                            <span>Todos los meses</span>
+                                        </div>
+                                        <span className="text-xs opacity-60">Anual</span>
+                                    </button>
+
+                                    <div className="h-px bg-zinc-800/60 my-1.5" />
+
+                                    {/* Monthly Grid */}
+                                    <div className="grid grid-cols-2 gap-1 px-1 pb-1">
+                                        {periods.filter(p => p.month !== -1).map((p) => (
+                                            <button 
+                                                key={p.label}
+                                                onClick={() => {
+                                                    setSelectedPeriod(p)
+                                                    setIsPeriodMenuOpen(false)
+                                                }}
+                                                className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-all duration-150 ${selectedPeriod.month === p.month ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-500/20' : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'}`}
+                                            >
+                                                <div className={`h-1.5 w-1.5 rounded-full ${selectedPeriod.month === p.month ? 'bg-white' : 'bg-indigo-400'}`} />
+                                                <span>{p.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -599,11 +662,11 @@ export function FinanceTab() {
 
                                                                     const payload = {
                                                                         "tipo": "recordatorio",
-                                                                        "first_name": "Residente", // Name not directly in inv object, could be improved
+                                                                        "resident_name": inv.resident_name || 'Residente',
                                                                         "phone": inv.telefono || '',
                                                                         "amount": inv.monto - inv.paid_amount, // Saldo real pendiente
                                                                         "due_date": inv.due_date,
-                                                                        "payment_link": null, // Not easily available here
+                                                                        "payment_link": `${window.location.origin}/residente/payments/${inv.id}`,
                                                                         "condominium": "", // Not easily available here
                                                                         "unit": inv.unidad || 'S/N'
                                                                     }
@@ -615,9 +678,6 @@ export function FinanceTab() {
                                                                     })
                                                                     
                                                                     if (res.ok) {
-                                                                        if (!condoId.startsWith('demo-')) {
-                                                                            await supabase.from('invoices').update({ reminder_sent: true }).eq('id', inv.id)
-                                                                        }
                                                                         setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, reminder_sent: true} : p))
                                                                         showToast('Recordatorio de Whatsapp enviado')
                                                                     } else {
@@ -650,7 +710,10 @@ export function FinanceTab() {
                                                                     setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
                                                                     return
                                                                 }
-                                                                const { error } = await supabase.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString(), paid_amount: inv.monto }).eq('id', inv.id)
+                                                                const { error } = await supabase
+                                                                    .from('resident_invoices')
+                                                                    .update({ status: 'paid', balance_due: 0 })
+                                                                    .eq('id', inv.id)
                                                                 if (!error) {
                                                                     setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
                                                                     fetchBillingData() // Actualiza KPIs arrriba

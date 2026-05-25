@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { createClient } from '@/utils/supabase/client'
-import { differenceInDays, parseISO } from 'date-fns'
 
 interface AgingData {
     name: string
@@ -21,12 +20,11 @@ export function AgingSummary({ condominiumId }: { condominiumId: string }) {
 
     useEffect(() => {
         if (!condominiumId || condominiumId.startsWith('demo-')) {
-            // Mock data
             setData([
-                { name: '1-15 días', value: 3500, color: '#10b981', description: 'Deuda corriente' }, // emerald-500
-                { name: '16-30 días', value: 8500, color: '#eab308', description: 'Atraso leve' }, // yellow-500
-                { name: '31-60 días', value: 12000, color: '#f97316', description: 'Atraso moderado' }, // orange-500
-                { name: '+60 días', value: 4900, color: '#f43f5e', description: 'Cartera vencida crítica' } // rose-500
+                { name: '1-15 días', value: 3500, color: '#10b981', description: 'Deuda corriente' },
+                { name: '16-30 días', value: 8500, color: '#eab308', description: 'Atraso leve' },
+                { name: '31-60 días', value: 12000, color: '#f97316', description: 'Atraso moderado' },
+                { name: '+60 días', value: 4900, color: '#f43f5e', description: 'Cartera vencida crítica' }
             ])
             setTotalDebt(28900)
             setLoading(false)
@@ -35,15 +33,54 @@ export function AgingSummary({ condominiumId }: { condominiumId: string }) {
 
         const fetchAging = async () => {
             try {
+                // PRIMARY: Use resident_debt_aging_v for pre-computed aging buckets
+                const { data: agingRows, error: agingError } = await supabase
+                    .from('resident_debt_aging_v')
+                    .select('deuda_total, dias_max_atraso')
+                    .eq('condominium_id', condominiumId)
+
+                if (!agingError && agingRows && agingRows.length > 0) {
+                    let buckets = [0, 0, 0, 0] // [0-15, 16-30, 31-60, 60+]
+                    let total = 0
+
+                    agingRows.forEach((row: any) => {
+                        const amount = Number(row.deuda_total || 0)
+                        if (amount <= 0) return
+
+                        const days = Number(row.dias_max_atraso || 0)
+                        total += amount
+
+                        if (days <= 15) {
+                            buckets[0] += amount
+                        } else if (days <= 30) {
+                            buckets[1] += amount
+                        } else if (days <= 60) {
+                            buckets[2] += amount
+                        } else {
+                            buckets[3] += amount
+                        }
+                    })
+
+                    setData([
+                        { name: '0-15 días', value: buckets[0], color: '#10b981', description: 'Deuda corriente' },
+                        { name: '16-30 días', value: buckets[1], color: '#eab308', description: 'Atraso leve' },
+                        { name: '31-60 días', value: buckets[2], color: '#f97316', description: 'Atraso moderado' },
+                        { name: '+60 días', value: buckets[3], color: '#f43f5e', description: 'Cartera vencida crítica' }
+                    ])
+                    setTotalDebt(total)
+                    return
+                }
+
+                // FALLBACK: Calculate from resident_invoices directly
                 const { data: invoices, error } = await supabase
-                    .from('invoices')
+                    .from('resident_invoices')
                     .select('amount, balance_due, due_date, status')
                     .eq('condominium_id', condominiumId)
                     .or('status.eq.pending,status.eq.overdue,balance_due.gt.0')
 
                 if (error) throw error
 
-                let buckets = [0, 0, 0, 0] // [1-15, 16-30, 31-60, 60+]
+                let buckets = [0, 0, 0, 0]
                 let total = 0
                 const now = new Date()
 
@@ -52,18 +89,11 @@ export function AgingSummary({ condominiumId }: { condominiumId: string }) {
                         const amount = inv.balance_due && inv.balance_due > 0 ? inv.balance_due : (inv.amount || 0)
                         if (amount <= 0) return
 
-                        const dueDate = inv.due_date ? parseISO(inv.due_date) : now
-                        // Calculate days strictly as difference from today
+                        const dueDate = inv.due_date ? new Date(inv.due_date) : now
                         let maxDays = 0
+
                         if (inv.status === 'overdue' || (inv.status === 'pending' && dueDate < now)) {
-                            maxDays = differenceInDays(now, dueDate)
-                            maxDays = Math.max(0, maxDays)
-                        } else if (inv.status === 'pending' && dueDate >= now) {
-                             // Not overdue yet, but has pending balance, count as 0-15 bucket for now
-                             maxDays = 0 
-                        } else {
-                             // Default fallback
-                             maxDays = 0
+                            maxDays = Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)))
                         }
 
                         total += amount
@@ -89,14 +119,14 @@ export function AgingSummary({ condominiumId }: { condominiumId: string }) {
                 setTotalDebt(total)
 
             } catch (err) {
-                console.error("Error fetching aging summary:", err)
+                console.error('Error fetching aging summary:', err)
             } finally {
                 setLoading(false)
             }
         }
 
         fetchAging()
-    }, [condominiumId, supabase])
+    }, [condominiumId])
 
     if (loading) {
         return (
@@ -168,7 +198,6 @@ export function AgingSummary({ condominiumId }: { condominiumId: string }) {
                                 <Tooltip content={<CustomTooltip />} />
                             </PieChart>
                         </ResponsiveContainer>
-                        {/* Center text in donut */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                             <span className="text-xs text-zinc-500 uppercase font-bold tracking-widest mt-1">Total</span>
                         </div>

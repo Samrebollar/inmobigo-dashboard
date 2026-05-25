@@ -1,20 +1,22 @@
 import { createClient } from '@/utils/supabase/client'
 import { CommunicationLog } from '@/types/residents'
-import { Invoice } from '@/types/finance'
+import { ResidentInvoice } from '@/types/finance'
 import { Resident } from '@/types/residents'
 import { differenceInDays, parseISO } from 'date-fns'
+import { buildPaymentLink, buildN8NPayload } from './legacy-sync-service'
 
 interface SmartReminderResult {
     success: boolean
     message: string
+    webhook_sent?: boolean
     log?: CommunicationLog
 }
 
 export const notificationsService = {
-    async sendSmartReminder(resident: Resident, invoices: Invoice[]): Promise<SmartReminderResult> {
+    async sendSmartReminder(resident: Resident, invoices: ResidentInvoice[]): Promise<SmartReminderResult> {
         const supabase = createClient()
 
-        // 1. Identify Overdue Invoices
+        // 1. Identificar facturas vencidas
         const overdueInvoices = invoices.filter(inv => {
             if (inv.status === 'paid') return false
             if (inv.status === 'overdue') return true
@@ -26,27 +28,25 @@ export const notificationsService = {
             return { success: false, message: 'No hay facturas vencidas para enviar recordatorio.' }
         }
 
-        // 2. Find Oldest Invoice to determine severity
+        // 2. Encontrar factura más antigua para determinar severidad
         const oldestInvoice = overdueInvoices.reduce((prev, curr) =>
             new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
         )
 
         const daysOverdue = differenceInDays(new Date(), parseISO(oldestInvoice.due_date))
 
-        // 3. Determine Message Type
+        // 3. Determinar tipo de mensaje
         let messageType: 'suave' | 'firme' | 'formal' | 'escalar' = 'suave'
         if (daysOverdue >= 30) messageType = 'escalar'
         else if (daysOverdue >= 15) messageType = 'formal'
         else if (daysOverdue >= 3) messageType = 'firme'
-        else if (daysOverdue >= 1) messageType = 'suave'
 
         if (daysOverdue < 1) {
             return { success: false, message: 'La factura aún no tiene suficientes días de atraso.' }
         }
 
-        // 4. Check for Idempotency (Prevent duplicate of same type today)
+        // 4. Idempotencia: evitar duplicados del mismo tipo hoy
         const startOfDay = new Date().toISOString().split('T')[0]
-        // Note: This query requires the table to exist
         const { data: existingLogs } = await supabase
             .from('communication_logs')
             .select('*')
@@ -58,57 +58,63 @@ export const notificationsService = {
         if (existingLogs && existingLogs.length > 0) {
             return {
                 success: false,
-                message: `Msj "${messageType}" ya enviado hoy.`
+                message: `Msj "${messageType}" ya enviado hoy.`,
             }
         }
 
-        // 5. Prepare Payload for n8n
-        const payload = {
+        // 5. Construir payload para n8n — compatible con estructura legacy
+        // payment_link generado dinámicamente (no existe columna en BD)
+        const payload = buildN8NPayload({
+            tipo: 'recordatorio',
+            residentName: `${resident.first_name} ${resident.last_name}`,
+            phone: resident.phone || '',
+            amount: oldestInvoice.amount,
+            dueDate: oldestInvoice.due_date,
+            residentInvoiceId: oldestInvoice.id,
+            daysOverdue,
+        })
+
+        // Agregar campos extra para n8n de recordatorio
+        const fullPayload = {
+            ...payload,
             resident_id: resident.id,
-            resident_name: `${resident.first_name} ${resident.last_name}`,
-            resident_phone: resident.phone,
             resident_email: resident.email,
             invoice_id: oldestInvoice.id,
-            invoice_folio: oldestInvoice.folio,
-            amount: oldestInvoice.amount,
-            due_date: oldestInvoice.due_date,
-            days_overdue: daysOverdue,
-            message_type: messageType
+            invoice_folio: oldestInvoice.folio || payload.folio,
+            message_type: messageType,
         }
 
+        let webhookSent = false
         try {
-            // 6. Send to n8n
-            console.log('Sending to n8n:', payload) // Debug log
-
+            // 6. Enviar a n8n
             const n8nUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL
 
             if (n8nUrl) {
                 try {
-                    await fetch(n8nUrl, {
+                    const response = await fetch(n8nUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(fullPayload),
                     })
+                    webhookSent = response.ok
                 } catch (fetchError) {
                     console.error('Error contacting n8n:', fetchError)
-                    // We continue to save the log even if n8n fails, marking it perhaps?
-                    // For now, just log the error.
                 }
             } else {
                 console.warn('NEXT_PUBLIC_N8N_WEBHOOK_URL is not set. Skipping webhook send.')
             }
 
-            // 6. Log to Database
+            // 7. Registrar en communication_logs
             const logEntry = {
-                organization_id: resident.organization_id || oldestInvoice.organization_id, // Fallback
+                organization_id: resident.organization_id || oldestInvoice.organization_id,
                 resident_id: resident.id,
                 invoice_id: oldestInvoice.id,
-                folio: oldestInvoice.folio,
+                folio: oldestInvoice.folio || payload.folio,
                 type: 'reminder',
                 method: 'n8n',
                 message_type: messageType,
                 days_overdue: daysOverdue,
-                metadata: payload
+                metadata: fullPayload,
             }
 
             const { data: logData, error: logError } = await supabase
@@ -121,10 +127,10 @@ export const notificationsService = {
 
             return {
                 success: true,
+                webhook_sent: webhookSent,
                 message: `Recordatorio "${messageType}" enviado.`,
-                log: logData
+                log: logData,
             }
-
         } catch (error: any) {
             console.error('Error sending smart reminder:', error)
             return { success: false, message: `Error: ${error.message}` }
@@ -141,9 +147,8 @@ export const notificationsService = {
 
         if (error) {
             console.error('Error fetching logs:', error)
-            console.error('Error details:', JSON.stringify(error, null, 2))
             return []
         }
         return data || []
-    }
+    },
 }

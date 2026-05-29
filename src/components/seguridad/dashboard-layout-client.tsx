@@ -64,6 +64,35 @@ export function DashboardLayoutClient({
         }
     }, [isSidebarOpen])
 
+    // Bulletproof fix to prevent libraries/modals from leaving document.body unclickable (pointer-events: none) or scroll-locked
+    useEffect(() => {
+        const unlock = () => {
+            if (document.body.style.pointerEvents === 'none') {
+                document.body.style.pointerEvents = 'auto'
+            }
+            if (document.body.hasAttribute('data-scroll-locked')) {
+                document.body.removeAttribute('data-scroll-locked')
+            }
+        }
+        
+        unlock()
+        
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes') {
+                    unlock()
+                }
+            })
+        })
+        
+        observer.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['style', 'data-scroll-locked']
+        })
+        
+        return () => observer.disconnect()
+    }, [pathname])
+
     return (
         <div className="flex h-screen w-full bg-black text-white overflow-hidden pointer-events-auto">
             {/* Desktop Sidebar */}

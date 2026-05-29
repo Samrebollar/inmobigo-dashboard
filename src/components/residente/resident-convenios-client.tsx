@@ -451,12 +451,12 @@ export function ResidentConveniosClient({
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="relative bg-zinc-900/40 backdrop-blur-xl border border-zinc-800/80 rounded-[3rem] p-12 shadow-2xl text-center overflow-hidden max-w-2xl mx-auto"
+                    className="relative bg-zinc-900/30 backdrop-blur-xl border border-white/5 rounded-[3rem] p-12 shadow-2xl text-center overflow-hidden max-w-2xl mx-auto ring-1 ring-white/5 shadow-[0_0_50px_rgba(99,102,241,0.02)]"
                 >
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none animate-pulse-soft" />
                     
-                    <div className="h-20 w-20 bg-zinc-950 border border-zinc-850 rounded-[2rem] flex items-center justify-center text-zinc-500 mx-auto mb-6 shadow-inner">
-                        <ClipboardList size={36} />
+                    <div className="h-20 w-20 bg-zinc-950 border border-white/5 rounded-[2rem] flex items-center justify-center text-zinc-400 mx-auto mb-6 shadow-inner ring-1 ring-white/5">
+                        <ClipboardList size={36} className="text-indigo-400" />
                     </div>
 
                     <h2 className="text-2xl font-black text-white tracking-tight">No tienes convenios activos actualmente</h2>
@@ -478,39 +478,39 @@ export function ResidentConveniosClient({
                     {/* 1. KPIs Section */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         {/* KPI 1: Deuda Total */}
-                        <div className="relative group bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-300 hover:border-zinc-700/50">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 text-violet-400">
+                        <div className="relative group bg-gradient-to-br from-zinc-900/40 to-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-500 hover:border-violet-500/40 hover:ring-1 hover:ring-violet-500/30 hover:shadow-[0_20px_40px_-15px_rgba(139,92,246,0.15)] ring-1 ring-white/5 hover:-translate-y-1">
+                            <div className="absolute top-0 right-0 p-4 opacity-[0.03] text-violet-400 group-hover:opacity-20 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500">
                                 <DollarSign size={48} />
                             </div>
                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Deuda Total
+                                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse shadow-[0_0_8px_rgba(167,139,250,0.5)]" /> Deuda Total
                             </p>
-                            <p className="text-3xl font-black text-white tracking-tight">{formatCurrency(totalDebt)}</p>
-                            <p className="text-[10px] text-zinc-600 mt-1.5 font-semibold">Total a financiar solicitado</p>
+                            <p className="text-3xl font-black text-white tracking-tight group-hover:text-violet-300 transition-colors duration-300">{formatCurrency(totalDebt)}</p>
+                            <p className="text-[10px] text-zinc-550 mt-1.5 font-semibold transition-colors duration-300 group-hover:text-zinc-400">Total a financiar solicitado</p>
                         </div>
 
                         {/* KPI 2: Saldo Restante */}
-                        <div className="relative group bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-300 hover:border-zinc-700/50">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 text-amber-500">
+                        <div className="relative group bg-gradient-to-br from-zinc-900/40 to-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-500 hover:border-amber-500/40 hover:ring-1 hover:ring-amber-500/30 hover:shadow-[0_20px_40px_-15px_rgba(245,158,11,0.15)] ring-1 ring-white/5 hover:-translate-y-1">
+                            <div className="absolute top-0 right-0 p-4 opacity-[0.03] text-amber-500 group-hover:opacity-20 group-hover:scale-110 group-hover:-rotate-6 transition-all duration-500">
                                 <TrendingDown size={48} />
                             </div>
                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Saldo Restante
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-550 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" /> Saldo Restante
                             </p>
-                            <p className="text-3xl font-black text-amber-500 tracking-tight">{formatCurrency(remainingBalance)}</p>
-                            <p className="text-[10px] text-zinc-600 mt-1.5 font-semibold">Monto restante por pagar</p>
+                            <p className="text-3xl font-black text-amber-500 tracking-tight group-hover:text-amber-400 transition-colors duration-300">{formatCurrency(remainingBalance)}</p>
+                            <p className="text-[10px] text-zinc-550 mt-1.5 font-semibold transition-colors duration-300 group-hover:text-zinc-400">Monto restante por pagar</p>
                         </div>
 
                         {/* KPI 3: Total Pagado */}
-                        <div className="relative group bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-300 hover:border-zinc-700/50">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 text-emerald-500">
+                        <div className="relative group bg-gradient-to-br from-zinc-900/40 to-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-500 hover:border-emerald-500/40 hover:ring-1 hover:ring-emerald-500/30 hover:shadow-[0_20px_40px_-15px_rgba(16,185,129,0.15)] ring-1 ring-white/5 hover:-translate-y-1">
+                            <div className="absolute top-0 right-0 p-4 opacity-[0.03] text-emerald-500 group-hover:opacity-20 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500">
                                 <CheckCircle2 size={48} />
                             </div>
                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Total Pagado
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> Total Pagado
                             </p>
-                            <p className="text-3xl font-black text-emerald-400 tracking-tight">{formatCurrency(totalPaid)}</p>
-                            <p className="text-[10px] text-zinc-600 mt-1.5 font-semibold">
+                            <p className="text-3xl font-black text-emerald-400 tracking-tight group-hover:text-emerald-300 transition-colors duration-300">{formatCurrency(totalPaid)}</p>
+                            <p className="text-[10px] text-zinc-550 mt-1.5 font-semibold transition-colors duration-300 group-hover:text-zinc-400">
                                 {installments.length > 0 
                                     ? `${paidCount} de ${installments.length} cuotas cubiertas`
                                     : 'Aún sin cuotas pagadas'}
@@ -518,19 +518,19 @@ export function ResidentConveniosClient({
                         </div>
 
                         {/* KPI 4: Próximo Vencimiento */}
-                        <div className="relative group bg-zinc-900/40 backdrop-blur-md border border-zinc-800 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-300 hover:border-zinc-700/50">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 text-indigo-400">
+                        <div className="relative group bg-gradient-to-br from-zinc-900/40 to-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-[2.2rem] p-6 overflow-hidden transition-all duration-500 hover:border-indigo-500/40 hover:ring-1 hover:ring-indigo-500/30 hover:shadow-[0_20px_40px_-15px_rgba(99,102,241,0.15)] ring-1 ring-white/5 hover:-translate-y-1">
+                            <div className="absolute top-0 right-0 p-4 opacity-[0.03] text-indigo-400 group-hover:opacity-20 group-hover:scale-110 group-hover:-rotate-6 transition-all duration-500">
                                 <Calendar size={48} />
                             </div>
                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Próximo Vencimiento
+                                <span className="h-1.5 w-1.5 rounded-full bg-indigo-450 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.5)]" /> Próximo Vencimiento
                             </p>
-                            <p className="text-lg font-black text-white tracking-tight truncate pt-1">
+                            <p className="text-lg font-black text-white tracking-tight truncate pt-1 group-hover:text-indigo-300 transition-colors duration-300">
                                 {nextUnpaidInstallment 
                                     ? format(new Date(nextUnpaidInstallment.due_date), 'd MMM, yyyy', { locale: es }) 
                                     : activeAgreement.status === 'pending' ? 'Pendiente aprobación' : 'Sin pendientes 🎉'}
                             </p>
-                            <p className="text-[10px] text-zinc-600 mt-2 font-semibold">
+                            <p className="text-[10px] text-zinc-550 mt-2 font-semibold transition-colors duration-300 group-hover:text-zinc-400">
                                 {nextUnpaidInstallment 
                                     ? `Cuota #${nextUnpaidInstallment.installment_number} por ${formatCurrency(nextUnpaidInstallment.amount)}` 
                                     : 'Todo al corriente'}
@@ -539,92 +539,72 @@ export function ResidentConveniosClient({
                     </div>
 
                     {/* Progress Indicator Card */}
-                    <div className="bg-zinc-900/20 border border-zinc-800/60 rounded-[2rem] p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 backdrop-blur-md shadow-lg">
-                        <div className="space-y-1.5 flex-1">
+                    <div className="relative group/progress bg-gradient-to-r from-zinc-900/40 to-black/20 border border-white/5 rounded-[2rem] p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 backdrop-blur-xl shadow-2xl ring-1 ring-white/5 transition-all duration-500 hover:border-purple-500/40 hover:ring-1 hover:ring-purple-500/30 hover:shadow-[0_20px_50px_-15px_rgba(168,85,247,0.15)] hover:-translate-y-0.5">
+                        <div className="space-y-2 flex-1">
                             <div className="flex justify-between items-center text-xs font-bold mb-1">
-                                <span className="text-zinc-400 uppercase tracking-widest">Progreso del Convenio</span>
-                                <span className="text-indigo-400">{progressPercentage}% cubierto</span>
+                                <span className="text-zinc-400 uppercase tracking-[0.1em] group-hover/progress:text-zinc-300 transition-colors">Progreso del Convenio</span>
+                                <span className="text-indigo-400 font-black group-hover/progress:text-purple-400 transition-colors">{progressPercentage}% cubierto</span>
                             </div>
-                            <div className="w-full bg-zinc-950/80 rounded-full h-3.5 border border-zinc-850 overflow-hidden relative">
+                            <div className="w-full bg-zinc-950/40 rounded-full h-3.5 border border-white/5 overflow-hidden relative shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
                                 <motion.div 
                                     initial={{ width: 0 }}
                                     animate={{ width: `${progressPercentage}%` }}
-                                    transition={{ duration: 0.8, ease: 'easeOut' }}
-                                    className="bg-gradient-to-r from-indigo-600 to-violet-500 h-full rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                                />
+                                    transition={{ duration: 1.2, ease: 'easeInOut' }}
+                                    className="bg-gradient-to-r from-indigo-600 via-purple-500 to-pink-500 h-full rounded-full relative"
+                                >
+                                    <div className="absolute inset-0 bg-white/20 animate-shimmer bg-[length:200%_auto]" />
+                                    {progressPercentage > 0 && (
+                                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_10px_#fff] animate-pulse" />
+                                    )}
+                                </motion.div>
                             </div>
                         </div>
-                        <div className="text-left md:text-right shrink-0 bg-zinc-950/40 px-6 py-3 rounded-2xl border border-zinc-850">
-                            <span className="text-[9px] text-zinc-500 font-extrabold uppercase tracking-widest block">Cuotas Cubiertas</span>
-                            <span className="text-base font-black text-white">{paidCount} de {installments.length} cubiertas</span>
+                        <div className="text-left md:text-right shrink-0 bg-zinc-950/60 px-6 py-4 rounded-2xl border border-white/5 transition-all hover:border-purple-500/30 hover:bg-zinc-900/60 group/box">
+                            <span className="text-[9px] text-zinc-550 font-extrabold uppercase tracking-widest block mb-0.5 group-hover/box:text-purple-400 transition-colors">Cuotas Cubiertas</span>
+                            <span className="text-lg font-black text-white">{paidCount} <span className="text-zinc-500 font-medium text-sm">de</span> {installments.length} <span className="text-zinc-500 font-medium text-xs">cubiertas</span></span>
                         </div>
                     </div>
 
-                    {/* Proposal & Details */}
-                    <div className="bg-zinc-900/20 border border-zinc-800/60 rounded-[2.2rem] p-6 md:p-8 space-y-4 backdrop-blur-md shadow-lg">
-                        <div className="flex items-center gap-2 pb-3 border-b border-zinc-800/35">
-                            <FileText size={16} className="text-indigo-400" />
-                            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Detalles de la propuesta y comentarios</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-xs">
-                            <div className="space-y-2">
-                                <p className="text-[9px] text-zinc-500 font-extrabold uppercase tracking-widest">Plan Propuesto</p>
-                                <p className="text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed bg-zinc-950/30 p-4 rounded-xl border border-zinc-900">
-                                    {activeAgreement.agreement_details || 'Sin detalles propuestos.'}
-                                </p>
-                            </div>
-                            <div className="space-y-2">
-                                <p className="text-[9px] text-zinc-500 font-extrabold uppercase tracking-widest">Tus comentarios</p>
-                                <p className="text-zinc-400 font-medium italic leading-relaxed bg-zinc-950/30 p-4 rounded-xl border border-zinc-900">
-                                    {activeAgreement.comments ? `"${activeAgreement.comments}"` : 'Sin comentarios adjuntos.'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Split View: Calendar (Left) & Timeline (Right) */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        
-                        {/* Calendario de Pagos Table */}
-                        <div className="lg:col-span-8 space-y-5">
+                    {/* Calendario de Pagos Table */}
+                    <div className="space-y-5 w-full">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2.5">
-                                    <CreditCard size={18} className="text-indigo-400" />
+                                    <CreditCard size={18} className="text-indigo-450" />
                                     Calendario de Pagos
                                 </h2>
-                                <span className="text-xs text-zinc-500 font-bold bg-zinc-950/40 px-3 py-1 rounded-lg border border-zinc-900">
+                                <span className="text-xs text-zinc-400 font-bold bg-zinc-900/50 px-3.5 py-1 rounded-xl border border-white/5 shadow-md">
                                     {installments.length} cuotas
                                 </span>
                             </div>
 
                             {loading ? (
-                                <div className="py-20 flex flex-col items-center justify-center border border-zinc-800/40 rounded-[2rem] bg-zinc-900/10 space-y-3">
+                                <div className="py-20 flex flex-col items-center justify-center border border-white/5 rounded-[2rem] bg-zinc-900/10 space-y-3">
                                     <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
                                     <p className="text-xs text-zinc-500">Cargando calendario de cuotas...</p>
                                 </div>
                             ) : installments.length === 0 ? (
-                                <div className="py-16 px-6 text-center border border-dashed border-zinc-800 rounded-[2rem] bg-zinc-900/10">
-                                    <div className="h-12 w-12 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center justify-center text-zinc-500 mx-auto mb-4">
-                                        <Info size={22} />
+                                <div className="py-16 px-6 text-center border border-dashed border-white/10 rounded-[2rem] bg-zinc-900/10">
+                                    <div className="h-12 w-12 bg-zinc-950 border border-white/5 rounded-xl flex items-center justify-center text-zinc-500 mx-auto mb-4">
+                                        <Info size={22} className="text-indigo-400" />
                                     </div>
                                     <h3 className="text-zinc-400 font-bold text-sm">No hay cuotas generadas</h3>
-                                    <p className="text-zinc-600 text-xs mt-1.5 max-w-sm mx-auto leading-relaxed">
+                                    <p className="text-zinc-650 text-xs mt-1.5 max-w-sm mx-auto leading-relaxed">
                                         {activeAgreement.status === 'pending'
                                             ? 'Este convenio está pendiente de aprobación por parte de la administración. El calendario oficial de cuotas se generará automáticamente en cuanto la propuesta sea aprobada.'
                                             : 'No se encontraron cuotas para este convenio.'}
                                     </p>
                                 </div>
                             ) : (
-                                <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2rem] overflow-hidden shadow-inner backdrop-blur-md">
+                                <div className="bg-zinc-900/10 border border-white/5 rounded-[2rem] overflow-hidden shadow-2xl backdrop-blur-xl ring-1 ring-white/5">
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="border-b border-zinc-850/80 bg-zinc-900/40">
+                                                <tr className="border-b border-white/5 bg-white/[0.02]">
                                                     <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Cuota</th>
                                                     <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Vencimiento</th>
                                                     <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Monto</th>
                                                     <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Estado</th>
-                                                    <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-right">Acciones</th>
+                                                    <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-center">Acciones</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-zinc-900/60">
@@ -648,8 +628,8 @@ export function ResidentConveniosClient({
                                                                     {statusStyle.label}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-6 py-4 text-right">
-                                                                <div className="flex items-center justify-end gap-2">
+                                                            <td className="px-6 py-4 text-center">
+                                                                <div className="flex items-center justify-center gap-2">
                                                                     {inst.status !== 'paid' ? (
                                                                         <>
                                                                             {/* Pagar button */}
@@ -672,21 +652,6 @@ export function ResidentConveniosClient({
                                                                             >
                                                                                 <Upload size={12} />
                                                                                 <span>Subir comprobante</span>
-                                                                            </button>
-
-                                                                            {/* Recordatorio button */}
-                                                                            <button
-                                                                                disabled={isProcessing}
-                                                                                onClick={() => handleSendReminder(inst)}
-                                                                                className="h-8 px-2.5 bg-zinc-900/60 hover:bg-zinc-800/80 text-zinc-400 hover:text-white border border-zinc-800 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
-                                                                                title="Enviarte recordatorio por WhatsApp"
-                                                                            >
-                                                                                {isProcessing ? (
-                                                                                    <Loader2 size={12} className="animate-spin text-zinc-450" />
-                                                                                ) : (
-                                                                                    <Send size={12} />
-                                                                                )}
-                                                                                <span>Recordatorio</span>
                                                                             </button>
                                                                         </>
                                                                     ) : (
@@ -712,45 +677,64 @@ export function ResidentConveniosClient({
                             )}
                         </div>
 
-                        {/* History / Timeline Log */}
-                        <div className="lg:col-span-4 space-y-5">
-                            <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2.5">
-                                <History size={18} className="text-indigo-400" />
-                                Historial del Convenio
-                            </h2>
+                    {/* History / Timeline Log - Moved to Bottom */}
+                    <div className="space-y-5 w-full">
+                        <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2.5">
+                            <History size={18} className="text-indigo-400" />
+                            Historial del Convenio
+                        </h2>
 
-                            <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2rem] p-5 relative overflow-hidden backdrop-blur-md max-h-[500px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-zinc-950/20 [&::-webkit-scrollbar-thumb]:bg-zinc-800 [&::-webkit-scrollbar-thumb]:rounded-full shadow-inner">
-                                {timelineEvents.length === 0 ? (
-                                    <p className="text-xs text-zinc-500 text-center py-8">Sin eventos registrados aún.</p>
-                                ) : (
-                                    <div className="relative pl-4 border-l border-zinc-800/80 space-y-6">
-                                        {timelineEvents.map((evt, idx) => {
-                                            const IconComponent = evt.icon
-                                            return (
-                                                <div key={evt.id || idx} className="relative group/item">
-                                                    {/* Icon Dot */}
-                                                    <div className={`absolute -left-[25px] top-0 h-[18px] w-[18px] rounded-full border flex items-center justify-center shadow-md ${evt.color}`}>
-                                                        <IconComponent size={10} />
-                                                    </div>
-
-                                                    {/* Details */}
-                                                    <div className="space-y-1">
-                                                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block leading-none">
-                                                            {format(new Date(evt.date), "d MMM, yyyy - h:mm a", { locale: es })}
-                                                        </span>
-                                                        <h4 className="text-xs font-black text-white leading-tight">
-                                                            {evt.title}
-                                                        </h4>
-                                                        <p className="text-[11px] text-zinc-400 leading-normal font-medium">
-                                                            {evt.description}
-                                                        </p>
-                                                    </div>
+                        <div className="bg-zinc-900/10 border border-white/5 rounded-[2rem] p-5 relative overflow-hidden backdrop-blur-xl max-h-[500px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-zinc-950/20 [&::-webkit-scrollbar-thumb]:bg-zinc-800 [&::-webkit-scrollbar-thumb]:rounded-full shadow-inner ring-1 ring-white/5 shadow-[0_0_50px_rgba(99,102,241,0.01)]">
+                            {timelineEvents.length === 0 ? (
+                                <p className="text-xs text-zinc-500 text-center py-8">Sin eventos registrados aún.</p>
+                            ) : (
+                                <motion.div 
+                                    variants={{
+                                        hidden: { opacity: 0 },
+                                        show: {
+                                            opacity: 1,
+                                            transition: {
+                                                staggerChildren: 0.08
+                                            }
+                                        }
+                                    }}
+                                    initial="hidden"
+                                    animate="show"
+                                    className="relative pl-4 border-l border-white/5 space-y-6"
+                                >
+                                    {timelineEvents.map((evt, idx) => {
+                                        const IconComponent = evt.icon
+                                        return (
+                                            <motion.div 
+                                                key={evt.id || idx}
+                                                variants={{
+                                                    hidden: { opacity: 0, x: -10 },
+                                                    show: { opacity: 1, x: 0 }
+                                                }}
+                                                className="relative group/item"
+                                            >
+                                                {/* Icon Dot */}
+                                                <div className={`absolute -left-[25px] top-0 h-[18px] w-[18px] rounded-full border flex items-center justify-center shadow-md ${evt.color} transition-all duration-300 group-hover/item:scale-110`}>
+                                                    <IconComponent size={10} />
                                                 </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
+
+                                                {/* Details */}
+                                                <div className="space-y-1 pl-1">
+                                                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block leading-none">
+                                                        {format(new Date(evt.date), "d MMM, yyyy - h:mm a", { locale: es })}
+                                                    </span>
+                                                    <h4 className="text-xs font-black text-white leading-tight transition-colors group-hover/item:text-indigo-400">
+                                                        {evt.title}
+                                                    </h4>
+                                                    <p className="text-[11px] text-zinc-400 leading-normal font-medium">
+                                                        {evt.description}
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        )
+                                    })}
+                                </motion.div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -768,7 +752,7 @@ export function ResidentConveniosClient({
                         >
                             <button 
                                 onClick={() => setIsRequestModalOpen(false)}
-                                className="absolute top-6 right-6 p-2 bg-zinc-950/40 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-full border border-zinc-850 transition-colors cursor-pointer"
+                                className="absolute top-6 right-6 p-2 bg-zinc-950/40 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-full border border-white/5 transition-colors cursor-pointer"
                             >
                                 <X size={16} />
                             </button>
@@ -880,14 +864,14 @@ export function ResidentConveniosClient({
                                 </h3>
                                 <button 
                                     onClick={() => setPaymentModalInstallment(null)}
-                                    className="p-1 hover:bg-zinc-850 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                                    className="p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
                                 >
                                     <X size={16} />
                                 </button>
                             </div>
 
                             <div className="space-y-4 text-xs font-sans">
-                                <div className="p-4 bg-zinc-950/60 border border-zinc-850 rounded-2xl flex justify-between items-center shadow-inner">
+                                <div className="p-4 bg-zinc-950/60 border border-white/5 rounded-2xl flex justify-between items-center shadow-inner">
                                     <div>
                                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Cuota a pagar</p>
                                         <p className="text-sm font-black text-white">Cuota #{paymentModalInstallment.installment_number}</p>
@@ -979,14 +963,14 @@ export function ResidentConveniosClient({
                                 </h3>
                                 <button 
                                     onClick={() => setUploadModalInstallment(null)}
-                                    className="p-1 hover:bg-zinc-850 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                                    className="p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
                                 >
                                     <X size={16} />
                                 </button>
                             </div>
 
                             <div className="space-y-4 text-xs font-sans">
-                                <div className="p-3.5 bg-zinc-950/60 border border-zinc-850 rounded-2xl flex justify-between items-center shadow-inner">
+                                <div className="p-3.5 bg-zinc-950/60 border border-white/5 rounded-2xl flex justify-between items-center shadow-inner">
                                     <div>
                                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Cuota a validar</p>
                                         <p className="text-xs font-black text-white">Cuota #{uploadModalInstallment.installment_number}</p>
@@ -1105,7 +1089,7 @@ export function ResidentConveniosClient({
                                 </h3>
                                 <button 
                                     onClick={() => setReceiptModalInstallment(null)}
-                                    className="p-1 hover:bg-zinc-850 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                                    className="p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors cursor-pointer"
                                 >
                                     <X size={16} />
                                 </button>
@@ -1124,11 +1108,11 @@ export function ResidentConveniosClient({
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-3 bg-zinc-950/50 border border-zinc-850 rounded-xl">
+                                    <div className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl">
                                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Método de Pago</p>
                                         <p className="text-xs font-bold text-white">{receiptModalInstallment.payment_method || 'No especificado'}</p>
                                     </div>
-                                    <div className="p-3 bg-zinc-950/50 border border-zinc-850 rounded-xl">
+                                    <div className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl">
                                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Fecha de Registro</p>
                                         <p className="text-xs font-bold text-white">
                                             {receiptModalInstallment.paid_at 
@@ -1139,14 +1123,14 @@ export function ResidentConveniosClient({
                                 </div>
 
                                 {receiptModalInstallment.payment_reference && (
-                                    <div className="p-3 bg-zinc-950/50 border border-zinc-850 rounded-xl">
+                                    <div className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl">
                                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Referencia / Folio</p>
                                         <p className="text-xs font-mono font-bold text-white select-all">{receiptModalInstallment.payment_reference}</p>
                                     </div>
                                 )}
 
                                 {receiptModalInstallment.notes && (
-                                    <div className="p-3 bg-zinc-950/50 border border-zinc-850 rounded-xl">
+                                    <div className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl">
                                         <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Notas / Observaciones</p>
                                         <p className="text-xs text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">{receiptModalInstallment.notes}</p>
                                     </div>

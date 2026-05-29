@@ -211,6 +211,7 @@ export function CreateInvoiceModal({
             await financeService.create({
                 organization_id: organizationId,
                 condominium_id: selectedCondoId,
+                resident_id: selectedResident.id,
                 unit_id: selectedResident.unit_id,
                 amount: parseFloat(formData.amount),
                 status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',

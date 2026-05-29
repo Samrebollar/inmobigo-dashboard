@@ -17,8 +17,8 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
     return (
         <div className="min-h-screen bg-zinc-950 p-4 md:p-8 space-y-12 max-w-4xl mx-auto font-sans">
             <header className="flex flex-col space-y-6">
-                <Link href="/dashboard">
-                    <Button variant="ghost" className="text-zinc-500 hover:text-white p-0 gap-2 w-fit">
+                <Link href="/residente">
+                    <Button variant="ghost" className="text-zinc-400 hover:text-white transition-all p-0 gap-2 w-fit hover:bg-transparent">
                         <ArrowLeft size={16} /> Volver al Tablero
                     </Button>
                 </Link>
@@ -60,21 +60,38 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
                         return (
                             <motion.div 
                                 key={ann.id}
-                                initial={{ opacity: 0, y: 20 }}
+                                initial={{ opacity: 0, y: 30 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
-                                className="bg-zinc-900/30 backdrop-blur-md border border-white/5 p-8 md:p-10 rounded-[2.5rem] space-y-8 shadow-2xl hover:bg-zinc-900/50 transition-all group ring-1 ring-white/5"
+                                transition={{ type: 'spring', stiffness: 80, delay: idx * 0.05 }}
+                                className="saas-card-glow bg-gradient-to-b from-zinc-900/40 to-zinc-950/20 backdrop-blur-xl border border-white/5 p-8 md:p-10 rounded-[2rem] space-y-8 shadow-2xl hover:border-indigo-500/25 transition-all duration-500 group ring-1 ring-white/5 relative overflow-hidden"
                             >
+                                {/* Background ambient gradient per card priority / type */}
+                                {ann.priority === 'high' ? (
+                                    <div className="absolute top-0 right-0 w-48 h-48 bg-rose-500/[0.02] blur-[80px] rounded-full pointer-events-none" />
+                                ) : lowerType.includes('mantenimiento') ? (
+                                    <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/[0.02] blur-[80px] rounded-full pointer-events-none" />
+                                ) : lowerType.includes('evento') ? (
+                                    <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/[0.02] blur-[80px] rounded-full pointer-events-none" />
+                                ) : (
+                                    <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/[0.02] blur-[80px] rounded-full pointer-events-none" />
+                                )}
+
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <div className="flex gap-3">
-                                            <Badge className={cn("px-3.5 py-1.5 rounded-xl border-0 shadow-sm uppercase text-[10px] font-bold tracking-widest", catClass)}>
+                                        <div className="flex items-center gap-2">
+                                            <span className={cn("px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-white/5", catClass)}>
+                                                <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", 
+                                                    lowerType.includes('mantenimiento') ? 'bg-amber-500' : 
+                                                    lowerType.includes('urgente') ? 'bg-rose-455' : 
+                                                    lowerType.includes('evento') ? 'bg-emerald-500' : 'bg-indigo-400'
+                                                )} />
                                                 {cat}
-                                            </Badge>
+                                            </span>
                                             {ann.priority === 'high' && (
-                                                <Badge className="bg-rose-500/10 text-rose-400 border-0 text-[10px] font-bold uppercase tracking-widest">
+                                                <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping" />
                                                     Prioridad Máxima
-                                                </Badge>
+                                                </span>
                                             )}
                                         </div>
                                         <span suppressHydrationWarning className="text-[11px] text-zinc-500 font-bold uppercase tracking-[0.2em]">
@@ -100,17 +117,21 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
                                                 href={url} 
                                                 target="_blank" 
                                                 rel="noopener noreferrer"
-                                                className="block p-8 bg-zinc-950/40 border border-white/10 rounded-[2rem] hover:border-indigo-500/50 transition-all group/file relative overflow-hidden shadow-2xl ring-1 ring-white/5"
+                                                className="block p-6 bg-zinc-950/50 border border-white/5 rounded-2xl hover:border-rose-500/30 transition-all duration-300 group/file relative overflow-hidden shadow-inner ring-1 ring-white/5"
                                             >
-                                                <div className="flex items-center gap-6">
-                                                    <div className="h-16 w-16 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ring-1 ring-rose-500/20">
-                                                        <File size={32} />
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/[0.01] blur-2xl rounded-full pointer-events-none" />
+                                                <div className="flex items-center justify-between gap-6">
+                                                    <div className="flex items-center gap-4 min-w-0">
+                                                        <div className="h-12 w-12 bg-rose-500/10 text-rose-450 rounded-xl flex items-center justify-center shrink-0 ring-1 ring-rose-500/25 group-hover/file:scale-105 transition-transform duration-300">
+                                                            <File size={24} />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-base font-black text-white leading-tight">Documento Adjunto (PDF)</p>
+                                                            <p className="text-xs text-zinc-500 font-semibold truncate mt-0.5">Haga clic para ver o descargar el archivo</p>
+                                                        </div>
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-xl font-bold text-white mb-1">Documento Adjunto (PDF)</p>
-                                                        <p className="text-sm text-zinc-500 font-medium flex items-center gap-2">
-                                                            Haga clic para ver el archivo completo <ArrowRight size={14} />
-                                                        </p>
+                                                    <div className="h-8 w-8 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center text-zinc-500 group-hover/file:text-rose-450 group-hover/file:border-rose-500/30 group-hover/file:translate-x-0.5 transition-all duration-300 shrink-0">
+                                                        <ArrowRight size={14} />
                                                     </div>
                                                 </div>
                                             </a>
@@ -118,29 +139,30 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
                                     }
 
                                     return (
-                                        <div className="relative w-full max-h-[600px] rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black/40 z-10">
+                                        <div className="relative w-full max-h-[600px] rounded-2xl overflow-hidden border border-white/5 shadow-2xl bg-zinc-950/40 z-10 group/img">
                                             <img 
                                                 src={url} 
                                                 alt={ann.title}
-                                                className="w-full h-full object-contain hover:scale-[1.02] transition-transform duration-700 pointer-events-none"
+                                                className="w-full h-full object-contain group-hover/img:scale-[1.01] transition-transform duration-[1000ms] pointer-events-none"
                                                 onError={(e) => {
                                                     (e.target as any).style.display = 'none';
                                                 }}
                                             />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent pointer-events-none" />
                                         </div>
                                     )
                                 })()}
 
                                 {(ann.location || ann.event_date) && (
-                                    <div className="p-8 bg-zinc-950/40 rounded-[2rem] border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6 ring-1 ring-white/5">
+                                    <div className="p-5 bg-zinc-950/30 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6 ring-1 ring-white/5 shadow-inner">
                                        {ann.event_date && (
-                                           <div className="flex items-center gap-4 text-sm text-zinc-300 font-bold">
-                                               <div className="p-3 bg-indigo-500/10 rounded-2xl ring-1 ring-indigo-500/20">
-                                                   <Calendar size={24} className="text-indigo-400" />
+                                           <div className="flex items-center gap-3.5 text-xs text-zinc-300 font-bold">
+                                               <div className="p-2.5 bg-indigo-500/10 rounded-xl ring-1 ring-indigo-500/20">
+                                                   <Calendar size={18} className="text-indigo-400" />
                                                </div>
                                                <div className="flex flex-col">
-                                                   <span className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Fecha y Hora</span>
-                                                   <span className="text-base">
+                                                   <span className="text-[9px] text-zinc-550 uppercase tracking-wider mb-0.5">Fecha y Hora</span>
+                                                   <span className="text-sm font-black text-white">
                                                        {(() => {
                                                            try {
                                                                return format(new Date(ann.event_date), 'd MMM, yyyy', { locale: es });
@@ -153,13 +175,13 @@ export function ResidentAnnouncementsClient({ initialAnnouncements }: ResidentAn
                                            </div>
                                        )}
                                        {ann.location && (
-                                           <div className="flex items-center gap-4 text-sm text-zinc-300 font-bold">
-                                               <div className="p-3 bg-amber-500/10 rounded-2xl ring-1 ring-amber-500/20">
-                                                   <MapPin size={24} className="text-amber-400" />
+                                           <div className="flex items-center gap-3.5 text-xs text-zinc-300 font-bold">
+                                               <div className="p-2.5 bg-amber-500/10 rounded-xl ring-1 ring-amber-500/20">
+                                                   <MapPin size={18} className="text-amber-400" />
                                                </div>
                                                <div className="flex flex-col">
-                                                   <span className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Ubicación</span>
-                                                   <span className="text-base">{ann.location}</span>
+                                                   <span className="text-[9px] text-zinc-550 uppercase tracking-wider mb-0.5">Ubicación</span>
+                                                   <span className="text-sm font-black text-white">{ann.location}</span>
                                                </div>
                                            </div>
                                        )}

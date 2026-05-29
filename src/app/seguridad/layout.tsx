@@ -101,13 +101,26 @@ export default async function DashboardLayout({
 
     const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
 
-    const { data: activeSub } = await adminSupabase
+    // Prioritize active subscriptions, fallback to the latest created overall
+    let { data: activeSub } = await adminSupabase
         .from('subscriptions')
         .select('subscription_status, plan_name, created_at, next_payment_date')
         .eq('organization_id', organizationId)
+        .eq('subscription_status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
+
+    if (!activeSub) {
+        const { data: fallbackSub } = await adminSupabase
+            .from('subscriptions')
+            .select('subscription_status, plan_name, created_at, next_payment_date')
+            .eq('organization_id', organizationId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        activeSub = fallbackSub
+    }
 
     const isDemoMode = !activeSub && role !== 'resident'
     

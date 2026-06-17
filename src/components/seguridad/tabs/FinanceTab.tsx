@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateCondoMonthlyFinancials, formatLocalDate } from '@/utils/finance-utils'
 import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -85,7 +85,7 @@ export function FinanceTab() {
             'Monto (MXN)': inv.monto,
             'Estado': inv.estado === 'paid' ? 'Pagada' : inv.estado === 'overdue' ? 'Vencida' : 'Pendiente',
             'Días de Atraso': inv.estado === 'paid' ? 0 : inv.atraso,
-            'Vencimiento': new Date(inv.due_date).toLocaleDateString('es-MX')
+            'Vencimiento': formatLocalDate(inv.due_date, 'full')
         }))
 
         // CSV con BOM explícito para Excel (Codificación UTF-8 para acentos felices)
@@ -140,7 +140,7 @@ export function FinanceTab() {
                 `$${Number(inv.monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
                 estadoTexto,
                 inv.estado === 'paid' ? '-' : `${inv.atraso}d`,
-                new Date(inv.due_date).toLocaleDateString('es-MX')
+                formatLocalDate(inv.due_date, 'full')
             ])
         })
 
@@ -213,7 +213,7 @@ export function FinanceTab() {
             // 1. Fetch units
             const { data: unitsData, error: unitsError } = await supabase
                 .from('units')
-                .select('id, monto_mensual')
+                .select('id, monto_mensual, facturacion_activa')
                 .eq('condominium_id', condoId)
                 .neq('billing_status', 'suspended')
 
@@ -222,7 +222,7 @@ export function FinanceTab() {
             // 2. Fetch residents
             const { data: residentsData, error: residentsError } = await supabase
                 .from('residents')
-                .select('unit_id, fecha_ingreso, facturacion_activa, status')
+                .select('unit_id, fecha_ingreso, status')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError
@@ -250,8 +250,8 @@ export function FinanceTab() {
                 vencido: condoFinancials.vencido,
                 morosos: condoFinancials.morososCount
             })
-        } catch (err) {
-            console.error('Fetch billing error:', err)
+        } catch (err: any) {
+            console.error('Fetch billing error:', err?.message || err?.details || err)
         }
     }
 
@@ -570,7 +570,7 @@ export function FinanceTab() {
                                             </td>
                                             <td className="px-4 py-3 text-zinc-300 font-medium">{inv.unidad}</td>
                                             <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
-                                                {new Date(inv.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                                {formatLocalDate(inv.fecha, 'short')}
                                             </td>
                                             <td className="px-4 py-3 text-zinc-400">{inv.concepto}</td>
                                             <td className="px-4 py-3 text-white font-bold">

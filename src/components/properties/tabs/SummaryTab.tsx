@@ -9,7 +9,7 @@ import { demoDb } from '@/utils/demo-db'
 import { motion } from 'framer-motion'
 import { useUserRole } from '@/hooks/use-user-role'
 import { createClient } from '@/utils/supabase/client'
-import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateCondoMonthlyFinancials, getLocalDateParts } from '@/utils/finance-utils'
 
 interface SummaryTabProps {
     condo: Condominium
@@ -27,6 +27,9 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         morosos: 0
     })
 
+    const [alerts, setAlerts] = useState<any[]>([])
+    const [recentActivity, setRecentActivity] = useState<any[]>([])
+
     useEffect(() => {
         if (!condo.id || isDemo) return
         
@@ -34,15 +37,14 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
             const supabase = createClient()
             
             try {
-                // Calculate current month's dynamic metrics
                 const now = new Date()
-                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-                const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+                const currentMonth = now.getMonth()
+                const currentYear = now.getFullYear()
 
                 // 1. Fetch units
                 const { data: unitsData, error: unitsError } = await supabase
                     .from('units')
-                    .select('id, monto_mensual')
+                    .select('id, monto_mensual, facturacion_activa, unit_number')
                     .eq('condominium_id', condo.id)
                     .neq('billing_status', 'suspended')
 
@@ -51,25 +53,31 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 // 2. Fetch residents
                 const { data: residentsData, error: residentsError } = await supabase
                     .from('residents')
-                    .select('unit_id, fecha_ingreso, facturacion_activa, status')
+                    .select('id, unit_id, first_name, last_name, fecha_ingreso, status')
                     .eq('condominium_id', condo.id)
 
                 if (residentsError) throw residentsError
 
-                // 3. Fetch resident invoices
+                // 3. Fetch resident_invoices for the current year, filtered by due_date
+                //    due_date is the billing-period reference — always use it over created_at
+                const yearStart = new Date(currentYear, 0, 1).toISOString().substring(0, 10)
+                const yearEnd   = new Date(currentYear, 11, 31).toISOString().substring(0, 10)
                 const { data: invoicesData, error: invoiceError } = await supabase
                     .from('resident_invoices')
-                    .select('amount, balance_due, status, resident_id, invoice_type, created_at')
+                    .select('id, amount, balance_due, status, resident_id, unit_id, invoice_type, created_at, due_date, paid_at')
                     .eq('condominium_id', condo.id)
+                    .gte('due_date', yearStart)
+                    .lte('due_date', yearEnd)
 
                 if (invoiceError) throw invoiceError
 
+                // ── Metrics ──────────────────────────────────────────────
                 const condoFinancials = calculateCondoMonthlyFinancials({
                     units: unitsData || [],
                     residents: residentsData || [],
                     invoices: invoicesData || [],
-                    selectedMonth: now.getMonth(),
-                    selectedYear: now.getFullYear()
+                    selectedMonth: currentMonth,
+                    selectedYear: currentYear
                 })
 
                 setMetrics({
@@ -78,8 +86,106 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                     vencido: condoFinancials.vencido,
                     morosos: condoFinancials.morososCount
                 })
-            } catch (error) {
-                console.error('[SummaryTab] fetchMetrics error:', error)
+
+                // Helper: invoice belongs to the current month by due_date
+                const isCurrentMonth = (inv: any) => {
+                    const dateStr = inv.due_date || inv.created_at
+                    if (!dateStr) return false
+                    const parts = getLocalDateParts(dateStr)
+                    if (!parts) return false
+                    return parts.year === currentYear && parts.month === currentMonth
+                }
+
+                const invoices = invoicesData || []
+                const residents = residentsData || []
+                const units = unitsData || []
+
+                // Fast look-up maps
+                const residentById   = new Map<string, any>(residents.map(r => [r.id, r]))
+                const residentByUnit = new Map<string, any>()
+                residents.filter(r => r.status === 'active' || r.status === 'delinquent').forEach(r => {
+                    if (r.unit_id) residentByUnit.set(r.unit_id, r)
+                })
+                const unitById = new Map<string, any>(units.map(u => [u.id, u]))
+
+                // ── Alertas Morosidad (mes actual) ────────────────────────
+                const currentMonthInvoices = invoices.filter(isCurrentMonth)
+
+                const overdueInvoices = currentMonthInvoices.filter(inv =>
+                    (inv.status === 'overdue' || inv.status === 'pending') &&
+                    Number(inv.balance_due || 0) > 0 &&
+                    inv.invoice_type === 'maintenance'
+                )
+
+                // Deduplicate by unit — keep highest amount
+                const alertsMap = new Map<string, any>()
+                overdueInvoices.forEach(inv => {
+                    const resident = inv.resident_id
+                        ? (residentById.get(inv.resident_id) ?? residentByUnit.get(inv.unit_id))
+                        : residentByUnit.get(inv.unit_id)
+
+                    const unit = unitById.get(inv.unit_id || resident?.unit_id)
+                    const unitNum = resident?.unit_number ?? unit?.unit_number ?? 'S/N'
+                    const residentName = resident
+                        ? `${resident.first_name ?? ''} ${resident.last_name ?? ''}`.trim()
+                        : ''
+
+                    if (!residentName) return
+
+                    const dueDate    = inv.due_date ? new Date(inv.due_date) : new Date(inv.created_at)
+                    const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 3600 * 24))
+                    const timeText   = daysOverdue <= 0 ? 'Mes Actual' : `Hace ${daysOverdue} días`
+                    const amount     = Number(inv.balance_due || inv.amount || 0)
+                    const key        = inv.unit_id || resident?.unit_id || inv.id
+
+                    if (!alertsMap.has(key) || alertsMap.get(key).amount < amount) {
+                        alertsMap.set(key, {
+                            id: inv.id,
+                            title: residentName,
+                            name: `Unidad ${unitNum}`,
+                            amount,
+                            timeText
+                        })
+                    }
+                })
+
+                setAlerts(Array.from(alertsMap.values()).sort((a, b) => b.amount - a.amount))
+
+                // ── Actividad Reciente (pagos del mes actual) ─────────────
+                const paidInvoices = currentMonthInvoices.filter(inv =>
+                    inv.status === 'paid' || inv.status === 'completed'
+                )
+
+                const activity = paidInvoices.map(inv => {
+                    const resident = inv.resident_id
+                        ? (residentById.get(inv.resident_id) ?? residentByUnit.get(inv.unit_id))
+                        : residentByUnit.get(inv.unit_id)
+
+                    const unit     = unitById.get(inv.unit_id || resident?.unit_id)
+                    const unitNum  = resident?.unit_number ?? unit?.unit_number ?? 'S/N'
+                    const name     = resident
+                        ? `${resident.first_name ?? ''} ${resident.last_name ?? ''}`.trim()
+                        : 'Desconocido'
+
+                    const activityDate = new Date(inv.paid_at || inv.created_at)
+                    const daysAgo      = Math.floor((now.getTime() - activityDate.getTime()) / (1000 * 3600 * 24))
+                    const timeText     = daysAgo === 0 ? 'Hoy' : daysAgo === 1 ? 'Ayer' : `Hace ${daysAgo} días`
+
+                    return {
+                        id: inv.id,
+                        title: `Pago Recibido - Unidad ${unitNum}`,
+                        name,
+                        amount: Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)),
+                        timeText,
+                        date: activityDate.getTime()
+                    }
+                })
+
+                activity.sort((a, b) => b.date - a.date)
+                setRecentActivity(activity.slice(0, 10))
+
+            } catch (error: any) {
+                console.error('[SummaryTab] fetchMetrics error:', error?.message || error?.details || error)
             }
         }
         
@@ -102,6 +208,10 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         : `${metrics.morosos} ${isPropiedades ? (metrics.morosos === 1 ? 'inquilino en atraso' : 'inquilinos en atraso') : (metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso')}`
     
     const occChange = isDemo ? "+2% vs mes anterior" : "Actualizado"
+
+    // Demo mode: fall back to page.tsx pre-computed data
+    const displayAlerts   = isDemo ? ((condo as any).alerts || []) : alerts
+    const displayActivity = isDemo ? ((condo as any).recent_activity || []) : recentActivity
 
     return (
         <div className="space-y-6">
@@ -172,9 +282,9 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                         <CardTitle className="text-lg font-medium text-white">Alertas Morosidad</CardTitle>
                     </CardHeader>
                     <CardContent className="px-3 pb-3 pt-0">
-                        {((condo as any).alerts && (condo as any).alerts.length > 0) ? (
+                        {(displayAlerts && displayAlerts.length > 0) ? (
                             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                {(condo as any).alerts.map((alert: any) => (
+                                {displayAlerts.map((alert: any) => (
                                     <div key={alert.id} className="flex items-center justify-between gap-4 rounded-xl bg-zinc-950/50 p-4 border border-zinc-800/50 hover:bg-zinc-900/80 transition-colors shadow-sm">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-rose-500/10 text-rose-500">
@@ -231,9 +341,9 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                         <CardTitle className="text-lg font-medium text-white">Actividad Reciente</CardTitle>
                     </CardHeader>
                     <CardContent className="px-3 pb-3 pt-0">
-                        {((condo as any).recent_activity && (condo as any).recent_activity.length > 0) ? (
+                        {(displayActivity && displayActivity.length > 0) ? (
                             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                {(condo as any).recent_activity.map((activity: any) => (
+                                {displayActivity.map((activity: any) => (
                                     <div key={activity.id} className="flex items-center justify-between gap-4 rounded-xl bg-zinc-950/50 p-4 border border-zinc-800/50 hover:bg-zinc-900/80 transition-colors shadow-sm">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-emerald-500/10 text-emerald-500">

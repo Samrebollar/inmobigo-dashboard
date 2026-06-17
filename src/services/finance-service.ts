@@ -9,6 +9,8 @@ import {
     getPaidAmount,
     Invoice
 } from '@/types/finance'
+import { calculateCondoMonthlyFinancials, getLocalDateParts } from '@/utils/finance-utils'
+
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -743,7 +745,7 @@ export const financeService = {
         // 2. Fetch Units for Expected Income and Deadlines
         let unitsQuery = supabase
             .from('units')
-            .select('id, condominium_id, unit_number, monto_mensual, payment_deadline')
+            .select('id, condominium_id, unit_number, monto_mensual, payment_deadline, facturacion_activa')
 
         if (condominiumId && condominiumId !== 'all' && !condominiumId.startsWith('demo-')) {
             unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
@@ -793,109 +795,70 @@ export const financeService = {
         } catch (e) { console.error('Error fetching expenses for activity:', e) }
 
         // CALCULATIONS
+        const condoFinancials = calculateCondoMonthlyFinancials({
+            units: units || [],
+            residents: [],
+            invoices: invoices || [],
+            selectedMonth: -1,
+            selectedYear: currentYear
+        })
+
         const stats = {
-            ingresosTotales: 0,
+            ingresosTotales: condoFinancials.recaudado,
             ingresosTotalesAnterior: 0,
-            deudaTotal: 0,
-            tasaCobranza: 0,
-            morosidadCount: 0,
-            morosidadMonto: 0,
+            deudaTotal: condoFinancials.vencido + condoFinancials.porCobrar,
+            tasaCobranza: condoFinancials.totalPeriodo > 0 
+                ? (condoFinancials.recaudado / condoFinancials.totalPeriodo) * 100 
+                : 0,
+            morosidadCount: condoFinancials.morososCount,
+            morosidadMonto: condoFinancials.vencido,
             incomeSummary: [] as any[],
             recentActivity: [] as any[]
         }
 
-        const expectedMonthly = (units || []).reduce((sum, u) => sum + (Number(u.monto_mensual) || 0), 0)
+        // Populate monthly data for the rolling 12 months chart
         const monthlyData: Record<string, { cobrado: number, pendiente: number }> = {}
-        const todayDay = now.getDate()
-
-        // Build unit paid map from resident_invoices
-        const unitPaidMap: Record<string, number> = {}
         ;(invoices || []).forEach((inv: any) => {
-            const invDate = new Date(inv.created_at)
-            if (inv.status === 'paid' && invDate.getMonth() === currentMonth && invDate.getFullYear() === currentYear) {
-                const unitId = inv.residents?.unit_id
-                if (unitId) {
-                    unitPaidMap[unitId] = (unitPaidMap[unitId] || 0) + inv.amount
-                }
+            const dateStr = inv.due_date || inv.created_at
+            if (!dateStr) return
+            const parts = getLocalDateParts(dateStr)
+            if (!parts) return
+
+            const d = new Date(parts.year, parts.month, 1)
+            const key = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' })
+
+            if (!monthlyData[key]) {
+                monthlyData[key] = { cobrado: 0, pendiente: 0 }
+            }
+
+            const bal = Number(inv.balance_due || 0)
+            const paid = Math.max(0, Number(inv.amount || 0) - bal)
+
+            monthlyData[key].cobrado += paid
+
+            if (inv.status === 'overdue' || inv.status === 'pending') {
+                monthlyData[key].pendiente += bal
             }
         })
-
-        const condoData: Record<string, {
-            expected: number, collected: number,
-            currentMonthMorosidad: number, historicalMorosidad: number,
-            overdueUnits: number, unitCount: number
-        }> = {}
-
-        // Process units
-        ;(units || []).forEach((u: any) => {
-            const cId = u.condominium_id || 'org_total'
-            if (!condoData[cId]) condoData[cId] = { expected: 0, collected: 0, currentMonthMorosidad: 0, historicalMorosidad: 0, overdueUnits: 0, unitCount: 0 }
-
-            const quota = Number(u.monto_mensual) || 0
-            const paidThisMonth = unitPaidMap[u.id] || 0
-            condoData[cId].expected += quota
-            condoData[cId].collected += paidThisMonth
-            condoData[cId].unitCount += 1
-
-            if (todayDay > (u.payment_deadline || 10) && paidThisMonth < quota) {
-                condoData[cId].currentMonthMorosidad += (quota - paidThisMonth)
-                condoData[cId].overdueUnits += 1
-            }
-        })
-
-        // Process resident_invoices for historical debt
-        ;(invoices || []).forEach((inv: any) => {
-            const cId = inv.condominium_id || 'org_total'
-            if (!condoData[cId]) condoData[cId] = { expected: 0, collected: 0, currentMonthMorosidad: 0, historicalMorosidad: 0, overdueUnits: 0, unitCount: 0 }
-
-            const invDate = new Date(inv.created_at)
-            const isHistorical = (invDate.getFullYear() < currentYear) ||
-                (invDate.getFullYear() === currentYear && invDate.getMonth() < currentMonth)
-
-            if ((inv.status === 'overdue' || inv.status === 'pending') && isHistorical) {
-                condoData[cId].historicalMorosidad += (inv.balance_due ?? inv.amount)
-            }
-        })
-
-        // Consolidate totals
-        let finalIngresos = 0
-        let finalMorosidad = 0
-        let finalDeuda = 0
-        let finalMorososCount = 0
-
-        const activeCondoIds = (condominiumId && condominiumId !== 'all')
-            ? Object.keys(condoData).filter(id => id === condominiumId)
-            : Object.keys(condoData).filter(id => condoData[id].expected > 0)
-
-        activeCondoIds.forEach(cId => {
-            const d = condoData[cId]
-            finalIngresos += d.collected
-            const currentOverdue = (todayDay > 10) ? d.currentMonthMorosidad : 0
-            finalMorosidad += d.historicalMorosidad + currentOverdue
-            finalDeuda += d.currentMonthMorosidad + d.historicalMorosidad
-            finalMorososCount += d.overdueUnits
-        })
-
-        stats.ingresosTotales = finalIngresos
-        stats.morosidadMonto = finalMorosidad
-        stats.deudaTotal = finalDeuda
-        stats.morosidadCount = finalMorososCount
-        stats.tasaCobranza = expectedMonthly > 0 ? (finalIngresos / expectedMonthly) * 100 : 0
 
         // Format Income Summary (12 months)
         const last12Months = []
         for (let i = 11; i >= 0; i--) {
             const d = new Date(currentYear, currentMonth - i, 1)
             const key = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' })
-            let total_cobrado = monthlyData[key]?.cobrado || 0
-            let total_pendiente = monthlyData[key]?.pendiente || 0
-            if (i === 0) {
-                total_cobrado = stats.ingresosTotales
-                total_pendiente = stats.morosidadMonto
-            }
+            const total_cobrado = monthlyData[key]?.cobrado || 0
+            const total_pendiente = monthlyData[key]?.pendiente || 0
             last12Months.push({ month: key, total_cobrado, total_pendiente })
         }
         stats.incomeSummary = last12Months
+
+        // Timezone-safe local date mapper for recent activity
+        const getSafeLocalDate = (dateStr: string | Date | null | undefined): Date => {
+            if (!dateStr) return new Date()
+            const parts = getLocalDateParts(dateStr)
+            if (!parts) return new Date(dateStr)
+            return new Date(parts.year, parts.month, parts.day, 12, 0, 0)
+        }
 
         // Build Activity Feed
         const aiInvoices = (invoices || [])
@@ -906,7 +869,7 @@ export const financeService = {
                 title: inv.status === 'paid' ? `Pago recibido` : `Pago vencido`,
                 subtitle: `${inv.condominiums?.name || ''} - ${inv.residents?.units?.unit_number || ''}`,
                 amount: inv.amount,
-                date: new Date(inv.updated_at || inv.created_at),
+                date: getSafeLocalDate(inv.updated_at || inv.created_at),
                 status: inv.status
             }))
 
@@ -915,7 +878,7 @@ export const financeService = {
             type: 'incident',
             title: `Nueva incidencia: ${t.title}`,
             subtitle: `${t.condominiums?.name || ''} - ${t.units?.unit_number || ''}`,
-            date: new Date(t.created_at),
+            date: getSafeLocalDate(t.created_at),
             status: t.status
         }))
 
@@ -924,7 +887,7 @@ export const financeService = {
             type: 'resident',
             title: `Nuevo residente: ${r.first_name} ${r.last_name}`,
             subtitle: `${r.condominiums?.name || ''} - ${r.units?.unit_number || ''}`,
-            date: new Date(r.created_at),
+            date: getSafeLocalDate(r.created_at),
             status: 'active'
         }))
 
@@ -934,7 +897,7 @@ export const financeService = {
             title: `Gasto: ${e.description || 'Gasto operativo'}`,
             subtitle: e.condominiums?.name || 'Gastos generales',
             amount: e.amount,
-            date: new Date(e.created_at || e.date || new Date()),
+            date: getSafeLocalDate(e.created_at || e.date),
             status: 'paid'
         }))
 

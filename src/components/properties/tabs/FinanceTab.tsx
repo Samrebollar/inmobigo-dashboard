@@ -3,12 +3,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateCondoMonthlyFinancials, formatLocalDate } from '@/utils/finance-utils'
 import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight, CheckCircle2, Eye, X, Loader2, FileSpreadsheet, Calendar, ChevronDown } from 'lucide-react'
+import { Download, Filter, FileText, ArrowUpRight, ArrowDownRight, CheckCircle2, Eye, X, Loader2, FileSpreadsheet, Calendar, ChevronDown, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 import Papa from 'papaparse'
@@ -31,6 +31,7 @@ export function FinanceTab() {
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
     const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
     const [toastMessage, setToastMessage] = useState<{title: string, type: 'success' | 'error'} | null>(null)
+    const [isGenerating, setIsGenerating] = useState(false)
     const [metrics, setMetrics] = useState({
         facturado: 0,
         recaudado: 0,
@@ -85,7 +86,7 @@ export function FinanceTab() {
             'Monto (MXN)': inv.monto,
             'Estado': inv.estado === 'paid' ? 'Pagada' : inv.estado === 'overdue' ? 'Vencida' : 'Pendiente',
             'Días de Atraso': inv.estado === 'paid' ? 0 : inv.atraso,
-            'Vencimiento': new Date(inv.due_date).toLocaleDateString('es-MX')
+            'Vencimiento': formatLocalDate(inv.due_date, 'full')
         }))
 
         // CSV con BOM explícito para Excel (Codificación UTF-8 para acentos felices)
@@ -140,7 +141,7 @@ export function FinanceTab() {
                 `$${Number(inv.monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
                 estadoTexto,
                 inv.estado === 'paid' ? '-' : `${inv.atraso}d`,
-                new Date(inv.due_date).toLocaleDateString('es-MX')
+                formatLocalDate(inv.due_date, 'full')
             ])
         })
 
@@ -213,7 +214,7 @@ export function FinanceTab() {
             // 1. Fetch units
             const { data: unitsData, error: unitsError } = await supabase
                 .from('units')
-                .select('id, monto_mensual')
+                .select('id, monto_mensual, facturacion_activa')
                 .eq('condominium_id', condoId)
                 .neq('billing_status', 'suspended')
 
@@ -222,16 +223,20 @@ export function FinanceTab() {
             // 2. Fetch residents
             const { data: residentsData, error: residentsError } = await supabase
                 .from('residents')
-                .select('unit_id, fecha_ingreso, facturacion_activa, status')
+                .select('unit_id, fecha_ingreso, status')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError
 
-            // 3. Fetch resident invoices
+            // 3. Fetch resident invoices — use due_date range for the selected year
+            const yearStart = new Date(selectedPeriod.year, 0, 1).toISOString().substring(0, 10)
+            const yearEnd = new Date(selectedPeriod.year, 11, 31).toISOString().substring(0, 10)
             const { data: invoicesData, error: invoiceError } = await supabase
                 .from('resident_invoices')
-                .select('amount, balance_due, status, resident_id, invoice_type, created_at')
+                .select('amount, balance_due, status, resident_id, invoice_type, created_at, due_date')
                 .eq('condominium_id', condoId)
+                .gte('due_date', yearStart)
+                .lte('due_date', yearEnd)
 
             if (invoiceError) throw invoiceError
 
@@ -250,8 +255,8 @@ export function FinanceTab() {
                 vencido: condoFinancials.vencido,
                 morosos: condoFinancials.morososCount
             })
-        } catch (err) {
-            console.error('Fetch billing error:', err)
+        } catch (err: any) {
+            console.error('Fetch billing error:', err?.message || err?.details || err)
         }
     }
 
@@ -283,7 +288,7 @@ export function FinanceTab() {
             let query = supabase
                 .from('resident_invoices')
                 .select(`
-                    id, amount, balance_due, status, created_at, due_date, description, invoice_type,
+                    id, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type,
                     residents (
                         first_name, last_name, phone,
                         units (unit_number)
@@ -292,9 +297,9 @@ export function FinanceTab() {
                 .eq('condominium_id', condoId)
 
             if (selectedPeriod.month !== -1) {
-                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString()
-                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0, 23, 59, 59).toISOString()
-                query = query.gte('created_at', startOfPeriod).lte('created_at', endOfPeriod)
+                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString().substring(0, 10)
+                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0).toISOString().substring(0, 10)
+                query = query.gte('due_date', startOfPeriod).lte('due_date', endOfPeriod)
                 query = query.eq('invoice_type', 'maintenance')
             }
 
@@ -345,7 +350,7 @@ export function FinanceTab() {
                         atraso: delayDays,
                         reminder_sent: false,
                         due_date: dueDate.toISOString(),
-                        fecha: inv.created_at,
+                        fecha: inv.period_start || inv.due_date || inv.created_at,
                         resident_name: resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente',
                     }
                 })
@@ -364,6 +369,39 @@ export function FinanceTab() {
         setLoading(true)
         fetchBillingData().then(() => fetchInvoices())
     }, [condoId, selectedPeriod])
+
+    const generateMonthlyInvoices = async (month: number, year: number) => {
+        if (condoId.startsWith('demo-')) {
+            showToast('Generación no disponible en modo demo', 'error')
+            return
+        }
+        setIsGenerating(true)
+        try {
+            const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
+            const res = await fetch('/api/cron/generate-monthly-invoices', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(cronSecret ? { 'Authorization': `Bearer ${cronSecret}` } : {})
+                },
+                body: JSON.stringify({ month, year, condominiumId: condoId })
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                showToast(data.error || 'Error al generar facturas', 'error')
+                return
+            }
+            const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+            showToast(`${data.generated} facturas generadas para ${monthNames[month]} ${year}`)
+            // Recargar datos
+            setLoading(true)
+            fetchBillingData().then(() => fetchInvoices())
+        } catch (err) {
+            showToast('Error de conexión al generar facturas', 'error')
+        } finally {
+            setIsGenerating(false)
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -426,6 +464,25 @@ export function FinanceTab() {
                             )}
                         </AnimatePresence>
                     </div>
+                    {/* Botón Generar Facturas */}
+                    {!condoId.startsWith('demo-') && (
+                        <Button
+                            variant="outline"
+                            className="border-indigo-700/60 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/60 hover:text-white hover:border-indigo-500 transition-all duration-200 shadow-md flex items-center gap-2"
+                            onClick={() => generateMonthlyInvoices(
+                                selectedPeriod.month === -1 ? new Date().getMonth() : selectedPeriod.month,
+                                selectedPeriod.year
+                            )}
+                            disabled={isGenerating}
+                            title={`Generar facturas de ${selectedPeriod.label === 'Todos los meses' ? 'este mes' : selectedPeriod.label}`}
+                        >
+                            {isGenerating
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Zap className="h-4 w-4" />
+                            }
+                            <span className="hidden sm:inline">{isGenerating ? 'Generando...' : 'Generar Facturas'}</span>
+                        </Button>
+                    )}
                     <div className="relative" ref={exportMenuRef}>
                         <Button 
                             variant="outline" 
@@ -570,7 +627,7 @@ export function FinanceTab() {
                                             </td>
                                             <td className="px-4 py-3 text-zinc-300 font-medium">{inv.unidad}</td>
                                             <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
-                                                {new Date(inv.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                                {formatLocalDate(inv.fecha, 'short')}
                                             </td>
                                             <td className="px-4 py-3 text-zinc-400">{inv.concepto}</td>
                                             <td className="px-4 py-3 text-white font-bold">

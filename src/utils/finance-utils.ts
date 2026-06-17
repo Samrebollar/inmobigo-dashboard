@@ -1,6 +1,65 @@
 import { Resident } from '@/types/residents'
 import { ResidentInvoice } from '@/types/finance'
 
+/**
+ * Safely parses a date string or Date object to local parts (year, month, day) without timezone shifts.
+ */
+export function getLocalDateParts(dateStr: string | Date | null | undefined): { year: number, month: number, day: number } | null {
+    if (!dateStr) return null
+    if (dateStr instanceof Date) {
+        return {
+            year: dateStr.getFullYear(),
+            month: dateStr.getMonth(), // 0-indexed
+            day: dateStr.getDate()
+        }
+    }
+    
+    // Match YYYY-MM-DD
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+        const [_, y, m, d] = match
+        return {
+            year: parseInt(y),
+            month: parseInt(m) - 1, // Convert to 0-indexed
+            day: parseInt(d)
+        }
+    }
+    
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return null
+    
+    // If it's a date-only string without T or :, extract UTC parts to avoid local timezone shifts
+    if (typeof dateStr === 'string' && !dateStr.includes('T') && !dateStr.includes(':')) {
+        return {
+            year: d.getUTCFullYear(),
+            month: d.getUTCMonth(),
+            day: d.getUTCDate()
+        }
+    }
+    
+    return {
+        year: d.getFullYear(),
+        month: d.getMonth(),
+        day: d.getDate()
+    }
+}
+
+/**
+ * Safely formats a date string or Date object to DD/MM/YY or DD/MM/YYYY without timezone shifts.
+ */
+export function formatLocalDate(dateStr: string | Date | null | undefined, formatType: 'short' | 'full' = 'short'): string {
+    if (!dateStr) return 'S/N'
+    
+    const parts = getLocalDateParts(dateStr)
+    if (!parts) return 'S/N'
+    
+    const day = String(parts.day).padStart(2, '0')
+    const month = String(parts.month + 1).padStart(2, '0')
+    const year = String(parts.year)
+    const yr = formatType === 'short' ? year.substring(2) : year
+    return `${day}/${month}/${yr}`
+}
+
 export interface ResidentFinancials {
     cuotaMensual: number
     totalPaid: number
@@ -104,11 +163,13 @@ export function calculateResidentMonthlyFinancials({
     const maintenanceInvoices = invoices.filter(inv => inv.invoice_type === 'maintenance')
     
     const kpiInvoices = maintenanceInvoices.filter(inv => {
-        if (!inv.created_at) return false
-        const invDate = new Date(inv.created_at)
-        if (invDate.getFullYear() !== selectedYear) return false
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return false
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return false
+        if (parts.year !== selectedYear) return false
         if (monthNum !== -1) {
-            return invDate.getMonth() === monthNum
+            return parts.month === monthNum
         }
         return true
     })
@@ -144,11 +205,13 @@ export function calculateResidentMonthlyFinancials({
 
     // Map all database invoices to their standardized shape first
     const mappedDbInvoices = invoices.filter(inv => {
-        if (!inv.created_at) return false
-        const invDate = new Date(inv.created_at)
-        if (invDate.getFullYear() !== selectedYear) return false
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return false
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return false
+        if (parts.year !== selectedYear) return false
         if (monthNum !== -1) {
-            return invDate.getMonth() === monthNum
+            return parts.month === monthNum
         }
         return true
     }).map(inv => {
@@ -190,9 +253,11 @@ export function calculateResidentMonthlyFinancials({
     for (const m of monthsToInspect) {
         // Find all invoices in DB belonging to this month 'm'
         const dbInvoicesInMonth = invoices.filter(inv => {
-            if (!inv.created_at) return false
-            const invDate = new Date(inv.created_at)
-            return invDate.getFullYear() === selectedYear && invDate.getMonth() === m
+            const dateStr = inv.due_date || inv.created_at
+            if (!dateStr) return false
+            const parts = getLocalDateParts(dateStr)
+            if (!parts) return false
+            return parts.year === selectedYear && parts.month === m
         })
 
         // Calculate total paid in this month
@@ -405,65 +470,113 @@ export function calculateCondoMonthlyFinancials({
 }): CondoFinancials {
     const today = new Date()
 
-    // Map residents by unit_id
-    const residentMap = new Map<string, any>()
-    residents.forEach(r => {
-        if (r.unit_id && r.status === 'active') {
-            residentMap.set(r.unit_id, r)
+    // Determine the first and last months of the period
+    let firstMonth = 0
+    let lastMonth = 11
+
+    if (selectedMonth !== -1) {
+        firstMonth = selectedMonth
+        lastMonth = selectedMonth
+    } else {
+        // Find the earliest month that has invoices in selectedYear
+        const condoInvoicesInYear = invoices.filter(inv => {
+            const dateStr = inv.due_date || inv.created_at
+            if (!dateStr) return false
+            const parts = getLocalDateParts(dateStr)
+            return parts && parts.year === selectedYear
+        })
+
+        if (condoInvoicesInYear.length > 0) {
+            const months = condoInvoicesInYear.map(inv => {
+                const parts = getLocalDateParts(inv.due_date || inv.created_at)
+                return parts ? parts.month : 0
+            })
+            firstMonth = Math.min(...months)
         }
-    })
 
-    const endOfPeriod = selectedMonth === -1
-        ? new Date(selectedYear, 12, 0, 23, 59, 59)
-        : new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59)
+        // Bounded by today's month if it's the current year
+        if (selectedYear === today.getFullYear()) {
+            lastMonth = today.getMonth()
+        } else if (selectedYear < today.getFullYear()) {
+            lastMonth = 11
+        } else {
+            lastMonth = -1 // Future year
+        }
+    }
 
-    // Calculate total expected income for the period
-    let totalPeriodo = 0
+    // Number of months in the period
+    const numMonths = (lastMonth >= firstMonth) ? (lastMonth - firstMonth + 1) : 0
+
+    // Calculate total expected income for the period:
+    // Sum monto_mensual for ALL billing-active units (facturacion_activa !== false) and multiply by numMonths.
+    let expectedMonthlyIncome = 0
     units.forEach(u => {
-        const res = residentMap.get(u.id)
-        if (!res) return
-        if (res.facturacion_activa === false) return
-
-        const fechaIngresoStr = res.fecha_ingreso || res.created_at
-        const fechaIngreso = fechaIngresoStr ? new Date(fechaIngresoStr) : null
-        if (fechaIngreso && fechaIngreso > endOfPeriod) return
-
-        totalPeriodo += Number(u.monto_mensual || 0)
+        if (u.facturacion_activa === false) return
+        expectedMonthlyIncome += Number(u.monto_mensual || 0)
     })
 
     let porCobrar = 0
     let vencido = 0
     const debtorResidents = new Set<string>()
 
-    // Filter operational maintenance invoices
+    // Filter operational maintenance invoices — use due_date as the billing month reference
+    // filter strictly within the [firstMonth, lastMonth] range of selectedYear
     const maintenanceInvoices = invoices.filter(inv => inv.invoice_type === 'maintenance')
     const filteredInvoices = maintenanceInvoices.filter(inv => {
-        if (!inv.created_at) return false
-        const invDate = new Date(inv.created_at)
-        if (invDate.getFullYear() !== selectedYear) return false
-        if (selectedMonth !== -1) {
-            return invDate.getMonth() === selectedMonth
-        }
-        return true
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return false
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return false
+        if (parts.year !== selectedYear) return false
+        return parts.month >= firstMonth && parts.month <= lastMonth
     })
 
     filteredInvoices.forEach(inv => {
         const bal = Number(inv.balance_due || 0)
-        
-        if (inv.status === 'pending') {
+        if (bal <= 0) return
+
+        // Determine if this billing period is past the payment deadline (day 10).
+        // Past months are always overdue. For the current month, check if today > day 10.
+        const invDateStr = inv.due_date || inv.created_at
+        const parts = getLocalDateParts(invDateStr)
+        const invMonth = parts ? parts.month : selectedMonth
+        const invYear  = parts ? parts.year : selectedYear
+
+        const isPastPeriod = invYear < today.getFullYear() ||
+            (invYear === today.getFullYear() && invMonth < today.getMonth())
+        const isCurrentPeriod = invYear === today.getFullYear() && invMonth === today.getMonth()
+        const isInOverduePeriod = isPastPeriod || (isCurrentPeriod && today.getDate() > 10)
+
+        // Treat pending as overdue when the payment deadline has passed
+        const effectiveStatus = (inv.status === 'pending' && isInOverduePeriod) ? 'overdue' : inv.status
+
+        if (effectiveStatus === 'pending') {
             porCobrar += bal
-        } else if (inv.status === 'overdue') {
+        } else if (effectiveStatus === 'overdue') {
             vencido += bal
-            if (bal > 0 && inv.resident_id) {
+            if (inv.resident_id) {
                 debtorResidents.add(inv.resident_id)
             }
         }
     })
 
-    // Calculate collected amount (recaudado)
-    const recaudado = selectedMonth === -1
-        ? invoices.reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
-        : Math.max(0, totalPeriodo - porCobrar - vencido)
+    // Calculate collected amount (recaudado) — use due_date for month assignment,
+    // filter strictly within the [firstMonth, lastMonth] range of selectedYear
+    const paidInvoicesForPeriod = invoices.filter(inv => {
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return false
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return false
+        if (parts.year !== selectedYear) return false
+        return parts.month >= firstMonth && parts.month <= lastMonth
+    })
+
+    const recaudado = paidInvoicesForPeriod.reduce(
+        (sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)),
+        0
+    )
+
+    const totalPeriodo = recaudado + porCobrar + vencido
 
     return {
         totalPeriodo,

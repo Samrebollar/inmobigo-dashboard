@@ -56,30 +56,33 @@ export default function FinancePage() {
         }
         setOrganization(org)
 
-        // Find Condominiums
+        // Find Condominiums — use local variable to avoid stale React state
+        let loadedCondos: { id: string, name: string }[] = []
         if (org) {
-          const { data: condos } = await supabase
+          // Fetch without status filter to include all condominiums for the org
+          const { data: condos, error: condosError } = await supabase
             .from('condominiums')
             .select('id, name')
             .eq('organization_id', (org as any)?.id ?? '')
-            .eq('status', 'active')
+            .order('name', { ascending: true })
 
-          if (condos && condos.length > 0) {
-            setCondominiumList(condos as any)
-            // Default to null (Todas las propiedades)
-            setCondominiumId(null)
+          if (!condosError && condos && condos.length > 0) {
+            loadedCondos = condos as any
+            setCondominiumList(loadedCondos)
+            setCondominiumId(null) // Default to "Todas las propiedades"
           }
         }
 
-        // Demo Overrides
-        if (isDemo && (condominiumList.length === 0)) {
+        // Demo Overrides — only apply if NO real condos were found from the DB
+        // Uses local variable (not stale React state) to check this correctly
+        if (isDemo && loadedCondos.length === 0) {
           const demoCondos = demoDb.getProperties()
           if (demoCondos.length > 0) {
             setCondominiumList(demoCondos.map(c => ({ id: c.id, name: c.name })))
           } else {
             setCondominiumList([{ id: 'demo-condo-1', name: 'Zacil (Demo)' }])
           }
-          setCondominiumId(null) 
+          setCondominiumId(null)
           if (!org) setOrganization({ id: 'demo-org-id' })
           setRole({ isResident: false, isAdminOrStaff: true })
         }

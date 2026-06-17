@@ -1,8 +1,16 @@
 import { createClient } from '@/utils/supabase/server'
 import { getUserContext } from '@/utils/user-context'
 import Link from 'next/link'
-import ResidentDashboardCondominioClient from '@/components/residente/resident-dashboard-condominio-client'
-import ResidentDashboardPropiedadesClient from '@/components/residente/resident-dashboard-propiedades-client'
+import nextDynamic from 'next/dynamic'
+
+const ResidentDashboardCondominioClient = nextDynamic(
+    () => import('@/components/residente/resident-dashboard-condominio-client')
+)
+
+const ResidentDashboardPropiedadesClient = nextDynamic(
+    () => import('@/components/residente/resident-dashboard-propiedades-client')
+)
+
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0

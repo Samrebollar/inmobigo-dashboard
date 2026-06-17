@@ -15,20 +15,31 @@ export function useDemoMode() {
             try {
                 const { data: { user } } = await supabase.auth.getUser()
                 if (!user) {
+                    // Only unauthenticated visitors are in demo mode
                     setIsDemo(true)
                     return
                 }
 
-                const { data: subscription } = await supabase
+                // Authenticated users: check for an active subscription
+                const { data: subscription, error: subError } = await supabase
                     .from('subscriptions')
                     .select('subscription_status')
                     .eq('user_id', user.id)
                     .eq('subscription_status', 'active')
                     .maybeSingle()
 
-                setIsDemo(!subscription)
+                // If there's a query error, default to NOT demo (real account benefit-of-doubt)
+                if (subError) {
+                    console.warn('useDemoMode: subscriptions query error, defaulting to real mode', subError.message)
+                    setIsDemo(false)
+                } else {
+                    // isDemo only if no active subscription row found
+                    setIsDemo(!subscription)
+                }
             } catch (e) {
-                setIsDemo(true)
+                // On unexpected errors, if we have a session assume real mode
+                const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
+                setIsDemo(!session)
             } finally {
                 setLoading(false)
             }

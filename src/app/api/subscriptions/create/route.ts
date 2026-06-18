@@ -29,7 +29,7 @@ const planMap = {
     },
     'CORPORATE PLUS': {
         price: 9999,
-        unit_limit: 1000,
+        unit_limit: 400,
         preapproval_plan_id: process.env.MP_CORPPLUS_ID,
     },
 }

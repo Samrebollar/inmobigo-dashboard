@@ -794,27 +794,39 @@ export const financeService = {
             expenses = data || []
         } catch (e) { console.error('Error fetching expenses for activity:', e) }
 
-        // CALCULATIONS
+        // CALCULATIONS — KPI cards always show current month only
         const condoFinancials = calculateCondoMonthlyFinancials({
             units: units || [],
             residents: [],
             invoices: invoices || [],
-            selectedMonth: -1,
+            selectedMonth: currentMonth,
             selectedYear: currentYear
+        })
+
+        // Calculate previous month for "vs mes anterior" comparison
+        const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1
+        const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear
+        const prevCondoFinancials = calculateCondoMonthlyFinancials({
+            units: units || [],
+            residents: [],
+            invoices: invoices || [],
+            selectedMonth: prevMonth,
+            selectedYear: prevYear
         })
 
         const stats = {
             ingresosTotales: condoFinancials.recaudado,
-            ingresosTotalesAnterior: 0,
+            ingresosTotalesAnterior: prevCondoFinancials.recaudado,
             deudaTotal: condoFinancials.vencido + condoFinancials.porCobrar,
             tasaCobranza: condoFinancials.totalPeriodo > 0 
                 ? (condoFinancials.recaudado / condoFinancials.totalPeriodo) * 100 
                 : 0,
             morosidadCount: condoFinancials.morososCount,
-            morosidadMonto: condoFinancials.vencido,
+            morosidadMonto: condoFinancials.vencido + condoFinancials.porCobrar,
             incomeSummary: [] as any[],
             recentActivity: [] as any[]
         }
+
 
         // Populate monthly data for the rolling 12 months chart
         const monthlyData: Record<string, { cobrado: number, pendiente: number }> = {}

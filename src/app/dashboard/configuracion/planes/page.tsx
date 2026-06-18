@@ -125,13 +125,13 @@ function PlansContent() {
         },
         {
             name: 'CORPORATE PLUS',
-            limit: 1000,
+            limit: 400,
             price: '$9,999',
             period: 'MXN / mes',
             color: 'amber',
             description: 'Soluciones a medida para los mayores operadores inmobiliarios.',
             features: [
-                'Más de 250 unidades',
+                '251 – 400 unidades',
                 'Soporte 24/7 dedicado',
                 'Integraciones a medida',
                 'Infraestructura dedicada',
@@ -209,7 +209,7 @@ function PlansContent() {
             </div>
 
             <div className="flex flex-wrap gap-8 justify-center items-stretch">
-                {plans.map((plan, index) => {
+                {plans.filter(plan => plan.name !== 'CORE PRUEBA').map((plan, index) => {
                     const c = getColorClasses(plan.color)
                     const isTooSmall = orgStatus && orgStatus.unitUsage > plan.limit
                     const isPreviousPlan = orgStatus && orgStatus.previousPlanName?.toUpperCase() === plan.name.toUpperCase()

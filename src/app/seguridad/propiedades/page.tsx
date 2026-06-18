@@ -116,7 +116,7 @@ export default function PropiedadesPage() {
           
         const PLAN_LIMITS: Record<string, number> = {
             'CORE': 20, 'PLUS': 60, 'ELITE': 120, 'CORPORATE': 250,
-            'CORE PRUEBA': 5, 'CORPORATE PLUS': 1000, 'FREE': 5
+            'CORE PRUEBA': 5, 'CORPORATE PLUS': 400, 'FREE': 5
         }
         setUnitsLimit(orgData?.units_limit || PLAN_LIMITS[orgData?.plan?.trim().toUpperCase() || 'FREE'] || 5)
       } else if (isDemo) {

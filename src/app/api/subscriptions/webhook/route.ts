@@ -7,7 +7,7 @@ const PLAN_LIMITS: Record<string, number> = {
     ELITE: 120,
     CORPORATE: 250,
     'CORE PRUEBA': 5,
-    'CORPORATE PLUS': 1000,
+    'CORPORATE PLUS': 400,
 }
 
 export async function POST(req: Request) {

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Mail, Lock, Loader2, ArrowRight, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { validateReferralCodeAction } from '@/app/actions/benefit-actions'
 
 function RegisterFormContent() {
     const router = useRouter()
@@ -14,12 +15,42 @@ function RegisterFormContent() {
 
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+    const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle')
 
     const [formData, setFormData] = useState({
         fullName: '',
         email: '',
         password: '',
+        referralCode: '',
     })
+
+    const handleValidateCode = async (code: string) => {
+        if (!code) {
+            setValidationStatus('idle')
+            return
+        }
+        setValidationStatus('validating')
+        try {
+            const res = await validateReferralCodeAction(code)
+            if (res.success && res.valid) {
+                setValidationStatus('valid')
+            } else {
+                setValidationStatus('invalid')
+            }
+        } catch (err) {
+            setValidationStatus('invalid')
+        }
+    }
+
+    // Auto-fill from URL params
+    useEffect(() => {
+        const refParam = searchParams.get('ref')
+        if (refParam) {
+            const code = refParam.trim().toUpperCase()
+            setFormData(prev => ({ ...prev, referralCode: code }))
+            handleValidateCode(code)
+        }
+    }, [searchParams])
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -38,7 +69,8 @@ function RegisterFormContent() {
                 options: {
                     data: {
                         full_name: formData.fullName,
-                        role: 'admin' // Se le asigna admin genérico, luego onboarding decide el específico
+                        role: 'admin', // Se le asigna admin genérico, luego onboarding decide el específico
+                        referral_code: validationStatus === 'valid' ? formData.referralCode.trim().toUpperCase() : undefined
                     }
                 }
             });
@@ -63,6 +95,16 @@ function RegisterFormContent() {
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value })
+    }
+
+    const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value.toUpperCase()
+        setFormData(prev => ({ ...prev, referralCode: val }))
+        if (val.trim()) {
+            handleValidateCode(val)
+        } else {
+            setValidationStatus('idle')
+        }
     }
 
     return (
@@ -140,6 +182,49 @@ function RegisterFormContent() {
                                     placeholder="Min. 6 caracteres"
                                 />
                             </div>
+                        </div>
+
+                        {/* REFERRAL CODE */}
+                        <div className="space-y-1">
+                            <label className="text-xs font-medium text-zinc-400 ml-1">¿Tienes un código de referido? (Opcional)</label>
+                            <div className="relative group/input">
+                                <User className="absolute left-3 top-3 h-4 w-4 text-zinc-500 group-focus-within/input:text-indigo-400 transition-colors" />
+                                <input
+                                    name="referralCode"
+                                    type="text"
+                                    value={formData.referralCode}
+                                    onChange={handleCodeChange}
+                                    className={cn(
+                                        "w-full rounded-xl border bg-black/40 py-2.5 pl-9 pr-10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 transition-all",
+                                        validationStatus === 'valid' && "border-emerald-500/50 focus:border-emerald-500/50 focus:ring-emerald-500/50 focus:bg-emerald-950/10",
+                                        validationStatus === 'invalid' && "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/50 focus:bg-red-950/10",
+                                        validationStatus === 'idle' && "border-white/10 focus:border-indigo-500/50 focus:ring-indigo-500/50 focus:bg-indigo-950/20",
+                                        validationStatus === 'validating' && "border-white/10 focus:border-indigo-500/50 focus:ring-indigo-500/50 focus:bg-indigo-950/20"
+                                    )}
+                                    placeholder="Ej. INM-6FC5I2"
+                                />
+                                {validationStatus === 'validating' && (
+                                    <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-indigo-400" />
+                                )}
+                                {validationStatus === 'valid' && (
+                                    <span className="absolute right-3 top-3 text-emerald-400 text-sm font-semibold">✅</span>
+                                )}
+                                {validationStatus === 'invalid' && (
+                                    <span className="absolute right-3 top-3 text-red-400 text-sm font-semibold">❌</span>
+                                )}
+                            </div>
+                            
+                            {/* Validation message */}
+                            {validationStatus === 'valid' && (
+                                <p className="text-[11px] text-emerald-400 font-medium ml-1">
+                                    {searchParams.get('ref') ? '✅ Has sido invitado por un administrador de InmobiGo.' : '✅ Código válido.'}
+                                </p>
+                            )}
+                            {validationStatus === 'invalid' && (
+                                <p className="text-[11px] text-red-400 font-medium ml-1">
+                                    ❌ Código no encontrado.
+                                </p>
+                            )}
                         </div>
 
                         {/* ERROR */}

@@ -10,7 +10,8 @@ import {
     Layers, 
     Headphones, 
     Settings,
-    LogOut
+    LogOut,
+    Gift
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -56,6 +57,7 @@ export function OwnerSidebar() {
         { href: '/owner/customers', icon: Users, label: 'Clientes' },
         { href: '/owner/revenue', icon: TrendingUp, label: 'Ingresos' },
         { href: '/owner/payments', icon: CreditCard, label: 'Pagos' },
+        { href: '/owner/referidos', icon: Gift, label: 'Referidos' },
         { href: '/owner/analytics', icon: BarChart3, label: 'Analytics' },
         { href: '/owner/plans', icon: Layers, label: 'Planes' },
         { href: '/owner/support', icon: Headphones, label: 'Soporte' },

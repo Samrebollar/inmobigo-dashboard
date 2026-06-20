@@ -576,7 +576,7 @@ export function calculateCondoMonthlyFinancials({
         0
     )
 
-    const totalPeriodo = recaudado + porCobrar + vencido
+    const totalPeriodo = expectedMonthlyIncome * numMonths
 
     return {
         totalPeriodo,

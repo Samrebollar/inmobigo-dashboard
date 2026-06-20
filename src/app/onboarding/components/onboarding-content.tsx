@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { UserTypeSelection } from './user-type-selection'
 import { createClient } from '@/utils/supabase/client'
 import { updateUserRoleAdminAction } from '@/app/actions/auth-actions'
+import { registerReferredAdminAction } from '@/app/actions/benefit-actions'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -164,6 +165,28 @@ export function OnboardingContent({ userId, initialUserType }: OnboardingContent
                     organization_id: orgId
                 }
             })
+
+            // Registrar referido si existe código en los metadatos del usuario
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                const referralCode = user?.user_metadata?.referral_code
+                if (referralCode && orgId) {
+                    console.log(`Referral code found in metadata: ${referralCode}. Registering referred admin...`)
+                    const res = await registerReferredAdminAction({
+                        referral_code: referralCode,
+                        referred_organization_id: orgId,
+                        referred_name: user?.user_metadata?.full_name || 'Nuevo Administrador',
+                        referred_email: user?.email || ''
+                    })
+                    if (res.success) {
+                        console.log('✅ Referred admin registered successfully!')
+                    } else {
+                        console.error('❌ Failed to register referred admin:', res.error)
+                    }
+                }
+            } catch (refErr) {
+                console.error('Error registering referred admin in onboarding:', refErr)
+            }
 
             console.log('Onboarding completado con éxito.')
             toast.success('Entorno configurado correctamente')

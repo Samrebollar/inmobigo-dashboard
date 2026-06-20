@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -325,6 +325,13 @@ export default async function DashboardLayout({
                         >
                             <Sparkles size={18} className="text-indigo-400" />
                             <span>Servicios Premium</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/beneficios"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-pink-500/20"
+                        >
+                            <Gift size={18} className="text-pink-500/80 group-hover:text-pink-400" />
+                            <span>Beneficios</span>
                         </Link>
                     </>
                 )}

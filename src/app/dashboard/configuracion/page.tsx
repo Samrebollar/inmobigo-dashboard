@@ -89,16 +89,30 @@ export default function SettingsPage() {
                 }
             }
 
-            // Get Subscription (Can still use client since it's simple)
-            const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
-                const { data: sub } = await supabase
+            // Get Subscription — query by organization_id (same logic as layout.tsx)
+            // First try active, then fall back to most recent of any status
+            if (data.organizationId) {
+                let { data: activeSub } = await supabase
                     .from('subscriptions')
                     .select('*')
-                    .eq('user_id', user.id)
+                    .eq('organization_id', data.organizationId)
                     .eq('subscription_status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
                     .maybeSingle()
-                setSubscription(sub)
+
+                if (!activeSub) {
+                    const { data: fallbackSub } = await supabase
+                        .from('subscriptions')
+                        .select('*')
+                        .eq('organization_id', data.organizationId)
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle()
+                    activeSub = fallbackSub
+                }
+
+                setSubscription(activeSub)
             }
         } catch (error) {
             console.error('Error initializing settings:', error)
@@ -718,7 +732,13 @@ export default function SettingsPage() {
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                             <div className="flex items-center gap-5 relative z-10">
-                                <div className="p-3.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group-hover:scale-110 group-hover:bg-indigo-500/20 transition-all duration-300">
+                                <div className={`p-3.5 rounded-full border transition-all duration-300 group-hover:scale-110 ${
+                                    subscription.subscription_status === 'active' 
+                                        ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 group-hover:bg-indigo-500/20'
+                                        : subscription.subscription_status === 'pending'
+                                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 group-hover:bg-amber-500/20'
+                                        : 'bg-zinc-700/30 text-zinc-400 border-zinc-700/40'
+                                }`}>
                                     <CreditCard className="h-6 w-6" />
                                 </div>
                                 <div className="space-y-1">
@@ -726,17 +746,45 @@ export default function SettingsPage() {
                                         Plan <span className="text-indigo-400 font-extrabold uppercase">{subscription.plan_name || subscription.plan_type || 'Activo'}</span>
                                     </h3>
                                     <p className="text-sm text-zinc-400 flex items-center gap-1.5">
-                                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                        Próxima facturación: <span className="text-zinc-300">
-                                            {subscription.next_billing_date && !isNaN(new Date(subscription.next_billing_date).getTime()) 
-                                                ? new Date(subscription.next_billing_date).toLocaleDateString() 
-                                                : 'Por determinar'}
-                                        </span>
+                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                            subscription.subscription_status === 'active' ? 'bg-emerald-500 animate-pulse' 
+                                            : subscription.subscription_status === 'pending' ? 'bg-amber-400 animate-pulse'
+                                            : 'bg-zinc-500'
+                                        }`}></span>
+                                        {subscription.subscription_status === 'active' && (
+                                            <>
+                                                Próxima facturación: <span className="text-zinc-300">
+                                                    {subscription.next_billing_date && !isNaN(new Date(subscription.next_billing_date).getTime()) 
+                                                        ? new Date(subscription.next_billing_date).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+                                                        : subscription.next_payment_date && !isNaN(new Date(subscription.next_payment_date).getTime())
+                                                        ? new Date(subscription.next_payment_date).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+                                                        : 'Por determinar'}
+                                                </span>
+                                            </>
+                                        )}
+                                        {subscription.subscription_status === 'pending' && (
+                                            <span className="text-amber-400/80">En proceso de activación — pago en revisión</span>
+                                        )}
+                                        {subscription.subscription_status === 'expired' && (
+                                            <span className="text-zinc-500">Vencido el {subscription.last_payment_date ? new Date(subscription.last_payment_date).toLocaleDateString('es-MX') : 'fecha desconocida'}</span>
+                                        )}
+                                        {!['active','pending','expired'].includes(subscription.subscription_status) && (
+                                            <span className="text-zinc-500 capitalize">{subscription.subscription_status}</span>
+                                        )}
                                     </p>
                                 </div>
                             </div>
-                            <Badge className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-3 py-1 group-hover:bg-indigo-500/20 transition-colors z-10">
-                                Estado Activo
+                            <Badge className={`px-3 py-1 z-10 transition-colors border ${
+                                subscription.subscription_status === 'active'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:bg-emerald-500/20'
+                                    : subscription.subscription_status === 'pending'
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 group-hover:bg-amber-500/20'
+                                    : 'bg-zinc-700/20 text-zinc-400 border-zinc-700/30'
+                            }`}>
+                                {subscription.subscription_status === 'active' && '✅ Activo'}
+                                {subscription.subscription_status === 'pending' && '⏳ En revisión'}
+                                {subscription.subscription_status === 'expired' && '⚠️ Vencido'}
+                                {!['active','pending','expired'].includes(subscription.subscription_status) && subscription.subscription_status}
                             </Badge>
                         </motion.div>
                     ) : (
@@ -745,12 +793,12 @@ export default function SettingsPage() {
                                 <Shield className="h-8 w-8" />
                             </div>
                             <div className="space-y-1">
-                                <h3 className="font-bold text-white text-lg">Estás en Modo Demo</h3>
+                                <h3 className="font-bold text-white text-lg">Sin suscripción activa</h3>
                                 <p className="text-sm text-zinc-400 max-w-xs">
-                                    No tienes un plan activo actualmente. Suscríbete para desbloquear todas las funciones.
+                                    No se encontró un plan activo para tu organización. Contacta a soporte o adquiere un plan.
                                 </p>
                             </div>
-                            <Link href="/dashboard/settings/plans">
+                            <Link href="/dashboard/configuracion/planes">
                                 <Button className="bg-indigo-600 hover:bg-indigo-500 text-white">
                                     Ver Planes Disponibles
                                 </Button>

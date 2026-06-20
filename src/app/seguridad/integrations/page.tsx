@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, ShieldCheck, Smartphone, Landmark, Zap, BellRing, RefreshCw, LogOut, Wallet, Info, Shield } from 'lucide-react'
+import { CheckCircle2, ShieldCheck, Smartphone, Landmark, Zap, BellRing, RefreshCw, LogOut, Wallet, Info, Shield, AlertTriangle } from 'lucide-react'
+import { Modal } from '@/components/ui/modal'
 
 import { motion } from 'framer-motion'
 
@@ -14,6 +15,7 @@ const MP_BLUE = '#009EE3'
 export default function PaymentsPage() {
     const [isConnected, setIsConnected] = useState(false)
     const [isConnecting, setIsConnecting] = useState(false)
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false)
 
     const handleConnect = () => {
         setIsConnecting(true)
@@ -25,9 +27,7 @@ export default function PaymentsPage() {
     }
 
     const handleDisconnect = () => {
-        if (confirm('¿Estás seguro de que deseas desconectar tu cuenta de MercadoPago?')) {
-            setIsConnected(false)
-        }
+        setShowDisconnectModal(true)
     }
 
     return (
@@ -309,6 +309,41 @@ export default function PaymentsPage() {
                     </div>
                 </div>
             </div>
+
+            <Modal isOpen={showDisconnectModal} onClose={() => setShowDisconnectModal(false)}>
+                <div className="flex flex-col items-center text-center p-6 space-y-6">
+                    {/* Glowing Warning Icon */}
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-lg shadow-rose-500/5">
+                        <AlertTriangle className="h-8 w-8 animate-bounce-slow" />
+                    </div>
+
+                    <div className="space-y-2">
+                        <h3 className="text-xl font-bold text-white tracking-tight">¿Desconectar Mercado Pago?</h3>
+                        <p className="text-zinc-400 text-sm leading-relaxed max-w-sm">
+                            Al desconectar tu cuenta, los residentes <strong className="text-zinc-200">ya no podrán pagar cuotas ni servicios</strong> en línea desde la app. Deberás volver a autorizar para reactivar la cobranza automática.
+                        </p>
+                    </div>
+
+                    <div className="flex w-full flex-col sm:flex-row gap-3 pt-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowDisconnectModal(false)}
+                            className="w-full border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 h-12 rounded-xl transition-all sm:order-1"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                setIsConnected(false)
+                                setShowDisconnectModal(false)
+                            }}
+                            className="w-full bg-rose-600 hover:bg-rose-500 text-white font-semibold h-12 rounded-xl shadow-lg shadow-rose-600/20 active:scale-95 transition-all sm:order-2"
+                        >
+                            Desconectar cuenta
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     )
 }

@@ -51,7 +51,7 @@ export function CreateInvoiceModal({
     const [recurringFreq, setRecurringFreq] = useState('Mensual')
     const [lateFeePercent, setLateFeePercent] = useState('5% mensual')
     const [lateFeeGrace, setLateFeeGrace] = useState('5 días')
-    const [paymentMethod, setPaymentMethod] = useState('Transferencia bancaria')
+    const [paymentMethod, setPaymentMethod] = useState('Efectivo')
     const [activeDebt, setActiveDebt] = useState<number>(0)
 
     const [paymentAmount, setPaymentAmount] = useState<string>('')
@@ -123,8 +123,10 @@ export function CreateInvoiceModal({
                     setActiveDebt(debt)
                     setPaymentAmount(debt.toString())
                     setResidentInvoices(pending)
-                } catch (error) {
-                    console.error('Error fetching debt:', error)
+                } catch (error: any) {
+                    if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
+                        console.error('Error fetching debt:', error)
+                    }
                     setActiveDebt(0)
                     setResidentInvoices([])
                 }
@@ -164,8 +166,10 @@ export function CreateInvoiceModal({
                 }
             }
 
-        } catch (error) {
-            console.error('Error loading condos:', error)
+        } catch (error: any) {
+            if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
+                console.error('Error loading condos:', error)
+            }
         }
     }
 
@@ -174,8 +178,10 @@ export function CreateInvoiceModal({
         try {
             const data = await residentsService.getByCondominium(condoId)
             setResidents(data)
-        } catch (error) {
-            console.error('Error loading residents:', error)
+        } catch (error: any) {
+            if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
+                console.error('Error loading residents:', error)
+            }
         } finally {
             setLoadingData(false)
         }
@@ -187,139 +193,121 @@ export function CreateInvoiceModal({
 
         try {
             const selectedResident = defaultResident || residents.find(r => r.id === formData.residentId)
-
-            if (!selectedResident) {
-                toast.error(`${isPropiedades ? 'Inquilino' : 'Residente'} no seleccionado`, {
-                    description: `Por favor, elige un ${isPropiedades ? 'inquilino' : 'residente'} válido de la lista para generar la factura.`,
-                })
+            if (!selectedResident || !selectedResident.unit_id) {
+                toast.error('Error', { description: 'Residente o unidad no válidos.' })
                 return
             }
 
-            // Should verify unit_id presence
-            if (!selectedResident.unit_id) {
-                toast.error('Unidad No Asignada', {
-                    description: `El ${isPropiedades ? 'inquilino' : 'residente'} seleccionado no tiene una unidad vinculada. Es necesario asignar una unidad antes de facturar.`,
-                })
-                return
-            }
+            let createdInvoice: any = null
+            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo'
 
-            // Append Toggle info to notes if needed, since schema doesn't support them yet
-            let finalNotes = formData.notes
-            if (autoLateFee) finalNotes += ' [Auto Late Fee: 5%]'
-            if (sendEmail) finalNotes += ' [Email Sent]'
+            if (isSettlingDebt) {
+                const firstInvoice = residentInvoices[0]
+                const receiptFolio = firstInvoice 
+                    ? `FAC-${firstInvoice.id.substring(0, 8).toUpperCase()}`
+                    : `REC-${Date.now().toString().slice(-6)}`
 
-            await financeService.create({
-                organization_id: organizationId,
-                condominium_id: selectedCondoId,
-                resident_id: selectedResident.id,
-                unit_id: selectedResident.unit_id,
-                amount: parseFloat(formData.amount),
-                status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
-                due_date: formData.dueDate,
-                description: finalNotes ? `${formData.concept} - ${finalNotes}` : formData.concept,
-                payment_method: paymentMethod,
-                ...(paymentMethod === 'Efectivo' && {
-                    paid_at: new Date().toISOString(),
-                    paid_amount: parseFloat(formData.amount),
-                    balance_due: 0
-                })
-            } as any)
-
-            // Handle Debt Repayment
-            if (activeDebt > 0 && parseFloat(paymentAmount) > 0) {
                 let remainingToApply = parseFloat(paymentAmount)
                 for (const inv of residentInvoices) {
                     if (remainingToApply <= 0) break
                     const currentDebt = inv.balance_due ?? inv.amount
-                    
                     if (remainingToApply >= currentDebt) {
                         remainingToApply -= currentDebt
-                        await financeService.update(inv.id, {
-                            status: 'paid',
-                            paid_at: new Date().toISOString(),
-                            paid_amount: inv.amount,
-                            balance_due: 0
-                        } as any)
+                        await financeService.update(inv.id, { 
+                            status: 'paid', 
+                            paid_at: new Date().toISOString(), 
+                            paid_amount: inv.amount, 
+                            balance_due: 0,
+                            payment_method: paymentMethod,
+                            payment_provider: receiptFolio
+                        })
+                        if (!createdInvoice) createdInvoice = { ...inv, folio: receiptFolio }
                     } else {
                         const newBalance = currentDebt - remainingToApply
-                        await financeService.update(inv.id, {
-                            balance_due: newBalance,
-                            paid_amount: (inv.paid_amount ?? 0) + remainingToApply
-                        } as any)
+                        await financeService.update(inv.id, { 
+                            balance_due: newBalance, 
+                            paid_amount: (inv.paid_amount ?? 0) + remainingToApply,
+                            payment_method: paymentMethod,
+                            payment_provider: receiptFolio
+                        })
                         remainingToApply = 0
+                        if (!createdInvoice) createdInvoice = { ...inv, folio: receiptFolio }
                     }
                 }
-                
-                // Reduce resident initial debt_amount if money left
                 if (remainingToApply > 0 && selectedResident.debt_amount) {
                     const currentInitialDebt = Number(selectedResident.debt_amount)
-                    if (remainingToApply >= currentInitialDebt) {
-                        await residentsService.update(selectedResident.id, { debt_amount: 0 })
-                    } else {
-                        await residentsService.update(selectedResident.id, { debt_amount: currentInitialDebt - remainingToApply })
-                    }
+                    await residentsService.update(selectedResident.id, { debt_amount: Math.max(0, currentInitialDebt - remainingToApply) })
                 }
-            }            // PDF Receipt Generation
+            } else {
+                createdInvoice = await financeService.create({
+                    organization_id: organizationId,
+                    condominium_id: selectedCondoId,
+                    resident_id: selectedResident.id,
+                    unit_id: selectedResident.unit_id,
+                    amount: parseFloat(formData.amount),
+                    status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
+                    due_date: formData.dueDate,
+                    description: formData.notes ? `${formData.concept} - ${formData.notes}` : formData.concept,
+                    payment_method: paymentMethod,
+                    ...(paymentMethod === 'Efectivo' && { paid_at: new Date().toISOString(), paid_amount: parseFloat(formData.amount), balance_due: 0 })
+                } as any)
+            }
+
+            // PDF Generation — recibo completo con folio de la factura existente o nueva
             try {
                 const doc = new jsPDF()
-                
-                // Color Palette
-                const primaryColor = [79, 70, 229] // Indigo
-                
-                // Header Banner
+                const pdfFolio = createdInvoice?.folio
+                    || (createdInvoice?.id ? `FAC-${createdInvoice.id.substring(0, 8).toUpperCase()}` : null)
+                    || `REC-${Date.now().toString().slice(-6)}`
+                const amountForPDF = isSettlingDebt
+                    ? parseFloat(paymentAmount) || parseFloat(formData.amount) || 0
+                    : parseFloat(formData.amount) || 0
+
+                // ─── Header Banner ───────────────────────────────────────────────
                 doc.setFillColor(79, 70, 229)
                 doc.rect(0, 0, 210, 35, 'F')
-                
                 doc.setFontSize(22)
                 doc.setTextColor(255, 255, 255)
                 doc.setFont('helvetica', 'bold')
                 doc.text('RECIBO DE PAGO', 14, 22)
-                
                 doc.setFontSize(10)
                 doc.setFont('helvetica', 'normal')
-                doc.text(`Folio: REC-${Date.now().toString().slice(-6)}`, 150, 16)
+                doc.text(`Folio: ${pdfFolio}`, 150, 16)
                 doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
-                
-                // Resident Info
+
+                // ─── Resident Info ───────────────────────────────────────────────
                 doc.setFontSize(12)
                 doc.setTextColor(40, 40, 40)
                 doc.setFont('helvetica', 'bold')
                 doc.text('INFORMACIÓN DEL RESIDENTE', 14, 50)
-                
                 doc.setFontSize(10)
                 doc.setFont('helvetica', 'normal')
                 doc.text(`Nombre: ${selectedResident.first_name} ${selectedResident.last_name}`, 14, 60)
                 doc.text(`Unidad: ${selectedResident.unit_number || 'S/N'}`, 14, 66)
                 doc.text(`Condominio: ${condominiums.find(c => c.id === selectedCondoId)?.name || 'Condominio'}`, 14, 72)
-                
-                // Divider
+
+                // ─── Divider ─────────────────────────────────────────────────────
                 doc.setDrawColor(220, 220, 220)
                 doc.line(14, 80, 196, 80)
-                
-                // Payment Details
+
+                // ─── Payment Details ─────────────────────────────────────────────
                 doc.setFontSize(12)
                 doc.setFont('helvetica', 'bold')
                 doc.text('DETALLES DEL PAGO', 14, 92)
-                
-                const tableColumn = ["Concepto", "Monto Pagado", "Método de Pago"]
-                const tableRows = [
-                    [
-                        formData.concept,
-                        `$${Number(formData.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-                        paymentMethod
-                    ]
-                ]
-                
+
                 autoTable(doc, {
-                    head: [tableColumn],
-                    body: tableRows,
+                    head: [['Concepto', 'Monto Pagado', 'Método de Pago']],
+                    body: [[
+                        formData.concept,
+                        `$${amountForPDF.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+                        paymentMethod
+                    ]],
                     startY: 98,
                     styles: { fontSize: 10, cellPadding: 5 },
                     headStyles: { fillColor: [79, 70, 229] },
                     alternateRowStyles: { fillColor: [245, 245, 245] },
                 })
-                
-                // Balances
+
                 const finalY = (doc as any).lastAutoTable.finalY + 15
 
                 // Notes
@@ -328,61 +316,43 @@ export function CreateInvoiceModal({
                     doc.setFont('helvetica', 'bold')
                     doc.setTextColor(40, 40, 40)
                     doc.text('Notas:', 14, finalY)
-                    
-                    doc.setFontSize(10)
                     doc.setFont('helvetica', 'normal')
                     doc.setTextColor(100, 100, 100)
-                    
-                    // Word wrap notes
                     const splitNotes = doc.splitTextToSize(formData.notes, 90)
                     doc.text(splitNotes, 14, finalY + 6)
                 }
 
+                // ─── Totals ──────────────────────────────────────────────────────
                 doc.setFontSize(11)
                 doc.setFont('helvetica', 'bold')
                 doc.setTextColor(60, 60, 60)
-                doc.text(`Total Procesado: $${Number(formData.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
-                
-                const currentPaid = parseFloat(formData.amount) || 0
-                const newBalance = Math.max(0, activeDebt - currentPaid)
-                
+                doc.text(`Total Procesado: $${amountForPDF.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
+                const newBalance = Math.max(0, activeDebt - amountForPDF)
                 doc.setFontSize(12)
-                doc.setTextColor(244, 63, 94) // Accent color for debt
+                doc.setTextColor(244, 63, 94)
                 doc.text(`Nuevo Saldo Pendiente: $${newBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY + 8)
-                
-                // Footer
+
+                // ─── Footer ──────────────────────────────────────────────────────
                 doc.setFontSize(8)
                 doc.setTextColor(150, 150, 150)
                 doc.setFont('helvetica', 'normal')
                 doc.text('Este documento es un comprobante de operación digital generado por InmobiGo SaaS.', 14, 275)
                 doc.text('Conserve este recibo para cualquier aclaración futura.', 14, 281)
-                
+
                 doc.save(`Recibo_${selectedResident.last_name}_${Date.now().toString().slice(-4)}.pdf`)
                 toast.success('Comprobante PDF generado y descargado.')
             } catch (pdfError) {
                 console.error('Error generating receipt PDF:', pdfError)
                 toast.error('Error al generar el archivo PDF del recibo.')
-            }            if (onSuccess) onSuccess()
-            onClose()
-            // Reset form
-            setFormData({
-                residentId: '',
-                concept: isPropiedades ? 'Renta' : 'Cuota de Mantenimiento',
-                amount: '',
-                dueDate: format(new Date(), 'yyyy-MM-dd'),
-                notes: ''
-            })
-            setPaymentMethod('Transferencia bancaria')
+            }
 
+            if (onSuccess) onSuccess()
+            onClose()
         } catch (error: any) {
-            console.error('Error creating invoice:', error)
-            toast.error('Error al facturar', {
-                description: error.message || 'Ocurrió un error inesperado al intentar generar la factura.',
-            })
+            toast.error('Error al procesar.')
         } finally {
             setLoading(false)
         }
-
     }
 
     return (
@@ -678,9 +648,7 @@ export function CreateInvoiceModal({
                                 onChange={(e) => setPaymentMethod(e.target.value)}
                                 className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-400 focus:outline-none"
                             >
-                                <option value="Transferencia bancaria">Transferencia bancaria</option>
                                 <option value="Efectivo">Efectivo</option>
-                                <option value="Tarjeta">Tarjeta</option>
                             </select>
 
                         </div>

@@ -40,8 +40,10 @@ export function RevenueChart({ organizationId, condominiumId }: { organizationId
                     const data = await res.json()
                     setChartData(data)
                 }
-            } catch (e) {
-                console.error('Error fetching revenue chart data', e)
+            } catch (e: any) {
+                if (e?.name !== 'AbortError' && !e?.message?.includes('aborted') && !e?.message?.includes('abort')) {
+                    console.error('Error fetching revenue chart data', e)
+                }
             } finally {
                 setIsLoading(false)
             }

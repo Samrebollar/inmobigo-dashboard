@@ -51,7 +51,7 @@ export function CreateInvoiceModal({
     const [recurringFreq, setRecurringFreq] = useState('Mensual')
     const [lateFeePercent, setLateFeePercent] = useState('5% mensual')
     const [lateFeeGrace, setLateFeeGrace] = useState('5 días')
-    const [paymentMethod, setPaymentMethod] = useState('Transferencia bancaria')
+    const [paymentMethod, setPaymentMethod] = useState('Efectivo')
     const [activeDebt, setActiveDebt] = useState<number>(0)
 
     const [paymentAmount, setPaymentAmount] = useState<string>('')
@@ -123,8 +123,10 @@ export function CreateInvoiceModal({
                     setActiveDebt(debt)
                     setPaymentAmount(debt.toString())
                     setResidentInvoices(pending)
-                } catch (error) {
-                    console.error('Error fetching debt:', error)
+                } catch (error: any) {
+                    if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
+                        console.error('Error fetching debt:', error)
+                    }
                     setActiveDebt(0)
                     setResidentInvoices([])
                 }
@@ -164,8 +166,10 @@ export function CreateInvoiceModal({
                 }
             }
 
-        } catch (error) {
-            console.error('Error loading condos:', error)
+        } catch (error: any) {
+            if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
+                console.error('Error loading condos:', error)
+            }
         }
     }
 
@@ -174,8 +178,10 @@ export function CreateInvoiceModal({
         try {
             const data = await residentsService.getByCondominium(condoId)
             setResidents(data)
-        } catch (error) {
-            console.error('Error loading residents:', error)
+        } catch (error: any) {
+            if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
+                console.error('Error loading residents:', error)
+            }
         } finally {
             setLoadingData(false)
         }
@@ -208,23 +214,15 @@ export function CreateInvoiceModal({
             if (autoLateFee) finalNotes += ' [Auto Late Fee: 5%]'
             if (sendEmail) finalNotes += ' [Email Sent]'
 
-            await financeService.create({
-                organization_id: organizationId,
-                condominium_id: selectedCondoId,
-                unit_id: selectedResident.unit_id,
-                amount: parseFloat(formData.amount),
-                status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
-                due_date: formData.dueDate,
-                description: finalNotes ? `${formData.concept} - ${finalNotes}` : formData.concept,
-                ...(paymentMethod === 'Efectivo' && {
-                    paid_at: new Date().toISOString(),
-                    paid_amount: parseFloat(formData.amount),
-                    balance_due: 0
-                })
-            } as any)
+            let createdInvoice: any = null
+            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo'
 
-            // Handle Debt Repayment
-            if (activeDebt > 0 && parseFloat(paymentAmount) > 0) {
+            if (isSettlingDebt) {
+                const firstInvoice = residentInvoices[0]
+                const receiptFolio = firstInvoice 
+                    ? `FAC-${firstInvoice.id.substring(0, 8).toUpperCase()}`
+                    : `REC-${Date.now().toString().slice(-6)}`
+
                 let remainingToApply = parseFloat(paymentAmount)
                 for (const inv of residentInvoices) {
                     if (remainingToApply <= 0) break
@@ -236,15 +234,21 @@ export function CreateInvoiceModal({
                             status: 'paid',
                             paid_at: new Date().toISOString(),
                             paid_amount: inv.amount,
-                            balance_due: 0
-                        } as any)
+                            balance_due: 0,
+                            payment_method: paymentMethod,
+                            payment_provider: receiptFolio
+                        })
+                        if (!createdInvoice) createdInvoice = { ...inv, folio: receiptFolio }
                     } else {
                         const newBalance = currentDebt - remainingToApply
                         await financeService.update(inv.id, {
                             balance_due: newBalance,
-                            paid_amount: (inv.paid_amount ?? 0) + remainingToApply
-                        } as any)
+                            paid_amount: (inv.paid_amount ?? 0) + remainingToApply,
+                            payment_method: paymentMethod,
+                            payment_provider: receiptFolio
+                        })
                         remainingToApply = 0
+                        if (!createdInvoice) createdInvoice = { ...inv, folio: receiptFolio }
                     }
                 }
                 
@@ -257,6 +261,23 @@ export function CreateInvoiceModal({
                         await residentsService.update(selectedResident.id, { debt_amount: currentInitialDebt - remainingToApply })
                     }
                 }
+            } else {
+                createdInvoice = await financeService.create({
+                    organization_id: organizationId,
+                    condominium_id: selectedCondoId,
+                    resident_id: selectedResident.id,
+                    unit_id: selectedResident.unit_id,
+                    amount: parseFloat(formData.amount),
+                    status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
+                    due_date: formData.dueDate,
+                    description: finalNotes ? `${formData.concept} - ${finalNotes}` : formData.concept,
+                    payment_method: paymentMethod,
+                    ...(paymentMethod === 'Efectivo' && {
+                        paid_at: new Date().toISOString(),
+                        paid_amount: parseFloat(formData.amount),
+                        balance_due: 0
+                    })
+                } as any)
             }            // PDF Receipt Generation
             try {
                 const doc = new jsPDF()
@@ -275,7 +296,8 @@ export function CreateInvoiceModal({
                 
                 doc.setFontSize(10)
                 doc.setFont('helvetica', 'normal')
-                doc.text(`Folio: REC-${Date.now().toString().slice(-6)}`, 150, 16)
+                const pdfFolio = createdInvoice?.folio || `FAC-${createdInvoice?.id?.substring(0, 8).toUpperCase()}` || `REC-${Date.now().toString().slice(-6)}`
+                doc.text(`Folio: ${pdfFolio}`, 150, 16)
                 doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
                 
                 // Resident Info
@@ -370,7 +392,7 @@ export function CreateInvoiceModal({
                 dueDate: format(new Date(), 'yyyy-MM-dd'),
                 notes: ''
             })
-            setPaymentMethod('Transferencia bancaria')
+            setPaymentMethod('Efectivo')
 
         } catch (error: any) {
             console.error('Error creating invoice:', error)
@@ -676,9 +698,7 @@ export function CreateInvoiceModal({
                                 onChange={(e) => setPaymentMethod(e.target.value)}
                                 className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-400 focus:outline-none"
                             >
-                                <option value="Transferencia bancaria">Transferencia bancaria</option>
                                 <option value="Efectivo">Efectivo</option>
-                                <option value="Tarjeta">Tarjeta</option>
                             </select>
 
                         </div>

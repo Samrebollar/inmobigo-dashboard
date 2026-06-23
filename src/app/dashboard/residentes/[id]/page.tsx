@@ -168,6 +168,14 @@ export default function ResidentMovementsPage() {
         return format(parseISO(dateStr), 'dd/MM/yyyy', { locale: es })
     }
 
+    const formatPaymentMethod = (method?: string | null) => {
+        if (!method) return 'Pago en línea'
+        const m = method.toLowerCase()
+        if (m.includes('efectivo')) return 'Efectivo'
+        if (m.includes('transferencia')) return 'Transferencia'
+        return 'Pago en línea'
+    }
+
     const exportToPDF = () => {
         const doc = new jsPDF()
         doc.setFontSize(18)
@@ -752,7 +760,7 @@ export default function ResidentMovementsPage() {
 
                 {/* Table */}
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-x-auto">
-                    <table className="w-full text-sm text-left min-w-[1100px]">
+                    <table className="w-full text-sm text-left min-w-[1300px]">
                         <thead className="bg-zinc-950/50 text-zinc-400 font-medium">
                             <tr className="border-b border-zinc-800">
                                 <th className="px-6 py-4">Fecha de Movimiento</th>
@@ -762,6 +770,8 @@ export default function ResidentMovementsPage() {
                                 <th className="px-6 py-4">Monto</th>
                                 <th className="px-6 py-4">Vencimiento</th>
                                 <th className="px-6 py-4">Fecha Pago</th>
+                                <th className="px-6 py-4">Folio de Pago</th>
+                                <th className="px-6 py-4">Método de Pago</th>
                                 <th className="px-6 py-4">Días de atraso</th>
                                 <th className="px-6 py-4 text-right">Acciones</th>
                             </tr>
@@ -797,6 +807,22 @@ export default function ResidentMovementsPage() {
                                         {inv.status === 'paid' ? (inv.updated_at ? formatDate(inv.updated_at) : formatDate(inv.created_at)) : '-'}
                                     </td>
                                     <td className="px-6 py-4">
+                                        {inv.status === 'paid'
+                                            ? (
+                                                <span className="font-mono text-xs text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md">
+                                                    {inv.payment_folio || inv.folio || '-'}
+                                                </span>
+                                            )
+                                            : <span className="text-zinc-600">-</span>
+                                        }
+                                    </td>
+                                    <td className="px-6 py-4 text-zinc-400">
+                                        {inv.status === 'paid'
+                                            ? formatPaymentMethod(inv.payment_method)
+                                            : '-'
+                                        }
+                                    </td>
+                                    <td className="px-6 py-4">
                                         {(inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
                                             ? <span className="text-red-400 font-medium">{Math.max(0, differenceInDays(new Date(), parseISO(inv.due_date)))} días</span>
                                             : <span className="text-zinc-600">-</span>
@@ -828,7 +854,7 @@ export default function ResidentMovementsPage() {
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={11} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>

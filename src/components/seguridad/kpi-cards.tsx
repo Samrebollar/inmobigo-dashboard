@@ -55,8 +55,10 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
                     setError(errData.error || `Error ${res.status}`)
                 }
             } catch (e: any) {
-                console.error('Error fetching finance metrics:', e)
-                setError(e.message)
+                if (e?.name !== 'AbortError' && !e?.message?.includes('aborted') && !e?.message?.includes('abort')) {
+                    console.error('Error fetching finance metrics:', e)
+                    setError(e.message)
+                }
             } finally {
                 setIsLoading(false)
             }

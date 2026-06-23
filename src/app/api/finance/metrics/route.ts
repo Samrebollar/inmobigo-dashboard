@@ -118,7 +118,7 @@ export async function GET(request: Request) {
             try {
                 let invQuery = supabase
                     .from('resident_invoices')
-                    .select('amount, balance_due, created_at')
+                    .select('amount, balance_due, created_at, status')
                     .eq('status', 'paid')
                     .gte('created_at', monthStart)
                     .lte('created_at', monthEnd)
@@ -133,7 +133,12 @@ export async function GET(request: Request) {
 
                 if (paidInvs && paidInvs.length > 0) {
                     ingresos_mes = paidInvs.reduce(
-                        (sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)),
+                        (sum, inv) => {
+                            const paidVal = (inv.balance_due >= inv.amount)
+                                ? Number(inv.amount || 0)
+                                : Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
+                            return sum + paidVal
+                        },
                         0
                     )
                 }
@@ -178,7 +183,12 @@ export async function GET(request: Request) {
             )
 
             recaudado_mes_inv = invoicesToUse.reduce(
-                (sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)),
+                (sum, inv) => {
+                    const paidVal = (inv.status === 'paid' && (inv.balance_due >= inv.amount))
+                        ? Number(inv.amount || 0)
+                        : Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
+                    return sum + paidVal
+                },
                 0
             )
             hasMonthlyData = true

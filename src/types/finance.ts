@@ -23,6 +23,8 @@ export interface ResidentInvoice {
     description?: string
     created_at: string
     updated_at?: string
+    payment_method?: string | null
+    payment_provider?: string | null
 
     // Joined data (optional, from joins)
     resident_name?: string
@@ -37,6 +39,7 @@ export interface ResidentInvoice {
     paid_at?: string        // NO existe en resident_invoices — solo backward compat con componentes viejos
     unit_id?: string        // NO existe en resident_invoices — solo backward compat
     payment_link?: string   // NO existe en resident_invoices — solo backward compat
+    payment_folio?: string  // folio del recibo de pago emitido (efectivo). Coincide con `payment_provider` si existe, sino con `folio`
 }
 
 // ─── VISTA: financial_dashboard_v ─────────────────────────────────────────────
@@ -96,6 +99,10 @@ export interface CreateInvoiceDTO {
     invoice_type?: InvoiceType
     due_date: string
     description?: string
+    payment_method?: string
+    paid_at?: string
+    paid_amount?: number
+    balance_due?: number
 }
 
 export interface FinancialSummary {

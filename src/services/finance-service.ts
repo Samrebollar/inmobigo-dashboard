@@ -10,16 +10,19 @@ import {
     Invoice
 } from '@/types/finance'
 import { calculateCondoMonthlyFinancials, getLocalDateParts } from '@/utils/finance-utils'
+import { syncToLegacy, syncPaymentToLegacy } from './legacy-sync-service'
 
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 /** Enriches a raw resident_invoice row with computed fields */
 function enrichInvoice(inv: any): ResidentInvoice {
+    const mainFolio = generateFolio(inv.id)
     return {
         ...inv,
-        folio: generateFolio(inv.id),
+        folio: mainFolio,
         paid_amount: getPaidAmount(inv),
+        payment_folio: inv.payment_provider || mainFolio,
         // Flatten joined resident data if present
         resident_name: inv.residents
             ? `${inv.residents.first_name || ''} ${inv.residents.last_name || ''}`.trim() || null
@@ -217,14 +220,18 @@ export const financeService = {
 
     // ── CREATE INVOICE ───────────────────────────────────────────────────────
     async create(invoice: CreateInvoiceDTO): Promise<ResidentInvoice> {
+        const balanceDue = invoice.balance_due !== undefined 
+            ? invoice.balance_due 
+            : (invoice.status === 'paid' ? 0 : invoice.amount)
+
         if (invoice.condominium_id.startsWith('demo-')) {
             return {
                 id: `demo-inv-${Math.random().toString(36).substr(2, 9)}`,
                 ...invoice,
-                balance_due: invoice.amount,
+                balance_due: balanceDue,
                 invoice_type: invoice.invoice_type || 'maintenance',
                 folio: `FAC-DEMO${Date.now().toString().slice(-4)}`,
-                paid_amount: 0,
+                paid_amount: invoice.amount - balanceDue,
                 created_at: new Date().toISOString(),
             }
         }
@@ -241,11 +248,13 @@ export const financeService = {
                 condominium_id: invoice.condominium_id,
                 resident_id: invoice.resident_id,
                 amount: invoice.amount,
-                balance_due: invoice.amount, // starts with full balance
+                balance_due: balanceDue,
                 status: invoice.status,
                 invoice_type: invoice.invoice_type || 'maintenance',
                 due_date: invoice.due_date,
                 description: invoice.description,
+                payment_method: invoice.payment_method || null,
+                payment_provider: invoice.payment_provider || null,
             })
             .select()
             .single()
@@ -253,6 +262,18 @@ export const financeService = {
         if (error) {
             console.error('[financeService.create]', error)
             throw new Error('Error al crear la factura')
+        }
+
+        // Sincronizar a la tabla legacy invoices
+        try {
+            await syncToLegacy(supabase, data, {
+                paid_amount: invoice.amount - balanceDue,
+                paid_at: invoice.status === 'paid' ? (invoice.paid_at || new Date().toISOString()) : null,
+                payment_provider: invoice.payment_method || (invoice.status === 'paid' ? 'Manual' : null),
+                external_payment_id: data.id,
+            })
+        } catch (syncErr) {
+            console.warn('[financeService.create] Failed to sync to legacy invoices:', syncErr)
         }
 
         return enrichInvoice(data)
@@ -280,6 +301,21 @@ export const financeService = {
             throw new Error('Error al actualizar la factura')
         }
 
+        // Sincronizar a la tabla legacy invoices
+        try {
+            const isPaid = data.status === 'paid'
+            const paidAmount = Math.max(0, data.amount - data.balance_due)
+            await syncPaymentToLegacy(supabase, id, {
+                paidAmount,
+                newBalanceDue: data.balance_due,
+                newStatus: data.status,
+                paymentProvider: (updates as any).payment_method || (isPaid ? 'Manual' : undefined),
+                externalPaymentId: (updates as any).external_payment_id || undefined,
+            })
+        } catch (syncErr) {
+            console.warn('[financeService.update] Failed to sync to legacy invoices:', syncErr)
+        }
+
         return enrichInvoice(data)
     },
 
@@ -298,6 +334,16 @@ export const financeService = {
         if (error) {
             console.error('[financeService.delete]', error)
             throw new Error('Error al eliminar la factura')
+        }
+
+        // Sincronizar a la tabla legacy invoices (eliminar de la tabla legacy)
+        try {
+            await supabase
+                .from('invoices')
+                .delete()
+                .eq('external_payment_id', id)
+        } catch (syncErr) {
+            console.warn('[financeService.delete] Failed to delete from legacy invoices:', syncErr)
         }
     },
 

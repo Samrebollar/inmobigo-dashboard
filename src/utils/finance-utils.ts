@@ -340,13 +340,14 @@ export function calculateResidentMonthlyFinancials({
 
     if (selectedMonth === 'all') {
         // totalPaid = ALL real paid invoices in period (maintenance + manual_payment + any type)
+        // Use due_date as the primary date for month/year assignment (same logic as the table filter)
         const allPaidInvoicesForYear = invoices.filter(inv => {
-            if (!inv.created_at) return false
-            const invDate = new Date(inv.created_at)
-            if (invDate.getFullYear() !== selectedYear) return false
             if (inv.status !== 'paid') return false
-            // Exclude virtual rows and unpaid types
-            return true
+            const dateStr = inv.due_date || inv.created_at
+            if (!dateStr) return false
+            const parts = getLocalDateParts(dateStr)
+            if (!parts) return false
+            return parts.year === selectedYear
         })
         const totalPaid = allPaidInvoicesForYear
             .reduce((sum, inv) => sum + (Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
@@ -410,10 +411,14 @@ export function calculateResidentMonthlyFinancials({
     const isOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > 10)
 
     // totalPaid = ALL real paid invoices for this month (maintenance + manual_payment + any type)
+    // Use due_date as the primary date for month/year assignment (same logic as the table filter)
     const allPaidInvoicesForMonth = invoices.filter(inv => {
-        if (!inv.created_at) return false
-        const invDate = new Date(inv.created_at)
-        return invDate.getFullYear() === selectedYear && invDate.getMonth() === monthNum && inv.status === 'paid'
+        if (inv.status !== 'paid') return false
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return false
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return false
+        return parts.year === selectedYear && parts.month === monthNum
     })
     const totalPaid = allPaidInvoicesForMonth
         .reduce((sum, inv) => sum + (Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)

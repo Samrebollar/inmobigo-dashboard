@@ -13,9 +13,16 @@ export interface Ticket {
     priority: TicketPriority
     category?: string
     images?: string[]
-    assigned_to?: string // user_id of staff
+    assigned_to?: string          // user_id of staff
     created_at: string
     updated_at: string
+    resolved_at?: string
+
+    // v2 additive columns
+    location?: string
+    reported_by_name?: string
+    resolution_notes?: string
+    assigned_to_name?: string
 
     // Joins
     condominium_name?: string
@@ -35,12 +42,19 @@ export interface CreateTicketDTO {
     status: TicketStatus
     category?: string
     images?: string[]
+    location?: string
+    reported_by_name?: string
 }
 
 export interface UpdateTicketDTO {
     status?: TicketStatus
     priority?: TicketPriority
     assigned_to?: string
-    description?: string 
+    assigned_to_name?: string
+    description?: string
     images?: string[]
+    location?: string
+    resolution_notes?: string
+    resolved_at?: string
 }
+

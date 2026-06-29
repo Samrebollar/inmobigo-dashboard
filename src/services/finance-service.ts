@@ -254,7 +254,7 @@ export const financeService = {
                 due_date: invoice.due_date,
                 description: invoice.description,
                 payment_method: invoice.payment_method || null,
-                payment_provider: invoice.payment_provider || null,
+                payment_provider: (invoice as any).payment_provider || null,
             })
             .select()
             .single()

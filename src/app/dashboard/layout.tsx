@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift, BookOpen } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -318,6 +318,13 @@ export default async function DashboardLayout({
                         >
                             <ClipboardList size={18} className="text-emerald-500/80 group-hover:text-emerald-400" />
                             <span>Control Operativo</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/bitacora-inteligente"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-cyan-500/20"
+                        >
+                            <BookOpen size={18} className="text-cyan-500/80 group-hover:text-cyan-400" />
+                            <span>Bitácora Inteligente</span>
                         </Link>
                         <Link
                             href="/dashboard/premium-services"

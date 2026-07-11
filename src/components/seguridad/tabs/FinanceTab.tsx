@@ -222,7 +222,7 @@ export function FinanceTab() {
             // 2. Fetch residents
             const { data: residentsData, error: residentsError } = await supabase
                 .from('residents')
-                .select('unit_id, fecha_ingreso, status')
+                .select('id, unit_id, fecha_ingreso, status')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError
@@ -230,7 +230,7 @@ export function FinanceTab() {
             // 3. Fetch resident invoices
             const { data: invoicesData, error: invoiceError } = await supabase
                 .from('resident_invoices')
-                .select('amount, balance_due, status, resident_id, invoice_type, created_at')
+                .select('amount, balance_due, status, resident_id, invoice_type, created_at, due_date')
                 .eq('condominium_id', condoId)
 
             if (invoiceError) throw invoiceError

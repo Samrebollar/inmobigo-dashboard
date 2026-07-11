@@ -843,7 +843,7 @@ export const financeService = {
         // CALCULATIONS — KPI cards always show current month only
         const condoFinancials = calculateCondoMonthlyFinancials({
             units: units || [],
-            residents: [],
+            residents: residents || [],
             invoices: invoices || [],
             selectedMonth: currentMonth,
             selectedYear: currentYear
@@ -854,7 +854,7 @@ export const financeService = {
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear
         const prevCondoFinancials = calculateCondoMonthlyFinancials({
             units: units || [],
-            residents: [],
+            residents: residents || [],
             invoices: invoices || [],
             selectedMonth: prevMonth,
             selectedYear: prevYear

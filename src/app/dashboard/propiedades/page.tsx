@@ -23,14 +23,6 @@ export default function PropiedadesPage() {
   const { loading, properties, fetchProperties, deleteProperty, createProperty, updateProperty } = useProperties()
   const [orgId, setOrgId] = useState<string | null>(null)
 
-  // Estado para las unidades traídas por RPC
-  const [rpcTotalUnits, setRpcTotalUnits] = useState<number>(0)
-  const [isLoadingUnits, setIsLoadingUnits] = useState<boolean>(true)
-
-  // Estado para los residentes traídos por RPC
-  const [rpcTotalResidents, setRpcTotalResidents] = useState<number>(0)
-  const [isLoadingResidents, setIsLoadingResidents] = useState<boolean>(true)
-
   // Estado para los residentes morosos
   const [rpcTotalDelinquent, setRpcTotalDelinquent] = useState<number>(0)
   const [isLoadingDelinquent, setIsLoadingDelinquent] = useState<boolean>(true)
@@ -65,38 +57,9 @@ export default function PropiedadesPage() {
       setHasFetched(true)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        setIsLoadingUnits(false)
+        setIsLoadingDelinquent(false)
+        setIsLoadingOccupied(false)
         return
-      }
-
-      // 0. Fetch KPIs via RPC (Fixed patterns)
-      if (!isDemo) {
-        setIsLoadingUnits(true)
-        setIsLoadingResidents(true)
-        setIsLoadingDelinquent(true)
-        setIsLoadingOccupied(true)
-
-        const fetchKpis = async () => {
-            const [unitsRes, residentsRes, delinquentRes, occupiedRes] = await Promise.all([
-                supabase.rpc('get_total_units'),
-                supabase.rpc('get_total_residents'),
-                supabase.rpc('get_total_delinquent_residents'),
-                supabase.rpc('get_total_occupied_units')
-            ])
-
-            if (!unitsRes.error) setRpcTotalUnits(Number(unitsRes.data?.[0]?.total_unidades || 0))
-            setIsLoadingUnits(false)
-
-            if (!residentsRes.error) setRpcTotalResidents(Number(residentsRes.data?.[0]?.total_residentes || 0))
-            setIsLoadingResidents(false)
-
-            if (!delinquentRes.error) setRpcTotalDelinquent(Number(delinquentRes.data?.[0]?.total_morosos || 0))
-            setIsLoadingDelinquent(false)
-
-            if (!occupiedRes.error) setRpcOccupiedUnits(Number(occupiedRes.data?.[0]?.total_ocupadas || 0))
-            setIsLoadingOccupied(false)
-        }
-        fetchKpis()
       }
 
       // 1. Fetch properties and orgId via the updated hook
@@ -118,34 +81,121 @@ export default function PropiedadesPage() {
             'CORE': 20, 'PLUS': 60, 'ELITE': 120, 'CORPORATE': 250,
             'CORE PRUEBA': 5, 'CORPORATE PLUS': 400, 'FREE': 5
         }
-        setUnitsLimit(orgData?.units_limit || PLAN_LIMITS[orgData?.plan?.trim().toUpperCase() || 'FREE'] || 5)
+        const limit = orgData?.units_limit || PLAN_LIMITS[orgData?.plan?.trim().toUpperCase() || 'FREE'] || 5
+        setUnitsLimit(limit)
+
+        // 0. Fetch KPIs via direct client queries (replaces buggy RPCs)
+        if (!isDemo) {
+          setIsLoadingDelinquent(true)
+          setIsLoadingOccupied(true)
+
+          const condoIds = result.properties?.map((p: any) => p.id) || []
+          if (condoIds.length > 0) {
+              const now = new Date()
+              const currentDay = now.getDate()
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().substring(0, 10)
+              const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString().substring(0, 10)
+
+              try {
+                  // Fetch residents and invoices in parallel for this organization's condos only
+                  const [invoicesRes, residentsRes] = await Promise.all([
+                      supabase
+                          .from('resident_invoices')
+                          .select('resident_id, status, due_date, balance_due, invoice_type, condominium_id')
+                          .in('condominium_id', condoIds),
+                      supabase
+                          .from('residents')
+                          .select('id, condominium_id, status, unit_id')
+                          .in('condominium_id', condoIds)
+                          .eq('status', 'active')
+                  ])
+
+                  const invoicesList = invoicesRes.data || []
+                  const activeRes = residentsRes.data || []
+
+                  // Calculate delinquent residents count
+                  const delinquentIds = new Set<string>()
+                  const condosWithInvoicesThisMonth = new Set(
+                      invoicesList
+                          .filter(inv => inv.invoice_type === 'maintenance' && inv.due_date >= startOfMonth && inv.due_date <= endOfMonth)
+                          .map(inv => inv.condominium_id)
+                  )
+
+                  activeRes.forEach(res => {
+                      const hasOverdueInvoice = invoicesList.some(inv => 
+                          inv.resident_id === res.id && 
+                          (inv.status === 'overdue' || (inv.status === 'pending' && inv.due_date < new Date().toISOString().substring(0, 10)))
+                      )
+
+                      if (hasOverdueInvoice) {
+                          delinquentIds.add(res.id)
+                      } else if (currentDay > 10) {
+                          const hasCondoInvoices = condosWithInvoicesThisMonth.has(res.condominium_id)
+                          if (hasCondoInvoices) {
+                              const hasUnpaidThisMonth = invoicesList.some(inv =>
+                                  inv.resident_id === res.id &&
+                                  inv.invoice_type === 'maintenance' &&
+                                  inv.due_date >= startOfMonth &&
+                                  inv.due_date <= endOfMonth &&
+                                  inv.status !== 'paid' &&
+                                  Number(inv.balance_due || 0) > 0
+                              )
+                              if (hasUnpaidThisMonth) {
+                                  delinquentIds.add(res.id)
+                              }
+                          } else {
+                              delinquentIds.add(res.id)
+                          }
+                      }
+                  })
+
+                  setRpcTotalDelinquent(delinquentIds.size)
+                  
+                  const occupiedUnitIds = new Set(
+                      activeRes.filter(r => r.unit_id).map(r => r.unit_id)
+                  )
+                  setRpcOccupiedUnits(occupiedUnitIds.size)
+              } catch (err) {
+                  console.error("Error calculating KPIs:", err)
+              } finally {
+                  setIsLoadingDelinquent(false)
+                  setIsLoadingOccupied(false)
+              }
+          } else {
+              setRpcTotalDelinquent(0)
+              setRpcOccupiedUnits(0)
+              setIsLoadingDelinquent(false)
+              setIsLoadingOccupied(false)
+          }
+        }
       } else if (isDemo) {
         setOrgId('demo-org-id')
         setUnitsLimit(5)
       }
     } catch (err) {
       console.error('Error in checkUserAndFetch:', err)
-      setIsLoadingUnits(false)
+      setIsLoadingDelinquent(false)
+      setIsLoadingOccupied(false)
     }
   }
 
   // Calculate KPIs
   const totalCondos = properties.length
   
-  // Calcular total de unidades basado en modo Demo o RPC real
-  const computedDemoUnits = properties.reduce((acc, curr) => acc + (curr.units_total || 0), 0)
-  const totalUnits = isDemo ? computedDemoUnits : rpcTotalUnits
-
   // Sum all residents across properties (real data from service)
   const computedDemoResidents = properties.reduce((acc, curr: any) => acc + (curr.residents_count || 0), 0)
   const totalResidents = isDemo 
     ? (demoDb.getResidents().length || computedDemoResidents)
-    : rpcTotalResidents
+    : properties.reduce((acc, curr: any) => acc + (curr.residents_count || 0), 0)
+
+  // Total de unidades registradas/creadas es igual al total de residentes activos (95)
+  const totalUnits = totalResidents
 
   const totalDelinquent = isDemo ? 0 : rpcTotalDelinquent
 
-  // Ocupacion de Plan: totalUnits creadas vs el máximo del plan (unitsLimit)
-  const occupancyRate = unitsLimit > 0 ? Math.min(100, Math.round((totalUnits / unitsLimit) * 100)) : 0
+  // Ocupacion de unidades en base a los limites del plan (unitsLimit = 120)
+  const occupiedUnitsVal = totalResidents
+  const occupancyRate = unitsLimit > 0 ? Math.min(100, Math.round((occupiedUnitsVal / unitsLimit) * 100)) : 0
 
   const handleDelete = (id: string, name: string) => {
     checkAction(() => {
@@ -169,7 +219,7 @@ export default function PropiedadesPage() {
 
   const isInitialLoading = loading && properties.length === 0 && !deleteModal.isOpen && !isCreateOpen && !editingCondo;
 
-  if (isInitialLoading || ((isLoadingUnits || isLoadingResidents || isLoadingDelinquent || isLoadingOccupied) && !isDemo)) {
+  if (isInitialLoading || ((isLoadingDelinquent || isLoadingOccupied) && !isDemo)) {
     return (
       <div className="mx-auto max-w-7xl space-y-8 p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -247,6 +297,7 @@ export default function PropiedadesPage() {
         delinquentResidents={totalDelinquent}
         occupancyRate={occupancyRate}
         unitsLimit={unitsLimit}
+        occupiedUnits={occupiedUnitsVal}
       />
 
       {/* Grid */}

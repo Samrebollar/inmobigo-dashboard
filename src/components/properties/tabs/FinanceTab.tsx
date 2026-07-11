@@ -223,7 +223,7 @@ export function FinanceTab() {
             // 2. Fetch residents
             const { data: residentsData, error: residentsError } = await supabase
                 .from('residents')
-                .select('unit_id, fecha_ingreso, status')
+                .select('id, unit_id, fecha_ingreso, status')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError

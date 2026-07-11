@@ -11,9 +11,10 @@ interface KPIProps {
     delinquentResidents?: number
     occupancyRate: number
     unitsLimit?: number
+    occupiedUnits?: number
 }
 
-export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinquentResidents = 0, occupancyRate, unitsLimit = 0 }: KPIProps) {
+export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinquentResidents = 0, occupancyRate, unitsLimit = 0, occupiedUnits = 0 }: KPIProps) {
     const { isPropiedades } = useUserRole()
     const stats = [
         {
@@ -22,8 +23,8 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             icon: Building2,
             color: 'text-blue-400',
             bg: 'bg-blue-500/10',
-            trend: '+12% vs mes anterior',
-            trendColor: 'text-emerald-400',
+            trend: 'Portafolio activo',
+            trendColor: 'text-indigo-400',
             hoverBorder: 'hover:border-blue-500/50'
         },
         {
@@ -32,17 +33,17 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             icon: Home,
             color: 'text-purple-400',
             bg: 'bg-purple-500/10',
-            trend: 'Capacidad total',
-            trendColor: 'text-zinc-500',
+            trend: unitsLimit > 0 ? `${totalUnits} de ${unitsLimit} del plan` : 'Plan sin límite',
+            trendColor: 'text-purple-400',
             hoverBorder: 'hover:border-purple-500/50'
         },
         {
             label: isPropiedades ? 'Inquilinos al corriente' : 'Residentes al corriente',
-            value: totalResidents,
+            value: Math.max(0, totalResidents - delinquentResidents),
             icon: Users,
             color: 'text-emerald-400',
             bg: 'bg-emerald-500/10',
-            trend: '+5 nuevos esta semana',
+            trend: 'Sin deudas pendientes',
             trendColor: 'text-emerald-400',
             hoverBorder: 'hover:border-emerald-500/50'
         },
@@ -52,8 +53,8 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             icon: AlertCircle,
             color: 'text-rose-400',
             bg: 'bg-rose-500/10',
-            trend: 'Requiere atención',
-            trendColor: 'text-rose-400',
+            trend: delinquentResidents > 0 ? 'Requiere atención' : 'Al corriente',
+            trendColor: delinquentResidents > 0 ? 'text-rose-400' : 'text-emerald-400',
             hoverBorder: 'hover:border-rose-500/50'
         },
         {
@@ -62,7 +63,7 @@ export function PropertiesKPI({ totalCondos, totalUnits, totalResidents, delinqu
             icon: TrendingUp,
             color: 'text-amber-400',
             bg: 'bg-amber-500/10',
-            trend: unitsLimit > 0 ? `${totalUnits} de ${unitsLimit} creadas` : 'Plan sin límite',
+            trend: unitsLimit > 0 ? `${occupiedUnits} de ${unitsLimit} ocupadas` : `${occupiedUnits} de ${totalUnits} ocupadas`,
             trendColor: 'text-amber-400',
             hoverBorder: 'hover:border-amber-500/50'
         }

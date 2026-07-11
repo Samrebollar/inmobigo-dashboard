@@ -583,6 +583,61 @@ export function calculateCondoMonthlyFinancials({
 
     const totalPeriodo = expectedMonthlyIncome * numMonths
 
+    // ── PROJECT DEBT FOR MONTHS WITH NO INVOICES GENERATED ──────────────────────
+    // When invoices haven't been generated (e.g., the cron didn't run this month),
+    // we still show the correct Pendiente / Morosidad amount based on the day-10 rule.
+    // We calculate it per month in the period and add projected amounts on top of
+    // what the existing invoices already account for.
+    if (numMonths > 0 && expectedMonthlyIncome > 0) {
+        for (let m = firstMonth; m <= lastMonth; m++) {
+            // Skip future months
+            if (selectedYear > today.getFullYear()) continue
+            if (selectedYear === today.getFullYear() && m > today.getMonth()) continue
+
+            // Determine if this month has passed the day-10 deadline
+            const isPastMonth = selectedYear < today.getFullYear() ||
+                (selectedYear === today.getFullYear() && m < today.getMonth())
+            const isCurrentMonth = selectedYear === today.getFullYear() && m === today.getMonth()
+            const isInOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > 10)
+
+            // Check if any maintenance invoices already exist for this month
+            const invoicesForThisMonth = maintenanceInvoices.filter(inv => {
+                const dateStr = inv.due_date || inv.created_at
+                if (!dateStr) return false
+                const parts = getLocalDateParts(dateStr)
+                return parts && parts.year === selectedYear && parts.month === m
+            })
+
+            // If invoices already exist for this month → skip (already counted above)
+            if (invoicesForThisMonth.length > 0) continue
+
+            // No invoices generated for this month — project the full expected income as debt
+            // Subtract any amount already collected for this month (e.g., manual payments)
+            const paidThisMonth = paidInvoicesForPeriod.filter(inv => {
+                const dateStr = inv.due_date || inv.created_at
+                if (!dateStr) return false
+                const parts = getLocalDateParts(dateStr)
+                return parts && parts.year === selectedYear && parts.month === m
+            }).reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
+
+            const projectedDebt = Math.max(0, expectedMonthlyIncome - paidThisMonth)
+
+            if (projectedDebt > 0) {
+                if (isInOverduePeriod) {
+                    vencido += projectedDebt
+                    // Count all active residents as debtors for this projected month
+                    residents.forEach(r => {
+                        if (r.status === 'active' && r.id) {
+                            debtorResidents.add(r.id)
+                        }
+                    })
+                } else {
+                    porCobrar += projectedDebt
+                }
+            }
+        }
+    }
+
     return {
         totalPeriodo,
         recaudado,

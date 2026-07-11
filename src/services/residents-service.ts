@@ -94,6 +94,19 @@ export const residentsService = {
 
     async create(resident: CreateResidentDTO): Promise<Resident> {
         if (resident.condominium_id.startsWith('demo-')) {
+            const existing = demoDb.getResidents(resident.condominium_id)
+            if (resident.phone) {
+                const dup = existing.find(r => r.phone === resident.phone)
+                if (dup) {
+                    throw new Error(`Duplicado: El teléfono ${resident.phone} ya está registrado para el residente ${dup.first_name} ${dup.last_name}.`)
+                }
+            }
+            if (resident.email) {
+                const dup = existing.find(r => r.email.toLowerCase() === resident.email.toLowerCase())
+                if (dup) {
+                    throw new Error(`Duplicado: El correo ${resident.email} ya está registrado para el residente ${dup.first_name} ${dup.last_name}.`)
+                }
+            }
             const residentId = `demo-res-${Math.random().toString(36).substr(2, 9)}`
             const newResident: Resident = {
                 id: residentId,
@@ -112,7 +125,39 @@ export const residentsService = {
             return newResident
         }
         const supabase = createClient()
-        // ... existing implementation ...
+
+        // 0. Verify duplicates by email in same condo
+        if (resident.email) {
+            const { data: existingEmail } = await supabase
+                .from('residents')
+                .select('first_name, last_name, units(unit_number)')
+                .eq('condominium_id', resident.condominium_id)
+                .eq('email', resident.email.trim().toLowerCase())
+                .maybeSingle()
+
+            if (existingEmail) {
+                const name = `${existingEmail.first_name} ${existingEmail.last_name}`;
+                const unit = (existingEmail as any).units?.unit_number || 'sin asignar';
+                throw new Error(`Duplicado: El correo ${resident.email} ya está registrado para el residente ${name} en la unidad ${unit}.`)
+            }
+        }
+
+        // 1. Verify duplicates by phone in same condo
+        if (resident.phone) {
+            const { data: existingPhone } = await supabase
+                .from('residents')
+                .select('first_name, last_name, units(unit_number)')
+                .eq('condominium_id', resident.condominium_id)
+                .eq('phone', resident.phone)
+                .maybeSingle()
+
+            if (existingPhone) {
+                const name = `${existingPhone.first_name} ${existingPhone.last_name}`;
+                const unit = (existingPhone as any).units?.unit_number || 'sin asignar';
+                throw new Error(`Duplicado: El teléfono ${resident.phone} ya está registrado para el residente ${name} en la unidad ${unit}.`)
+            }
+        }
+
         const { vehicles, ...residentData } = resident
         const { data: newResident, error: residentError } = await supabase
             .from('residents')

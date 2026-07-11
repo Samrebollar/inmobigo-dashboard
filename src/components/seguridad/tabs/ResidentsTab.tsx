@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send } from 'lucide-react'
+import { Plus, Search, Filter, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { resendInvitationAction } from '@/app/actions/auth-actions'
@@ -220,6 +220,24 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
 
     return (
         <div className="space-y-6">
+            {/* Total Residents Stat Panel */}
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
+                        <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Total de Residentes</p>
+                        <p className="text-2xl font-black text-white leading-none mt-1">
+                            {residents.length} <span className="text-xs text-zinc-500 font-normal lowercase">registrados actualmente</span>
+                        </p>
+                    </div>
+                </div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg">
+                    Sincronizado
+                </div>
+            </div>
+
             {/* Actions Bar */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="relative max-w-sm">

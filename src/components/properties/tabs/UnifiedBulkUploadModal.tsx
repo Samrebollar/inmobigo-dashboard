@@ -195,6 +195,9 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                     
                     if (result.errors.length > 0) {
                         setError(`Carga parcial: ${result.success} exitosos. Algunos errores: ${result.errors.slice(0, 2).join(', ')}`)
+                        if (result.success > 0) {
+                            onSuccess()
+                        }
                     } else {
                         setSuccessMessage(`¡Excelente! ✅ Se procesaron ${result.success} registros correctamente (Unidades y Residentes vinculados).`)
                         onSuccess()

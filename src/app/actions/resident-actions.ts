@@ -210,15 +210,36 @@ export async function adminCreateResidentAction(payload: any) {
         // 0. Verificar duplicados en la tabla residents
         const { data: existingResident } = await admin
             .from('residents')
-            .select('id')
+            .select('first_name, last_name, units(unit_number)')
             .eq('email', cleanEmail)
+            .eq('condominium_id', condominium_id)
             .maybeSingle();
             
         if (existingResident) {
+            const name = `${existingResident.first_name} ${existingResident.last_name}`;
+            const unit = (existingResident as any).units?.unit_number || 'sin asignar';
             return { 
                 success: false, 
-                error: `Ya existe un registro con el correo ${cleanEmail} en la base de datos de residentes.` 
+                error: `Duplicado: El correo ${cleanEmail} ya está registrado para el residente ${name} en la unidad ${unit}.` 
             };
+        }
+
+        if (phone) {
+            const { data: existingPhone } = await admin
+                .from('residents')
+                .select('first_name, last_name, units(unit_number)')
+                .eq('condominium_id', condominium_id)
+                .eq('phone', phone)
+                .maybeSingle();
+
+            if (existingPhone) {
+                const name = `${existingPhone.first_name} ${existingPhone.last_name}`;
+                const unit = (existingPhone as any).units?.unit_number || 'sin asignar';
+                return {
+                    success: false,
+                    error: `Duplicado: El teléfono ${phone} ya está registrado para el residente ${name} en la unidad ${unit}.`
+                };
+            }
         }
 
         // 1. Verificar si el usuario ya existe en auth

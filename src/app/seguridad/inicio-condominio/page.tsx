@@ -48,7 +48,7 @@ export default async function DashboardPage({
   // Check if Admin (Owner/Staff)
   const { data: orgUser } = await adminSupabase
     .from('organization_users')
-    .select('role, organization:organizations(*)')
+    .select('role_new, organization_id, organization:organizations(*)')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -107,6 +107,15 @@ export default async function DashboardPage({
   // If not in orgUser, try fetching Organization directly as owner (legacy check)
 
   let organization: any = orgUser?.organization
+
+  if (!organization && orgUser?.organization_id) {
+    const { data: directOrg } = await adminSupabase
+      .from('organizations')
+      .select(`*`)
+      .eq('id', orgUser.organization_id)
+      .maybeSingle()
+    organization = directOrg as any
+  }
 
   if (!organization) {
     // Fallback: Check if owner directly

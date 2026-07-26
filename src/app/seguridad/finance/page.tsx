@@ -36,16 +36,26 @@ export default function FinancePage() {
         // Check Role
         const [resData, orgUserData] = await Promise.all([
           supabase.from('residents').select('id, condominium_id').eq('user_id', user.id).maybeSingle(),
-          supabase.from('organization_users').select('role, organization:organizations(*)').eq('user_id', user.id).maybeSingle()
+          supabase.from('organization_users').select('role_new, organization_id').eq('user_id', user.id).maybeSingle()
         ])
         
         const isResident = !!resData.data
         const residentCondoId = resData.data?.condominium_id
-        const isAdminOrStaff = !!orgUserData.data?.role
+        const roleName = orgUserData.data?.role_new
+        const isAdminOrStaff = ['owner', 'admin', 'admin_condominio', 'admin_propiedad', 'manager', 'accountant', 'staff'].includes(roleName || '')
         setRole({ isResident, isAdminOrStaff })
         if (isResident) setCondominiumId(residentCondoId)
 
-        let org = orgUserData.data?.organization
+        let org: any = null
+        if (orgUserData.data?.organization_id) {
+          const { data: directOrg } = await supabase
+            .from('organizations')
+            .select('*')
+            .eq('id', orgUserData.data.organization_id)
+            .maybeSingle()
+          org = directOrg
+        }
+
         if (!org) {
           const { data: ownerOrg } = await supabase
             .from('organizations')

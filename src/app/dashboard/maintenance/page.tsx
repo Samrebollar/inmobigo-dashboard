@@ -20,9 +20,9 @@ export default async function MaintenancePage() {
     // 1. Check if Admin/Staff
     const { data: orgUser } = await supabase
         .from('organization_users')
-        .select('role')
+        .select('role_new, organization_id')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
     // 2. Check if Resident
     let resident = null

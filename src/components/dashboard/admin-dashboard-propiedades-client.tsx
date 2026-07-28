@@ -68,6 +68,8 @@ export default function AdminDashboardPropiedadesClient({
 
     const [condominiums, setCondominiums] = useState<Array<{ id: string, name: string }>>([])
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
+    const [recentActivity, setRecentActivity] = useState<any[]>(initialActivity)
+    const [ingresosAnterior, setIngresosAnterior] = useState<number>(0)
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {

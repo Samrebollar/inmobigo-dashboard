@@ -824,6 +824,7 @@ export const financeService = {
                 .order('created_at', { ascending: false })
                 .limit(5)
             if (condominiumId && condominiumId !== 'all') ticketsQuery = ticketsQuery.eq('condominium_id', condominiumId)
+            else ticketsQuery = ticketsQuery.eq('organization_id', organizationId)
             const { data } = await ticketsQuery
             tickets = data || []
         } catch (e) { console.error('Error fetching tickets for activity:', e) }

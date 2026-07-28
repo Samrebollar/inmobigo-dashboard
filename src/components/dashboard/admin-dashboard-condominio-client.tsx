@@ -77,57 +77,6 @@ export default function AdminDashboardCondominioClient({
         setMounted(true)
     }, [])
 
-    useEffect(() => {
-        let isMounted = true
-        
-        const fetchData = async () => {
-            try {
-                // Fetch stats that don't depend on selectedCondoId (Global stats)
-                // Note: If you want these to also filter by condo, you'd need to update the service methods
-                const [total, { total_deuda }, tasa, morosidadData] = await Promise.all([
-                    financeService.getTotalIngresos(),
-                    dashboardService.getDeudaTotal(),
-                    financeService.getTasaCobranza(),
-                    financeService.getMorosidad()
-                ])
-
-                if (isMounted) {
-                    setTotalIngresos(total)
-                    setTotalDeuda(total_deuda)
-                    setTasaCobranza(tasa)
-                    setMorosidad(morosidadData)
-                    setIsLoadingIngresos(false)
-                    setIsLoadingDeuda(false)
-                    setIsLoadingTasa(false)
-                    setIsLoadingMorosidad(false)
-                }
-            } catch (err) {
-                console.error('Error fetching global stats:', err)
-                if (isMounted) {
-                    setIngresosError('Error')
-                    setDeudaError('Error')
-                    setTasaError('Error')
-                    setMorosidadError('Error')
-                    setIsLoadingIngresos(false)
-                    setIsLoadingDeuda(false)
-                    setIsLoadingTasa(false)
-                    setIsLoadingMorosidad(false)
-                }
-            }
-        }
-
-        const fetchCondos = async () => {
-            const supabase = createClient()
-            const { data } = await supabase.from('condominiums').select('id, name')
-            if (isMounted && data) {
-                setCondominiums(data)
-            }
-        }
-
-        fetchData()
-        fetchCondos()
-        return () => { isMounted = false }
-    }, [])
 
     useEffect(() => {
         let isMounted = true

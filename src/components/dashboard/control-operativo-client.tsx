@@ -1400,10 +1400,8 @@ export function ControlOperativoClient() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            const [orgUserResult, propertiesResult] = await Promise.all([
-                supabase.from('organization_users').select('organization_id').eq('user_id', user.id).maybeSingle(),
-                supabase.from('condominiums').select('id, name').eq('status', 'active'),
-            ])
+            const orgUserResult = await supabase
+                .from('organization_users').select('organization_id').eq('user_id', user.id).maybeSingle()
 
             const orgId = orgUserResult.data?.organization_id
             if (!orgId) return

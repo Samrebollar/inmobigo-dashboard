@@ -18,6 +18,7 @@ import { PlanExpirationBanner } from '@/components/seguridad/PlanExpirationBanne
 interface AdminDashboardClientProps {
     userEmail?: string
     userName?: string
+    organizationId: string
     daysRemaining?: number
     nextPaymentDate?: string
     stats: {
@@ -36,11 +37,12 @@ interface AdminDashboardClientProps {
 
 export default function AdminDashboardPropiedadesClient({ 
     userEmail, 
-    userName, 
+    userName,
+    organizationId,
     daysRemaining = 999, 
     nextPaymentDate,
     stats, 
-    recentActivity = [] 
+    recentActivity: initialActivity = [] 
 }: AdminDashboardClientProps) {
     const isPropiedades = true
     const [totalIngresos, setTotalIngresos] = useState<number | null>(null)
@@ -62,96 +64,80 @@ export default function AdminDashboardPropiedadesClient({
     const [isLoadingIncome, setIsLoadingIncome] = useState(true)
     const [incomeError, setIncomeError] = useState<string | null>(null)
 
+    const [recentActivity, setRecentActivity] = useState<any[]>(initialActivity)
+    const [ingresosAnterior, setIngresosAnterior] = useState<number>(0)
     const [condominiums, setCondominiums] = useState<Array<{ id: string, name: string }>>([])
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     useEffect(() => {
         let isMounted = true
-        const fetchIncome = async () => {
-            try {
-                setIsLoadingIncome(true)
-                setIncomeError(null)
-                const data = await financeService.getIncomeSummaryYear(selectedCondoId || undefined)
-                if (isMounted) setIncomeSummary(data)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setIncomeError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingIncome(false)
-            }
-        }
-        fetchIncome()
-        return () => { isMounted = false }
-    }, [selectedCondoId])
 
-    useEffect(() => {
-        let isMounted = true
-        const fetchIngresos = async () => {
+        const fetchAll = async () => {
             try {
                 setIsLoadingIngresos(true)
-                setIngresosError(null)
-                const total = await financeService.getTotalIngresos()
-                if (isMounted) setTotalIngresos(total)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setIngresosError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingIngresos(false)
-            }
-        }
-        const fetchDeuda = async () => {
-            try {
                 setIsLoadingDeuda(true)
-                setDeudaError(null)
-                const { total_deuda } = await dashboardService.getDeudaTotal()
-                if (isMounted) setTotalDeuda(total_deuda)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setDeudaError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingDeuda(false)
-            }
-        }
-        const fetchTasa = async () => {
-            try {
                 setIsLoadingTasa(true)
-                setTasaError(null)
-                const tasa = await financeService.getTasaCobranza()
-                if (isMounted) setTasaCobranza(tasa)
-            } catch (err) {
-                console.error(err)
-                if (isMounted) setTasaError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingTasa(false)
-            }
-        }
-        const fetchMorosidad = async () => {
-            try {
                 setIsLoadingMorosidad(true)
+                setIsLoadingIncome(true)
+
+                setIngresosError(null)
+                setDeudaError(null)
+                setTasaError(null)
                 setMorosidadError(null)
-                const data = await financeService.getMorosidad()
-                if (isMounted) setMorosidad(data)
+
+                const analytics = await financeService.getDashboardAnalytics(organizationId, selectedCondoId || undefined)
+
+                if (isMounted) {
+                    setTotalIngresos(analytics.ingresosTotales)
+                    setIngresosAnterior(analytics.ingresosTotalesAnterior)
+                    setTotalDeuda(analytics.deudaTotal)
+                    setTasaCobranza(analytics.tasaCobranza)
+                    setMorosidad({
+                        total_facturas_vencidas: analytics.morosidadCount,
+                        monto_vencido: analytics.morosidadMonto
+                    })
+                    setIncomeSummary(analytics.incomeSummary)
+                    setRecentActivity(analytics.recentActivity)
+
+                    setIsLoadingIngresos(false)
+                    setIsLoadingDeuda(false)
+                    setIsLoadingTasa(false)
+                    setIsLoadingMorosidad(false)
+                    setIsLoadingIncome(false)
+                }
             } catch (err) {
-                console.error(err)
-                if (isMounted) setMorosidadError('Error al cargar')
-            } finally {
-                if (isMounted) setIsLoadingMorosidad(false)
+                console.error('Error fetching dashboard analytics (seguridad propiedades):', err)
+                if (isMounted) {
+                    setIngresosError('Error')
+                    setDeudaError('Error')
+                    setTasaError('Error')
+                    setMorosidadError('Error')
+                    setIsLoadingIngresos(false)
+                    setIsLoadingDeuda(false)
+                    setIsLoadingTasa(false)
+                    setIsLoadingMorosidad(false)
+                    setIsLoadingIncome(false)
+                }
             }
         }
+
         const fetchCondos = async () => {
             const supabase = createClient()
-            const { data } = await supabase.from('condominiums').select('id, name')
+            const { data } = await supabase.from('condominiums').select('id, name').eq('organization_id', organizationId)
             if (isMounted && data) {
                 setCondominiums(data)
             }
         }
-        fetchIngresos()
-        fetchDeuda()
-        fetchTasa()
-        fetchMorosidad()
+
+        fetchAll()
         fetchCondos()
         return () => { isMounted = false }
-    }, [])
+    }, [selectedCondoId, organizationId])
 
     const container = {
         hidden: { opacity: 0 },

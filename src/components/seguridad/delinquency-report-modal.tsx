@@ -22,6 +22,7 @@ import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { Resident } from '@/types/residents'
 import { Invoice } from '@/types/finance'
+import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
 interface DelinquencyReportModalProps {
     isOpen: boolean
     onClose: () => void
@@ -139,37 +140,50 @@ export function DelinquencyReportModal({
 
             // Process data
             const delinquencyReport: DelinquentResident[] = []
+            const currentYear = new Date().getFullYear()
 
             allResidents.forEach(resident => {
                 const residentInvoices = allInvoices.filter(inv => inv.resident_id === resident.id)
+                const monthlyFee = Number((resident as any).units?.monto_mensual || 0)
 
-                // Separate paid vs unpaid
-                const unpaid = residentInvoices.filter(inv => inv.status === 'overdue' || inv.status === 'pending')
-                const paid = residentInvoices.filter(inv => inv.status === 'paid')
+                const fin = calculateResidentMonthlyFinancials({
+                    resident,
+                    invoices: residentInvoices,
+                    selectedMonth: 'all',
+                    selectedYear: currentYear,
+                    monthlyFee
+                })
 
-                // ONLY include if they have actual UNPAID invoices
-                if (unpaid.length === 0) return
+                // Unpaid invoices (DB invoices + virtual projected overdue dues)
+                const unpaid = fin.filteredInvoices.filter((inv: any) => inv.status === 'overdue' || inv.status === 'pending')
+                const paid = fin.filteredInvoices.filter((inv: any) => inv.status === 'paid')
 
-                // Calculate Totals using balance_due if available, fallback to amount
-                const totalDebt = unpaid.reduce((sum, inv) => sum + (inv.balance_due ?? inv.amount), 0)
+                const totalDebt = fin.overdueAmount > 0 
+                    ? fin.overdueAmount 
+                    : (fin.totalPending > 0 ? fin.totalPending : unpaid.reduce((sum, inv) => sum + (inv.balance_due ?? inv.amount), 0))
 
-                // Calculate Days Overdue (from oldest unpaid invoice)
-                let maxDays = 0
-                if (unpaid.length > 0) {
-                    // Find oldest due date
-                    const oldestDueDate = unpaid.reduce((oldest, inv) => {
-                        return new Date(inv.due_date) < new Date(oldest) ? inv.due_date : oldest
-                    }, unpaid[0].due_date)
+                if (totalDebt <= 0 && unpaid.length === 0) return
 
-                    maxDays = differenceInDays(new Date(), parseISO(oldestDueDate))
+                let maxDays = fin.maxDaysOverdue
+                if (maxDays === 0 && unpaid.length > 0) {
+                    const oldestDueDate = unpaid.reduce((oldest: string, inv: any) => {
+                        const d = inv.due_date || inv.created_at
+                        return d && new Date(d) < new Date(oldest) ? d : oldest
+                    }, unpaid[0].due_date || unpaid[0].created_at || new Date().toISOString())
+                    maxDays = Math.max(0, differenceInDays(new Date(), parseISO(oldestDueDate)))
+                } else if (maxDays === 0 && totalDebt > 0) {
+                    const today = new Date()
+                    if (today.getDate() > 10) {
+                        maxDays = today.getDate() - 10
+                    } else {
+                        maxDays = 1
+                    }
                 }
 
-                // Determine Risk Level
                 let risk: 'low' | 'medium' | 'critical' = 'low'
                 if (maxDays > 15) risk = 'critical'
                 else if (maxDays > 7) risk = 'medium'
 
-                // Only include if there is debt
                 if (totalDebt > 0) {
                     delinquencyReport.push({
                         ...resident,

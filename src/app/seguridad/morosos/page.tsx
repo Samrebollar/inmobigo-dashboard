@@ -40,30 +40,31 @@ export default function MorososPage() {
         // Get Organization for user
         const { data: orgUserData } = await supabase
           .from('organization_users')
-          .select('organization:organizations(*)')
+          .select('role_new, organization_id')
           .eq('user_id', user.id)
           .maybeSingle()
 
-        let org = orgUserData?.organization
-        if (!org) {
+        let orgId = orgUserData?.organization_id
+
+        if (!orgId) {
           const { data: ownerOrg } = await supabase
             .from('organizations')
-            .select('*')
+            .select('id')
             .eq('owner_id', user.id)
             .maybeSingle()
-          org = ownerOrg
+          orgId = ownerOrg?.id
         }
 
-        if (org) {
+        if (orgId) {
           const { data: condos } = await supabase
             .from('condominiums')
             .select('id')
-            .eq('organization_id', (org as any).id)
+            .eq('organization_id', orgId)
             .eq('status', 'active')
             .limit(1)
 
           if (condos && condos.length > 0) {
-            setCondominiumId((condos as any)[0].id)
+            setCondominiumId(condos[0].id)
           }
         }
 

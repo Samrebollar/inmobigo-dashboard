@@ -18,7 +18,10 @@ export const residentsService = {
             .select(`
         *,
         units (
-          unit_number
+          unit_number,
+          monto_mensual,
+          payment_deadline,
+          facturacion_activa
         ),
         vehicles (*)
       `)
@@ -42,7 +45,10 @@ export const residentsService = {
             .select(`
         *,
         units (
-          unit_number
+          unit_number,
+          monto_mensual,
+          payment_deadline,
+          facturacion_activa
         ),
         vehicles (*)
       `)

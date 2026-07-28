@@ -800,7 +800,34 @@ export const financeService = {
         }
         const { data: units } = await unitsQuery
 
-        // 3. Fetch Activity Data
+        // 3. Fetch All Residents for Financial Calculations
+        let allResidents: any[] = []
+        try {
+            if (condominiumId && condominiumId !== 'all' && !condominiumId.startsWith('demo-')) {
+                const { data } = await supabase
+                    .from('residents')
+                    .select('id, status, condominium_id')
+                    .eq('condominium_id', condominiumId)
+                allResidents = data || []
+            } else {
+                const { data: condoList } = await supabase
+                    .from('condominiums')
+                    .select('id')
+                    .eq('organization_id', organizationId)
+                const condoIds = condoList?.map(c => c.id) || []
+                if (condoIds.length > 0) {
+                    const { data } = await supabase
+                        .from('residents')
+                        .select('id, status, condominium_id')
+                        .in('condominium_id', condoIds)
+                    allResidents = data || []
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching all residents for analytics:', e)
+        }
+
+        // 4. Fetch Recent Activity Data (limit to 5 items each)
         let residents: any[] = []
         let tickets: any[] = []
         let expenses: any[] = []
@@ -811,8 +838,12 @@ export const financeService = {
                 .select('*, condominiums(name), units(unit_number)')
                 .order('created_at', { ascending: false })
                 .limit(5)
-            if (condominiumId && condominiumId !== 'all') residentsQuery = residentsQuery.eq('condominium_id', condominiumId)
-            else residentsQuery = residentsQuery.eq('organization_id', organizationId)
+            if (condominiumId && condominiumId !== 'all') {
+                residentsQuery = residentsQuery.eq('condominium_id', condominiumId)
+            } else if (allResidents.length > 0) {
+                const condoIds = Array.from(new Set(allResidents.map(r => r.condominium_id)))
+                residentsQuery = residentsQuery.in('condominium_id', condoIds)
+            }
             const { data } = await residentsQuery
             residents = data || []
         } catch (e) { console.error('Error fetching residents for activity:', e) }
@@ -844,7 +875,7 @@ export const financeService = {
         // CALCULATIONS — KPI cards always show current month only
         const condoFinancials = calculateCondoMonthlyFinancials({
             units: units || [],
-            residents: residents || [],
+            residents: allResidents || [],
             invoices: invoices || [],
             selectedMonth: currentMonth,
             selectedYear: currentYear
@@ -855,7 +886,7 @@ export const financeService = {
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear
         const prevCondoFinancials = calculateCondoMonthlyFinancials({
             units: units || [],
-            residents: residents || [],
+            residents: allResidents || [],
             invoices: invoices || [],
             selectedMonth: prevMonth,
             selectedYear: prevYear

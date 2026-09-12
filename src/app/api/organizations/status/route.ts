@@ -66,7 +66,8 @@ export async function GET() {
             unitLimit: org?.units_limit || 0,
             subscriptionStatus: sub?.subscription_status || 'none',
             daysRemaining: daysRemaining,
-            previousPlanName: sub?.plan_name || org?.plan
+            previousPlanName: sub?.plan_name || org?.plan,
+            userEmail: user.email
         })
 
     } catch (error: any) {

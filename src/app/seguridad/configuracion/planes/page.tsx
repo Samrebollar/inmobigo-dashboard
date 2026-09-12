@@ -209,7 +209,7 @@ function PlansContent() {
             </div>
 
             <div className="flex flex-wrap gap-8 justify-center items-stretch">
-                {plans.filter(plan => plan.name !== 'CORE PRUEBA').map((plan, index) => {
+                {plans.map((plan, index) => {
                     const c = getColorClasses(plan.color)
                     const isTooSmall = orgStatus && orgStatus.unitUsage > plan.limit
                     const isPreviousPlan = orgStatus && orgStatus.previousPlanName?.toUpperCase() === plan.name.toUpperCase()

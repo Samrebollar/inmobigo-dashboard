@@ -87,7 +87,7 @@ export const notificationsService = {
         let webhookSent = false
         try {
             // 6. Enviar a n8n
-            const n8nUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL
+            const n8nUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || 'https://n8n.inmobigo.mx/webhook/send-reminder-manual'
 
             if (n8nUrl) {
                 try {
@@ -100,8 +100,6 @@ export const notificationsService = {
                 } catch (fetchError) {
                     console.error('Error contacting n8n:', fetchError)
                 }
-            } else {
-                console.warn('NEXT_PUBLIC_N8N_WEBHOOK_URL is not set. Skipping webhook send.')
             }
 
             // 7. Registrar en communication_logs

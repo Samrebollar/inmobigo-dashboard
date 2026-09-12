@@ -177,7 +177,7 @@ export async function sendInstallmentReminderAction({
         console.log(`📤 [sendInstallmentReminderAction] Enviando recordatorio para cuota #${installmentNumber} del convenio ${agreementId}`)
         
         // 1. Send to n8n webhook
-        const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK || 'https://n8n.srv1286224.hstgr.cloud/webhook/convenio-admin'
+        const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/convenio-decision'
         let webhookSuccess = false
         
         try {

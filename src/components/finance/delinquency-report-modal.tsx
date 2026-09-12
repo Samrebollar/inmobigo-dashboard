@@ -91,7 +91,7 @@ export function DelinquencyReportModal({
             unit: resident.unit_number || 'S/N'
         }
 
-        const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+        const webhookUrl = process.env.NEXT_PUBLIC_N8N_MOROSIDAD_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/send-morosidad-whatsapp'
         console.log('--- Envio de Recordatorio ---')
         console.log('Webhook URL a usar:', webhookUrl)
         console.log('Payload:', payload)

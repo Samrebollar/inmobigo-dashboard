@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     // 2️⃣ Notificar al Webhook de n8n de forma opcional (sin romper si falla o no está configurado)
-    const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK || 'https://n8n.srv1286224.hstgr.cloud/webhook/convenio-admin'
+    const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/convenio-decision'
     let webhookSuccess = false
     let webhookError = ''
 

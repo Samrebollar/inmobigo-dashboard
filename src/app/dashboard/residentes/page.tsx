@@ -335,7 +335,8 @@ export default function ResidentsPage() {
                     return
                 }
 
-                const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+                const webhookUrl = process.env.NEXT_PUBLIC_N8N_REMINDER_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/send-reminder-manual'
+                const res = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ invoice_id: invoiceId })

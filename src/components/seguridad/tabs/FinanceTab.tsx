@@ -619,7 +619,7 @@ export function FinanceTab() {
                                                             onClick={async () => {
                                                                 setSendingReminderId(inv.id)
                                                                 try {
-                                                                    const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+                                                                    const webhookUrl = process.env.NEXT_PUBLIC_N8N_MOROSIDAD_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/send-morosidad-whatsapp'
                                                                     console.log('Enviando recordatorio a:', webhookUrl)
 
                                                                     const payload = {

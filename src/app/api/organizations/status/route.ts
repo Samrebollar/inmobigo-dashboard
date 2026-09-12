@@ -40,13 +40,69 @@ export async function GET() {
             .eq('organization_id', orgId)
 
         // 4. Get Subscription Status
-        const { data: sub } = await adminSupabase
+        let { data: sub } = await adminSupabase
             .from('subscriptions')
-            .select('subscription_status, plan_name, created_at')
+            .select('*')
             .eq('organization_id', orgId)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
+
+        // 🔄 AUTO-SYNC: Si el estado actual es pending o vencido, consultar automáticamente a MercadoPago
+        if ((!sub || sub.subscription_status !== 'active') && process.env.MP_ACCESS_TOKEN) {
+            const { data: pendingSub } = await adminSupabase
+                .from('subscriptions')
+                .select('*')
+                .eq('organization_id', orgId)
+                .or('subscription_status.eq.pending,subscription_status.eq.expired')
+                .not('mercado_subscription_id', 'is', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            if (pendingSub?.mercado_subscription_id) {
+                try {
+                    const mpRes = await fetch(
+                        `https://api.mercadopago.com/preapproval/${pendingSub.mercado_subscription_id}`,
+                        {
+                            headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` }
+                        }
+                    )
+                    if (mpRes.ok) {
+                        const mpData = await mpRes.json()
+                        if (mpData.status === 'authorized') {
+                            const PLAN_LIMITS: Record<string, number> = {
+                                CORE: 20, PLUS: 60, ELITE: 120, CORPORATE: 250, 'CORE PRUEBA': 5, 'CORPORATE PLUS': 400
+                            }
+                            const now = new Date()
+                            const nextPayment = new Date()
+                            nextPayment.setMonth(now.getMonth() + 1)
+
+                            await adminSupabase.from('subscriptions').update({
+                                subscription_status: 'active',
+                                last_payment_date: now.toISOString(),
+                                next_payment_date: nextPayment.toISOString(),
+                                amount_paid: pendingSub.price,
+                            }).eq('id', pendingSub.id)
+
+                            await adminSupabase.from('organizations').update({
+                                plan: pendingSub.plan_name,
+                                subscription_status: 'active',
+                                units_limit: PLAN_LIMITS[pendingSub.plan_name] || 0,
+                                next_billing_date: nextPayment.toISOString(),
+                            }).eq('id', orgId)
+
+                            sub = {
+                                ...pendingSub,
+                                subscription_status: 'active'
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Auto-sync MercadoPago pending check failed:', err)
+                }
+            }
+        }
 
         let daysRemaining = 0
         if (sub) {

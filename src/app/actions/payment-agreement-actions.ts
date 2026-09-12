@@ -38,21 +38,27 @@ interface UpdateStatusPayload {
     id: string
     status: 'approved' | 'rejected'
     adminUserId: string
+    rejectionReason?: string
 }
 
-export async function updatePaymentAgreementStatusAction({ id, status, adminUserId }: UpdateStatusPayload) {
+export async function updatePaymentAgreementStatusAction({ id, status, adminUserId, rejectionReason }: UpdateStatusPayload) {
     const supabase = createAdminClient()
     
     try {
         console.log(`🔄 [updatePaymentAgreementStatusAction] Actualizando convenio ID: ${id} a estado: ${status}`)
         
+        const updateData: any = {
+            status,
+            approved_by: adminUserId,
+            approved_at: new Date().toISOString()
+        }
+        if (rejectionReason) {
+            updateData.rejection_reason = rejectionReason
+        }
+
         const { data, error } = await supabase
             .from('payment_agreements')
-            .update({
-                status,
-                approved_by: adminUserId,
-                approved_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', id)
             .select()
             .single()

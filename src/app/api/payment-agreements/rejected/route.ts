@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       .from('payment_agreements')
       .update({
         status: 'rejected',
-        comments: reason,
+        rejection_reason: reason,
         approved_by: admin_user_id || null,
         approved_at: new Date().toISOString(),
       })

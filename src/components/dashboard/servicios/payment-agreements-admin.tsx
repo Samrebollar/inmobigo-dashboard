@@ -195,7 +195,8 @@ export function PaymentAgreementsAdmin({
                 const fallbackRes = await updatePaymentAgreementStatusAction({
                     id,
                     status: 'rejected',
-                    adminUserId
+                    adminUserId,
+                    rejectionReason: reason
                 })
                 if (!fallbackRes.success) {
                     throw new Error(data.error || fallbackRes.error || 'Error al rechazar el convenio')
@@ -204,11 +205,11 @@ export function PaymentAgreementsAdmin({
                 toast.success('Convenio rechazado correctamente')
                 setAgreements(prev => prev.map(ag => 
                     ag.id === id 
-                        ? { ...ag, status: 'rejected', approved_by: adminUserId, approved_at: new Date().toISOString(), comments: reason } 
+                        ? { ...ag, status: 'rejected', approved_by: adminUserId, approved_at: new Date().toISOString(), rejection_reason: reason } 
                         : ag
                 ))
                 if (selectedAgreement && selectedAgreement.id === id) {
-                    setSelectedAgreement(prev => prev ? { ...prev, status: 'rejected', comments: reason } : null)
+                    setSelectedAgreement(prev => prev ? { ...prev, status: 'rejected', rejection_reason: reason } : null)
                 }
             }
 

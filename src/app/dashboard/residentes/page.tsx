@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -55,7 +55,7 @@ interface ResidentWithFinance extends Resident {
 
 
 
-export default function ResidentsPage() {
+function ResidentsContent() {
     const supabase = createClient()
     const { isPropiedades } = useUserRole()
 
@@ -667,5 +667,13 @@ export default function ResidentsPage() {
                 />
             )}
         </div>
+    )
+}
+
+export default function ResidentsPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-zinc-500">Cargando residentes...</div>}>
+            <ResidentsContent />
+        </Suspense>
     )
 }

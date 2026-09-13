@@ -20,11 +20,20 @@ export async function GET() {
             .eq('user_id', user.id)
             .maybeSingle()
 
-        if (!orgUser) {
-            return NextResponse.json({ error: 'No organization found' }, { status: 404 })
+        let orgId = orgUser?.organization_id
+
+        if (!orgId) {
+            const { data: resident } = await adminSupabase
+                .from('residents')
+                .select('condominiums(organization_id)')
+                .eq('user_id', user.id)
+                .maybeSingle()
+            orgId = (resident?.condominiums as any)?.organization_id
         }
 
-        const orgId = orgUser.organization_id
+        if (!orgId) {
+            return NextResponse.json({ error: 'No organization found' }, { status: 404 })
+        }
 
         // 2. Fetch Team Members
         const { data: teamMembers, error: teamError } = await adminSupabase

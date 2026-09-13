@@ -44,7 +44,12 @@ export async function updateSession(request: NextRequest) {
 
     // REQUISITO: Permitir acceso público a rutas tipo /abc123 o /uuid-1234... en cualquier dominio (fallback)
     // Excluimos explícitamente rutas conocidas de la app para evitar conflictos
-    const reservedRoutes = ['dashboard', 'login', 'register', 'auth', 'onboarding', 'owner', 'pase', 'api']
+    // REQUISITO: Permitir acceso público a rutas tipo /abc123 o /uuid-1234... en cualquier dominio (fallback)
+    // Excluimos explícitamente rutas conocidas de la app para evitar conflictos
+    const reservedRoutes = [
+        'dashboard', 'login', 'register', 'auth', 'onboarding', 'owner', 'pase', 'api',
+        'seguridad', 'residente', 'inquilino', 'acceso-residente', 'activar-residente', 'reset-password', 'test-route'
+    ]
     const isVisitRoute = pathname !== '/' && 
                         /^\/[a-zA-Z0-9-]+$/.test(pathname) && 
                         !reservedRoutes.includes(pathname.split('/')[1])
@@ -108,8 +113,8 @@ export async function updateSession(request: NextRequest) {
             role = orgUser.role_new
         } else if (profile?.role_new && profile.role_new !== 'resident' && profile.role_new !== 'tenant') {
             role = profile.role_new
-        } else if (user.user_metadata?.role === 'admin') {
-            role = 'admin'
+        } else if (user.user_metadata?.role && !['resident', 'tenant'].includes(user.user_metadata.role)) {
+            role = user.user_metadata.role
         } else if (resident || profile?.role_new === 'resident' || profile?.role_new === 'tenant' || user.user_metadata?.role === 'resident' || user.user_metadata?.role === 'tenant') {
             role = 'resident' 
         }

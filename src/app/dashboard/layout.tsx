@@ -42,7 +42,7 @@ export default async function DashboardLayout({
     const isPropiedades = businessType === 'propiedades'
 
     // 2. Check if Resident (STRICT: Must be in residents)
-    const { data: resident } = await supabase
+    const { data: resident } = await adminSupabase
         .from('residents')
         .select('id, first_name, last_name, condominiums(organization_id)')
         .eq('user_id', user.id)
@@ -51,7 +51,7 @@ export default async function DashboardLayout({
     const isMetadataResident = user.user_metadata?.role === 'resident'
 
     // 3. Get Profile for Name fallback and Avatar
-    const { data: profile } = await supabase
+    const { data: profile } = await adminSupabase
         .from('profiles')
         .select('full_name, avatar_url, role_new')
         .eq('id', user.id)

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
-export async function proxy(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
     // Si es una Server Action, permitir que continúe sin interferir
     if (request.headers.get('next-action')) {
         return NextResponse.next()

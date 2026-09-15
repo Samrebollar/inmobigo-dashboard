@@ -442,18 +442,68 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                 )}
             </AnimatePresence>
 
-            {/* Existing Proof Preview & Delete Modals remain unchanged but z-index should be checked */}
+            {/* Proof Preview Modal */}
             <AnimatePresence>
                 {selectedProof && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProof(null)} className="absolute inset-0 bg-black/95 backdrop-blur-xl" />
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative max-w-4xl w-full bg-zinc-900 border border-white/10 rounded-[3rem] p-6 shadow-2xl">
-                            <button onClick={() => setSelectedProof(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-indigo-400 transition-all flex items-center gap-2 font-bold"><X size={24} /> Cerrar</button>
-                            <img src={selectedProof} alt="Comprobante" className="w-full h-auto max-h-[80vh] object-contain rounded-3xl" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative max-w-4xl w-full bg-zinc-900 border border-white/10 rounded-[3rem] p-6 shadow-2xl overflow-hidden">
+                            {/* Header toolbar */}
+                            <div className="flex items-center justify-between mb-4">
+                                <span className="text-xs font-black text-zinc-500 uppercase tracking-widest">Comprobante de Pago</span>
+                                <div className="flex items-center gap-3">
+                                    <a
+                                        href={selectedProof}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-4 py-2 rounded-xl bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-indigo-500/20"
+                                    >
+                                        <Eye size={14} /> Abrir en nueva pestaña
+                                    </a>
+                                    <a
+                                        href={selectedProof}
+                                        download
+                                        className="px-4 py-2 rounded-xl bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-emerald-500/20"
+                                    >
+                                        <Download size={14} /> Descargar
+                                    </a>
+                                    <button onClick={() => setSelectedProof(null)} className="p-2 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all flex items-center gap-2 font-bold text-sm">
+                                        <X size={18} /> Cerrar
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Image with fallback */}
+                            <div className="min-h-[300px] flex items-center justify-center bg-zinc-950 rounded-3xl overflow-hidden">
+                                <img
+                                    src={selectedProof}
+                                    alt="Comprobante"
+                                    className="max-w-full max-h-[75vh] object-contain rounded-3xl"
+                                    onError={(e) => {
+                                        const target = e.currentTarget
+                                        target.style.display = 'none'
+                                        const fallback = target.nextElementSibling as HTMLElement | null
+                                        if (fallback) fallback.style.display = 'flex'
+                                    }}
+                                />
+                                <div className="hidden flex-col items-center justify-center gap-4 p-12 text-center">
+                                    <FileText size={48} className="text-zinc-600" />
+                                    <p className="text-zinc-400 font-bold text-sm">No se puede previsualizar este archivo.</p>
+                                    <p className="text-zinc-600 text-xs">Es posible que sea un PDF u otro tipo de documento.</p>
+                                    <a
+                                        href={selectedProof}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="mt-2 px-6 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm hover:bg-indigo-500 transition-all"
+                                    >
+                                        Abrir archivo →
+                                    </a>
+                                </div>
+                            </div>
                         </motion.div>
                     </div>
                 )}
             </AnimatePresence>
+
 
             <AnimatePresence>
                 {deleteConfirmation && (

@@ -48,15 +48,18 @@ export async function GET(request: NextRequest) {
   }
 
   // 3. ¡ESTA ES LA CLAVE! Crear la respuesta y copiar las cookies MANUALMENTE CON OPCIONES
-      // 4. TRUCO MAESTRO: Si vamos a cambiar contraseña, pasamos el ID de usuario en la URL
-      // Esto sirve de respaldo si el móvil pierde la cookie de sesión en el salto
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user && next.startsWith('/reset-password')) {
-        const separator = next.includes('?') ? '&' : '?'
-        next = `${next}${separator}uid=${user.id}&e=${encodeURIComponent(user.email || '')}`
-      }
+  // 4. Respaldo para móvil: si el navegador pierde la cookie de sesión en el salto entre
+  // apps (correo -> navegador), adjuntamos los tokens reales de la sesión ya verificada
+  // en el FRAGMENTO de la URL (nunca en query string: el fragmento no se envía al servidor
+  // ni queda en logs). El cliente los usa para reestablecer la sesión con setSession().
+  // Importante: nunca pasar aquí un email o user id "pelado" — eso sería confiar en un
+  // identificador no verificado y permitiría a cualquiera forjar el enlace.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session && next.startsWith('/reset-password')) {
+    next = `${next}#access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token)}`
+  }
 
-      const response = NextResponse.redirect(new URL(next, request.url))
+  const response = NextResponse.redirect(new URL(next, request.url))
   
   // Obtenemos todas las cookies que Supabase acaba de intentar poner en el almacén
   const allCookies = cookieStore.getAll()

@@ -288,7 +288,7 @@ export function FinanceTab() {
             let query = supabase
                 .from('resident_invoices')
                 .select(`
-                    id, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type,
+                    id, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type, folio, paid_at,
                     residents (
                         first_name, last_name, phone,
                         units (unit_number)
@@ -317,7 +317,9 @@ export function FinanceTab() {
                     const resident = inv.residents
                     const unitName = resident?.units?.unit_number || 'S/N'
                     const phone = resident?.phone || ''
-                    const folio = `FAC-${inv.id.substring(0, 8).toUpperCase()}`
+                    // Folio real guardado en resident_invoices; solo si faltara (facturas viejas)
+                    // caemos al identificador visual derivado del id.
+                    const folio = inv.folio || `FAC-${inv.id.substring(0, 8).toUpperCase()}`
                     const concept = inv.description || 'Cuota de mantenimiento'
 
                     // paid_amount calculated from amount - balance_due
@@ -351,6 +353,7 @@ export function FinanceTab() {
                         reminder_sent: false,
                         due_date: dueDate.toISOString(),
                         fecha: inv.period_start || inv.due_date || inv.created_at,
+                        fecha_pago: inv.paid_at || null,
                         resident_name: resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente',
                     }
                 })
@@ -609,6 +612,7 @@ export function FinanceTab() {
                                     <th className="px-4 py-3 font-medium">Monto</th>
                                     <th className="px-4 py-3 font-medium">Atraso</th>
                                     <th className="px-4 py-3 font-medium">Estado</th>
+                                    <th className="px-4 py-3 font-medium">Fecha de Pago</th>
                                     <th className="px-4 py-3 font-medium">Recordatorio</th>
                                     <th className="px-4 py-3 font-medium text-center">Acciones</th>
                                 </tr>
@@ -616,7 +620,7 @@ export function FinanceTab() {
                             <tbody className="divide-y divide-zinc-800/50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                                             Cargando facturas recientes...
                                         </td>
                                     </tr>
@@ -653,6 +657,9 @@ export function FinanceTab() {
                                                 <Badge variant={inv.estado === 'overdue' ? 'destructive' : inv.estado === 'paid' ? 'success' : 'warning'} className="whitespace-nowrap">
                                                     {inv.estado === 'overdue' ? 'Vencida' : inv.estado === 'paid' ? 'Pagada' : 'Pendiente'}
                                                 </Badge>
+                                            </td>
+                                            <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
+                                                {inv.fecha_pago ? formatLocalDate(inv.fecha_pago, 'short') : <span className="text-zinc-500">-</span>}
                                             </td>
                                             <td className="px-4 py-3 font-medium">
                                                 {inv.estado !== 'paid' ? (
@@ -726,16 +733,17 @@ export function FinanceTab() {
                                                             title="Marcar como pagada"
                                                             className="h-10 w-10 rounded-full bg-zinc-900/50 hover:bg-emerald-500/20 transition-all duration-300 transform hover:scale-110 active:scale-95 group"
                                                             onClick={async () => {
+                                                                const now = new Date().toISOString()
                                                                 if (condoId.startsWith('demo-')) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', fecha_pago: now} : p))
                                                                     return
                                                                 }
                                                                 const { error } = await supabase
                                                                     .from('resident_invoices')
-                                                                    .update({ status: 'paid', balance_due: 0 })
+                                                                    .update({ status: 'paid', balance_due: 0, paid_at: now })
                                                                     .eq('id', inv.id)
                                                                 if (!error) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', fecha_pago: now} : p))
                                                                     fetchBillingData() // Actualiza KPIs arrriba
                                                                 }
                                                             }}
@@ -759,7 +767,7 @@ export function FinanceTab() {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                                             Aún no hay facturas registradas.
                                         </td>
                                     </tr>

@@ -377,12 +377,13 @@ export function FinanceTab() {
         }
         setIsGenerating(true)
         try {
-            const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
+            // Llamada del mismo origen hecha por un admin ya logueado: el servidor
+            // valida la sesión y que administre este condominio, no hace falta
+            // (ni se debe) mandar ningún secreto desde el navegador.
             const res = await fetch('/api/cron/generate-monthly-invoices', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(cronSecret ? { 'Authorization': `Bearer ${cronSecret}` } : {})
                 },
                 body: JSON.stringify({ month, year, condominiumId: condoId })
             })

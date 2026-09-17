@@ -49,6 +49,7 @@ export async function updateValidationStatus(
             .update({
                 status,
                 observacion: observacion || validation.observacion,
+                nota: observacion || validation.nota,
             })
             .eq('id', id)
 

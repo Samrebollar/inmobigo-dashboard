@@ -38,6 +38,7 @@ interface ResidentPaymentsClientProps {
         monto_mensual?: number
         payment_deadline?: number
     } | null
+    directPayments?: any[]
 }
 
 const CUOTA_FIJA = 2500
@@ -130,7 +131,12 @@ async function generateReceiptForResident(payment: any, residentName: string, co
     }
 }
 
-export default function ResidentPaymentsClient({ resident, invoices: dbInvoices = [], unit }: ResidentPaymentsClientProps) {
+export default function ResidentPaymentsClient({ 
+    resident, 
+    invoices: dbInvoices = [], 
+    unit,
+    directPayments = []
+}: ResidentPaymentsClientProps) {
     const today = new Date()
     const dayOfMonth = today.getDate()
 
@@ -672,6 +678,92 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                             </AnimatePresence>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            {/* 3.5. HISTORIAL DE PAGOS REALIZADOS (DE LA TABLA PAYMENTS) */}
+            <div className="space-y-6 pt-4">
+                <div className="flex flex-col md:flex-row items-center justify-between border-b border-white/5 pb-6 gap-4">
+                    <h2 className="text-2xl font-black text-white italic tracking-tight flex items-center gap-3">
+                        <div className="p-2.5 bg-emerald-500/10 rounded-2xl text-emerald-400 border border-emerald-500/20">
+                            <CreditCard className="h-6 w-6" />
+                        </div>
+                        Historial de Pagos Realizados (Transacciones)
+                    </h2>
+                    <span className="text-xs font-bold text-zinc-400 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl">
+                        Registros en tabla <code className="text-emerald-400 font-mono">payments</code>
+                    </span>
+                </div>
+
+                <div className="bg-zinc-900/30 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
+                    {directPayments.length === 0 ? (
+                        <div className="py-12 px-6 text-center">
+                            <div className="flex flex-col items-center justify-center gap-3">
+                                <div className="p-4 bg-zinc-900 rounded-full text-zinc-600 border border-zinc-800">
+                                    <Receipt size={28} />
+                                </div>
+                                <p className="text-zinc-400 font-bold text-sm">No hay transacciones registradas en el historial directo.</p>
+                                <p className="text-zinc-600 text-xs">Los pagos efectuados por Mercado Pago o Transferencia se registrarán aquí.</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-white/[0.02]">
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Concepto</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Método de Pago</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Folio / Transacción</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-right">Monto</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/[0.03]">
+                                    {directPayments.map((pay: any, idx: number) => {
+                                        const normStatus = (pay.status || '').toLowerCase()
+                                        const isPaid = ['approved', 'completed', 'paid', 'aprobado'].includes(normStatus)
+                                        const isPending = ['pending', 'in_process', 'pendiente'].includes(normStatus)
+                                        return (
+                                            <tr key={pay.id || idx} className="group hover:bg-white/[0.02] transition-colors">
+                                                <td className="px-8 py-6">
+                                                    <span className="text-zinc-300 font-bold text-xs">{formatDate(pay.created_at)}</span>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <span className="text-white font-medium text-xs">{pay.concept || 'Cuota de Mantenimiento'}</span>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <Badge className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold text-[10px] uppercase tracking-wider">
+                                                        {pay.payment_method || pay.provider || 'Mercado Pago'}
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <span className="text-zinc-400 font-mono text-xs">{pay.folio || pay.id?.slice(0, 10)}</span>
+                                                </td>
+                                                <td className="px-8 py-6 text-right">
+                                                    <span className="text-emerald-400 font-black text-lg tracking-tight">
+                                                        ${Number(pay.amount || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-6 text-center">
+                                                    <Badge className={cn(
+                                                        "px-4 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest border",
+                                                        isPaid
+                                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                            : isPending
+                                                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                                    )}>
+                                                        {isPaid ? 'Completado' : isPending ? 'Pendiente' : pay.status}
+                                                    </Badge>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </div>
 

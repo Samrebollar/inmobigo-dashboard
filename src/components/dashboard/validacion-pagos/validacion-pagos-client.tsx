@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, FileText, Filter, Eye, Loader2, CheckCircle, AlertTriangle, Receipt, Trash, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import { getValidations, updateValidationStatus, deleteValidation, syncApprovedValidations } from '@/app/actions/payment-validation-actions'
+import { getValidations, updateValidationStatus, deleteValidation, syncApprovedValidations, ensureValidationFolioAction } from '@/app/actions/payment-validation-actions'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -147,7 +147,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             toast.success(`Pago ${status === 'aprobado' ? 'aprobado' : 'rechazado'} con éxito`)
             if (status === 'aprobado') {
                 const item = validations.find(v => v.id === id)
-                if (item) generateReceipt(item)
+                if (item) await generateReceipt(item, res.folio)
             }
             await fetchData()
         } else {
@@ -181,8 +181,19 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
         toast.success('Descarga iniciada')
     }
 
-    const generateReceipt = (item: any) => {
+    const generateReceipt = async (item: any, overrideFolio?: string) => {
         try {
+            let receiptFolio = overrideFolio || item.folio
+            if (!receiptFolio || receiptFolio.trim() === '') {
+                const folioRes = await ensureValidationFolioAction(item.id)
+                if (folioRes.success && folioRes.folio) {
+                    receiptFolio = folioRes.folio
+                }
+            }
+            if (!receiptFolio) {
+                receiptFolio = `REC-${Date.now().toString().slice(-6)}`
+            }
+
             const doc = new jsPDF()
             doc.setFillColor(79, 70, 229)
             doc.rect(0, 0, 210, 35, 'F')
@@ -192,7 +203,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             doc.text('RECIBO DE PAGO', 14, 22)
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
-            doc.text(`Folio: REC-${Date.now().toString().slice(-6)}`, 150, 16)
+            doc.text(`Folio: ${receiptFolio}`, 150, 16)
             doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
             doc.setFontSize(12)
             doc.setTextColor(40, 40, 40)

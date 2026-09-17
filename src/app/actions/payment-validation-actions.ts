@@ -54,8 +54,15 @@ export async function updateValidationStatus(
 
         if (updateStatusErr) throw updateStatusErr
 
+        let approvedFolio: string | undefined = validation.folio
+
         // 3. Efectos secundarios al APROBAR
         if (status === 'aprobado') {
+            const folioRes = await ensureValidationFolioAction(id)
+            if (folioRes.success && folioRes.folio) {
+                approvedFolio = folioRes.folio
+            }
+
             try {
                 const adminClient = createAdminClient(
                     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -73,7 +80,7 @@ export async function updateValidationStatus(
 
                 if (existingRI) {
                     revalidatePath('/dashboard/validacion-pagos')
-                    return { success: true }
+                    return { success: true, folio: approvedFolio }
                 }
 
                 // ── Resolver el residente ─────────────────────────────────────────
@@ -270,11 +277,67 @@ export async function updateValidationStatus(
             }
         }
 
+        // ── Notificar a n8n de forma no bloqueante ────────────────────────────
+        const pagoDecisionWebhook =
+            process.env.N8N_PAGO_DECISION_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/pago-decision'
+        fetch(pagoDecisionWebhook, { method: 'POST' }).catch((err: Error) =>
+            console.error('[Validation] Error al notificar webhook pago-decision:', err.message)
+        )
+
         revalidatePath('/dashboard/validacion-pagos')
-        return { success: true }
+        return { success: true, folio: approvedFolio }
     } catch (error: any) {
         console.error('Error updating validation status:', error)
         return { success: false, error: 'Error al actualizar: ' + error.message }
+    }
+}
+
+/**
+ * Asegura que un registro de comprobante tenga un folio único (REC-XXXXXX) asignado en payment_validations.
+ * Revisa primero si payment_validations.folio ya tiene valor. Si está vacío, genera uno mediante la secuencia
+ * o fallback y actualiza la misma fila.
+ */
+export async function ensureValidationFolioAction(id: string): Promise<{ success: boolean; folio?: string; error?: string }> {
+    try {
+        const adminClient = createAdminClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
+        // 1. Revisar si ya existe un folio guardado en DB
+        const { data: current } = await adminClient
+            .from('payment_validations')
+            .select('folio')
+            .eq('id', id)
+            .maybeSingle()
+
+        if (current?.folio && current.folio.trim() !== '') {
+            return { success: true, folio: current.folio }
+        }
+
+        // 2. Intentar llamar a la función RPC 'ensure_payment_validation_folio'
+        const { data: rpcFolio, error: rpcErr } = await adminClient
+            .rpc('ensure_payment_validation_folio', { p_validation_id: id })
+
+        if (!rpcErr && rpcFolio && typeof rpcFolio === 'string' && rpcFolio.trim() !== '') {
+            return { success: true, folio: rpcFolio }
+        }
+
+        // 3. Fallback en JS si el RPC no se encuentra desplegado
+        const fallbackFolio = `REC-${Date.now().toString().slice(-6)}`
+        const { data: updated } = await adminClient
+            .from('payment_validations')
+            .update({ folio: fallbackFolio })
+            .eq('id', id)
+            .is('folio', null)
+            .select('folio')
+            .maybeSingle()
+
+        const finalFolio = updated?.folio || current?.folio || fallbackFolio
+        return { success: true, folio: finalFolio }
+    } catch (err: any) {
+        console.error('[Validation] Error al asegurar folio:', err)
+        return { success: false, error: err.message }
     }
 }
 

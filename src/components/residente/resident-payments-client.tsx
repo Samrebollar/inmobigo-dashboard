@@ -26,6 +26,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 interface ResidentPaymentsClientProps {
     resident: any
@@ -62,6 +64,70 @@ function mapStatus(status: string) {
         cancelled: 'Cancelado'
     }
     return map[status] || status
+}
+
+async function generateReceiptForResident(payment: any, residentName: string, condoName: string) {
+    try {
+        const folio = payment.folio
+        if (!folio) return
+
+        const doc = new jsPDF()
+        // Header
+        doc.setFillColor(79, 70, 229)
+        doc.rect(0, 0, 210, 35, 'F')
+        doc.setFontSize(22)
+        doc.setTextColor(255, 255, 255)
+        doc.setFont('helvetica', 'bold')
+        doc.text('RECIBO DE PAGO', 14, 22)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Folio: ${folio}`, 150, 16)
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
+        // Resident info
+        doc.setFontSize(12)
+        doc.setTextColor(40, 40, 40)
+        doc.setFont('helvetica', 'bold')
+        doc.text('INFORMACIÓN DEL RESIDENTE', 14, 50)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Nombre: ${residentName}`, 14, 60)
+        if (condoName) doc.text(`Condominio: ${condoName}`, 14, 66)
+        doc.setDrawColor(220, 220, 220)
+        doc.line(14, 76, 196, 76)
+        // Payment details
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(40, 40, 40)
+        doc.text('DETALLES DEL PAGO', 14, 88)
+        const tableRows = [[
+            payment.concept || 'Cuota de Mantenimiento',
+            `$${Number(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+            'Transferencia / Depósito',
+            payment.date
+        ]]
+        autoTable(doc, {
+            head: [['Concepto', 'Monto Pagado', 'Forma de Pago', 'Fecha']],
+            body: tableRows,
+            startY: 94,
+            styles: { fontSize: 10, cellPadding: 5 },
+            headStyles: { fillColor: [79, 70, 229] },
+            alternateRowStyles: { fillColor: [245, 245, 245] },
+        })
+        const finalY = (doc as any).lastAutoTable.finalY + 15
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(60, 60, 60)
+        doc.text(`Total Procesado: $${Number(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
+        // Footer
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.setFont('helvetica', 'normal')
+        doc.text('Este documento es un comprobante de operación digital generado por InmobiGo SaaS.', 14, 275)
+        doc.text('Conserve este recibo para cualquier aclaración futura.', 14, 281)
+        doc.save(`Recibo_${folio}.pdf`)
+    } catch (e) {
+        console.error('[Residente] Error al generar recibo PDF:', e)
+    }
 }
 
 export default function ResidentPaymentsClient({ resident, invoices: dbInvoices = [], unit }: ResidentPaymentsClientProps) {
@@ -121,6 +187,27 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                     .eq('resident_id', resident.id)
                     .order('created_at', { ascending: false })
                 if (data) {
+                    // ── Cruzar folios reales desde payment_validations ──────────────
+                    const validationIds = data
+                        .map((i: any) => {
+                            const m = (i.notes || '').match(/^validation:(.+)$/)
+                            return m ? m[1] : null
+                        })
+                        .filter(Boolean) as string[]
+
+                    const folioByValidationId: Record<string, string> = {}
+                    if (validationIds.length > 0) {
+                        const { data: pvRows } = await supabase
+                            .from('payment_validations')
+                            .select('id, folio')
+                            .in('id', validationIds)
+                        if (pvRows) {
+                            for (const row of pvRows) {
+                                if (row.folio) folioByValidationId[row.id] = row.folio
+                            }
+                        }
+                    }
+
                     setLiveInvoices(data.map((inv: any) => {
                         const baseDate = new Date(inv.due_date || inv.created_at)
                         const limitDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), paymentDeadline, 23, 59, 59)
@@ -131,13 +218,21 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                         }
                         // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
                         const paid_amount = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
-                        return { ...inv, atraso, paid_amount }
+
+                        // Inyectar folio real desde payment_validations si existe
+                        const validationMatch = (inv.notes || '').match(/^validation:(.+)$/)
+                        const realFolio = validationMatch
+                            ? (folioByValidationId[validationMatch[1]] || inv.folio || null)
+                            : (inv.folio || null)
+
+                        return { ...inv, folio: realFolio, atraso, paid_amount }
                     }))
                 }
             })
             .subscribe()
         return () => { supabase.removeChannel(ch) }
     }, [resident?.id])
+
     
     // Lógica de estado basada en deuda y fecha
     const isOverdue = dayOfMonth > paymentDeadline && resident.debt_amount > 0
@@ -548,13 +643,28 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                                         </td>
                                         <td className="px-10 py-8">
                                             <div className="flex justify-end">
-                                                <motion.button 
-                                                    whileHover={{ scale: 1.2, rotate: 12 }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                    className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all shadow-[0_0_20px_rgba(16,185,129,0)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-                                                >
-                                                    <Receipt size={20} />
-                                                </motion.button>
+                                                {payment.folio && payment.folio !== '—' ? (
+                                                    <motion.button
+                                                        title={`Descargar recibo ${payment.folio}`}
+                                                        whileHover={{ scale: 1.2, rotate: 12 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        onClick={() => generateReceiptForResident(
+                                                            payment,
+                                                            resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
+                                                            resident.condominiums?.name || ''
+                                                        )}
+                                                        className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all shadow-[0_0_20px_rgba(16,185,129,0)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                                                    >
+                                                        <Receipt size={20} />
+                                                    </motion.button>
+                                                ) : (
+                                                    <div
+                                                        title="Recibo pendiente de aprobación"
+                                                        className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/30 text-zinc-600 cursor-default"
+                                                    >
+                                                        <Receipt size={20} />
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                     </motion.tr>

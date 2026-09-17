@@ -49,6 +49,30 @@ export default async function PaymentsPage() {
             today.setHours(23, 59, 59, 0)
             const paymentDeadline = resident?.units?.payment_deadline || 10
 
+            // ── Cruzar folios reales desde payment_validations ──────────────────
+            // resident_invoices.notes = 'validation:{payment_validation_id}'
+            // El folio REC-XXXXXX vive en payment_validations.folio (no en resident_invoices)
+            const validationIds = inv
+                .map((i: any) => {
+                    const m = (i.notes || '').match(/^validation:(.+)$/)
+                    return m ? m[1] : null
+                })
+                .filter(Boolean) as string[]
+
+            // Map: payment_validation_id → folio
+            const folioByValidationId: Record<string, string> = {}
+            if (validationIds.length > 0) {
+                const { data: pvRows } = await supabase
+                    .from('payment_validations')
+                    .select('id, folio')
+                    .in('id', validationIds)
+                if (pvRows) {
+                    for (const row of pvRows) {
+                        if (row.folio) folioByValidationId[row.id] = row.folio
+                    }
+                }
+            }
+
             invoices = inv.map((invoice: any) => {
                 /*
                  * LÓGICA DE ATRASO:
@@ -81,7 +105,13 @@ export default async function PaymentsPage() {
                 // Compute paid_amount from amount - balance_due
                 const paid_amount = Math.max(0, Number(invoice.amount || 0) - Number(invoice.balance_due || 0))
 
-                return { ...invoice, atraso, paid_amount }
+                // Inyectar folio real desde payment_validations si existe
+                const validationMatch = (invoice.notes || '').match(/^validation:(.+)$/)
+                const realFolio = validationMatch
+                    ? (folioByValidationId[validationMatch[1]] || invoice.folio || null)
+                    : (invoice.folio || null)
+
+                return { ...invoice, folio: realFolio, atraso, paid_amount }
             })
         }
     }

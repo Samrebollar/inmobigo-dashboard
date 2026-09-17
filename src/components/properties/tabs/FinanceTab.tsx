@@ -264,11 +264,11 @@ export function FinanceTab() {
         try {
             if (condoId.startsWith('demo-')) {
                 const allDemoInvoices = [
-                    { id: '1', folio: 'FAC-DEMO0001', unidad: 'A-101', concepto: 'Mantenimiento Enero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-01-10', fecha: '2026-01-01T08:00:00.000Z' },
-                    { id: '2', folio: 'FAC-DEMO0002', unidad: 'A-102', concepto: 'Mantenimiento Febrero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-02-10', fecha: '2026-02-01T08:00:00.000Z' },
-                    { id: '3', folio: 'FAC-DEMO0003', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2026', monto: 2800, paid_amount: 0, estado: 'overdue', telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2026-03-10', fecha: '2026-03-01T08:00:00.000Z' },
-                    { id: '4', folio: 'FAC-DEMO0004', unidad: 'C-201', concepto: 'Mantenimiento Abril 2026', monto: 3100, paid_amount: 3100, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-04-10', fecha: '2026-04-01T08:00:00.000Z' },
-                    { id: '5', folio: 'FAC-DEMO0005', unidad: 'D-404', concepto: 'Mantenimiento Mayo 2026', monto: 3500, paid_amount: 1500, estado: 'pending', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-05-10', fecha: '2026-05-01T08:00:00.000Z' },
+                    { id: '1', folio: 'INV-202601-01', unidad: 'A-101', concepto: 'Mantenimiento Enero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', paid_at: '2026-01-05T10:00:00.000Z', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-01-10', fecha: '2026-01-01T08:00:00.000Z' },
+                    { id: '2', folio: 'INV-202602-02', unidad: 'A-102', concepto: 'Mantenimiento Febrero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', paid_at: '2026-02-08T11:30:00.000Z', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-02-10', fecha: '2026-02-01T08:00:00.000Z' },
+                    { id: '3', folio: 'INV-202603-03', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2026', monto: 2800, paid_amount: 0, estado: 'overdue', paid_at: null, telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2026-03-10', fecha: '2026-03-01T08:00:00.000Z' },
+                    { id: '4', folio: 'INV-202604-04', unidad: 'C-201', concepto: 'Mantenimiento Abril 2026', monto: 3100, paid_amount: 3100, estado: 'paid', paid_at: '2026-04-04T09:15:00.000Z', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-04-10', fecha: '2026-04-01T08:00:00.000Z' },
+                    { id: '5', folio: 'INV-202605-05', unidad: 'D-404', concepto: 'Mantenimiento Mayo 2026', monto: 3500, paid_amount: 1500, estado: 'pending', paid_at: null, telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-05-10', fecha: '2026-05-01T08:00:00.000Z' },
                 ]
 
                 if (selectedPeriod.month === -1) {
@@ -288,7 +288,7 @@ export function FinanceTab() {
             let query = supabase
                 .from('resident_invoices')
                 .select(`
-                    id, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type,
+                    id, folio, paid_at, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type,
                     residents (
                         first_name, last_name, phone,
                         units (unit_number)
@@ -317,7 +317,7 @@ export function FinanceTab() {
                     const resident = inv.residents
                     const unitName = resident?.units?.unit_number || 'S/N'
                     const phone = resident?.phone || ''
-                    const folio = `FAC-${inv.id.substring(0, 8).toUpperCase()}`
+                    const folio = inv.folio || `FAC-${inv.id.substring(0, 8).toUpperCase()}`
                     const concept = inv.description || 'Cuota de mantenimiento'
 
                     // paid_amount calculated from amount - balance_due
@@ -346,6 +346,7 @@ export function FinanceTab() {
                         monto: monto,
                         paid_amount: paidAmount,
                         estado: inv.status,
+                        paid_at: inv.paid_at || null,
                         telefono: phone,
                         atraso: delayDays,
                         reminder_sent: false,
@@ -608,6 +609,7 @@ export function FinanceTab() {
                                     <th className="px-4 py-3 font-medium">Monto</th>
                                     <th className="px-4 py-3 font-medium">Atraso</th>
                                     <th className="px-4 py-3 font-medium">Estado</th>
+                                    <th className="px-4 py-3 font-medium">Fecha de Pago</th>
                                     <th className="px-4 py-3 font-medium">Recordatorio</th>
                                     <th className="px-4 py-3 font-medium text-center">Acciones</th>
                                 </tr>
@@ -615,7 +617,7 @@ export function FinanceTab() {
                             <tbody className="divide-y divide-zinc-800/50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                                             Cargando facturas recientes...
                                         </td>
                                     </tr>
@@ -652,6 +654,9 @@ export function FinanceTab() {
                                                 <Badge variant={inv.estado === 'overdue' ? 'destructive' : inv.estado === 'paid' ? 'success' : 'warning'} className="whitespace-nowrap">
                                                     {inv.estado === 'overdue' ? 'Vencida' : inv.estado === 'paid' ? 'Pagada' : 'Pendiente'}
                                                 </Badge>
+                                            </td>
+                                            <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
+                                                {inv.paid_at ? formatLocalDate(inv.paid_at, 'short') : '-'}
                                             </td>
                                             <td className="px-4 py-3 font-medium">
                                                 {inv.estado !== 'paid' ? (
@@ -725,16 +730,17 @@ export function FinanceTab() {
                                                             title="Marcar como pagada"
                                                             className="h-10 w-10 rounded-full bg-zinc-900/50 hover:bg-emerald-500/20 transition-all duration-300 transform hover:scale-110 active:scale-95 group"
                                                             onClick={async () => {
+                                                                const nowIso = new Date().toISOString()
                                                                 if (condoId.startsWith('demo-')) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
                                                                     return
                                                                 }
                                                                 const { error } = await supabase
                                                                     .from('resident_invoices')
-                                                                    .update({ status: 'paid', balance_due: 0 })
+                                                                    .update({ status: 'paid', balance_due: 0, paid_at: nowIso })
                                                                     .eq('id', inv.id)
                                                                 if (!error) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
                                                                     fetchBillingData() // Actualiza KPIs arrriba
                                                                 }
                                                             }}
@@ -758,7 +764,7 @@ export function FinanceTab() {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                                             Aún no hay facturas registradas.
                                         </td>
                                     </tr>

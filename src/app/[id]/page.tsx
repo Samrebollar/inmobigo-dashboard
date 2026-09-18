@@ -213,9 +213,12 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
                             const adminClient = createAdminClient()
                             await adminClient
                                 .from('visitor_passes')
-                                .update({ 
+                                .update({
                                     status: 'used',
-                                    used_at: new Date().toISOString()
+                                    used_at: new Date().toISOString(),
+                                    // checked_in_at es lo que el workflow de n8n "07b - Notificar
+                                    // Ingreso" usa para avisarle al residente por WhatsApp.
+                                    checked_in_at: new Date().toISOString()
                                 })
                                 .eq('id', visita.id)
                             redirect(`/${qr_token}`)

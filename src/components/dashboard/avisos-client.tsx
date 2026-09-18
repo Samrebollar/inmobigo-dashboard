@@ -214,11 +214,25 @@ export function AvisosClient({
                 (payload) => {
                     console.log('🔥 CAMBIO DETECTADO (Admin):', payload)
                     if (payload.eventType === 'INSERT') {
-                        const newAlert = {
-                            ...payload.new as any,
-                            condominium_id: (payload.new as any).condominium_id // Will be null unless we fetch it or it's in the payload
+                        const inserted = payload.new as any
+                        // package_alerts.unit_id no tiene foreign key hacia units.id en la
+                        // base de datos, así que el payload de Realtime no trae el condominio
+                        // embebido. Lo resolvemos con una consulta puntual a `units`.
+                        setPackageAlerts(prev => [{ ...inserted, condominium_id: null }, ...prev])
+                        if (inserted.unit_id) {
+                            supabase
+                                .from('units')
+                                .select('condominium_id')
+                                .eq('id', inserted.unit_id)
+                                .maybeSingle()
+                                .then(({ data }) => {
+                                    if (data?.condominium_id) {
+                                        setPackageAlerts(prev => prev.map(a =>
+                                            a.id === inserted.id ? { ...a, condominium_id: data.condominium_id } : a
+                                        ))
+                                    }
+                                })
                         }
-                        setPackageAlerts(prev => [newAlert, ...prev])
                     } else if (payload.eventType === 'UPDATE') {
                         setPackageAlerts(prev => prev.map(a => a.id === (payload.new as any).id ? payload.new : a))
                     } else if (payload.eventType === 'DELETE') {
@@ -242,11 +256,25 @@ export function AvisosClient({
                 (payload) => {
                     console.log('Realtime Event (Access):', payload)
                     if (payload.eventType === 'INSERT') {
-                        const newPass = {
-                            ...payload.new as any,
-                            condominium_id: (payload.new as any).condominium_id
+                        const inserted = payload.new as any
+                        // Mismo caso que package_alerts: visitor_passes.unit_id tampoco
+                        // tiene foreign key hacia units.id, así que resolvemos el
+                        // condominio aparte en vez de esperarlo en el payload.
+                        setVisitorPasses(prev => [{ ...inserted, condominium_id: null }, ...prev])
+                        if (inserted.unit_id) {
+                            supabase
+                                .from('units')
+                                .select('condominium_id')
+                                .eq('id', inserted.unit_id)
+                                .maybeSingle()
+                                .then(({ data }) => {
+                                    if (data?.condominium_id) {
+                                        setVisitorPasses(prev => prev.map(p =>
+                                            p.id === inserted.id ? { ...p, condominium_id: data.condominium_id } : p
+                                        ))
+                                    }
+                                })
                         }
-                        setVisitorPasses(prev => [newPass, ...prev])
                     } else if (payload.eventType === 'UPDATE') {
                         setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
                     } else if (payload.eventType === 'DELETE') {

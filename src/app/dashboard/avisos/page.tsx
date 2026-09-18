@@ -76,20 +76,58 @@ export default async function AvisosPage() {
   // CASE 1: ADMINISTRATOR / OWNER
   // If orgUser exists OR it's not a resident, treat as Admin context
   if (orgUser || !resident) {
-    const { data: initialPasses } = await adminSupabase
+    const { data: rawPasses, error: passesError } = await adminSupabase
       .from('visitor_passes')
-      .select('*, units(condominium_id)')
+      .select('*')
       .eq('organization_id', finalOrganizationId)
       .order('created_at', { ascending: false })
       .limit(50)
 
-    const { data: initialAlerts } = await adminSupabase
+    if (passesError) {
+      console.error('[AvisosPage] Error fetching visitor_passes:', passesError)
+    }
+
+    const { data: rawAlerts, error: alertsError } = await adminSupabase
       .from('package_alerts')
-      .select('*, units(condominium_id)')
+      .select('*')
       .eq('organization_id', finalOrganizationId)
       .in('status', ['pending', 'received'])
       .order('created_at', { ascending: false })
       .limit(50)
+
+    if (alertsError) {
+      console.error('[AvisosPage] Error fetching package_alerts:', alertsError)
+    }
+
+    // No hay foreign key declarada de visitor_passes.unit_id / package_alerts.unit_id
+    // hacia units.id en la base de datos, así que el embed de PostgREST
+    // (`.select('*, units(condominium_id)')`) falla en silencio y devuelve
+    // data=null. Resolvemos condominium_id nosotros mismos con una sola
+    // consulta extra a `units`, sin depender de esa relación.
+    const unitIds = Array.from(new Set([
+      ...(rawPasses || []).map((p: any) => p.unit_id),
+      ...(rawAlerts || []).map((a: any) => a.unit_id),
+    ].filter(Boolean)))
+
+    let unitCondoMap: Record<string, string> = {}
+    if (unitIds.length > 0) {
+      const { data: unitsData } = await adminSupabase
+        .from('units')
+        .select('id, condominium_id')
+        .in('id', unitIds)
+
+      unitCondoMap = Object.fromEntries(
+        (unitsData || []).map((u: any) => [u.id, u.condominium_id])
+      )
+    }
+
+    const attachCondo = (row: any) => ({
+      ...row,
+      units: { condominium_id: unitCondoMap[row.unit_id] || null },
+    })
+
+    const initialPasses = (rawPasses || []).map(attachCondo)
+    const initialAlerts = (rawAlerts || []).map(attachCondo)
 
     const admin = {
       ...user,

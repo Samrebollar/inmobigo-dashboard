@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
-import { Invoice } from '@/types/finance'
+import { Invoice, ResidentInvoicePayment } from '@/types/finance'
 import { financeService } from '@/services/finance-service'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -32,11 +32,21 @@ const formatCurrency = (amount: number) => {
     }).format(amount)
 }
 
+const formatPaymentMethod = (method?: string | null) => {
+    if (!method) return 'No especificado'
+    const m = method.toLowerCase()
+    if (m.includes('efectivo')) return 'Efectivo'
+    if (m.includes('transferencia')) return 'Transferencia Bancaria'
+    if (m.includes('línea') || m.includes('linea') || m.includes('mercado')) return 'Pago en Línea'
+    return method
+}
+
 export default function InvoiceDetailPage() {
     const params = useParams()
     const router = useRouter()
     const id = params?.id as string
     const [invoice, setInvoice] = useState<Invoice | null>(null)
+    const [payments, setPayments] = useState<ResidentInvoicePayment[]>([])
     const [residentName, setResidentName] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [downloading, setDownloading] = useState(false)
@@ -48,7 +58,10 @@ export default function InvoiceDetailPage() {
             try {
                 const data = await financeService.getInvoiceById(id)
                 setInvoice(data)
-                
+
+                const paymentsData = await financeService.getPaymentsByInvoiceIds([id])
+                setPayments(paymentsData)
+
                 // Fetch actual resident name
                 let foundName = ''
                 
@@ -116,7 +129,7 @@ export default function InvoiceDetailPage() {
             <div className="flex min-h-screen items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
-                    <p className="text-zinc-500 text-sm font-medium animate-pulse">Cargando detalles de la factura...</p>
+                    <p className="text-zinc-500 text-sm font-medium animate-pulse">Cargando detalles del recibo...</p>
                 </div>
             </div>
         )
@@ -127,7 +140,7 @@ export default function InvoiceDetailPage() {
             <div className="mx-auto max-w-3xl p-8 text-center mt-20">
                 <div className="bg-zinc-900/50 p-12 rounded-2xl border border-zinc-800 flex flex-col items-center">
                     <AlertTriangle className="h-16 w-16 text-zinc-600 mb-4" />
-                    <h2 className="text-2xl font-bold text-white mb-2">Factura no encontrada</h2>
+                    <h2 className="text-2xl font-bold text-white mb-2">Recibo no encontrado</h2>
                     <p className="text-zinc-400 mb-8">El documento que buscas no existe o no tienes permisos para verlo.</p>
                     <Link href="/dashboard/finance/billing">
                         <Button className="bg-indigo-600 hover:bg-indigo-700">Volver al historial</Button>
@@ -136,6 +149,11 @@ export default function InvoiceDetailPage() {
             </div>
         )
     }
+
+    // El recibo de pago (folio propio, distinto del folio de la cuota) es el
+    // último pago aplicado a esta factura — el que la liquidó si ya está pagada.
+    const primaryPayment = payments.length > 0 ? payments[payments.length - 1] : null
+    const documentFolio = primaryPayment?.folio || invoice.folio
 
     // Calculations
     const today = new Date()
@@ -172,19 +190,19 @@ export default function InvoiceDetailPage() {
         doc.setTextColor(100, 100, 100)
         doc.text(invoice.condominium_address || 'Dirección no registrada', 14, 30)
 
-        // Título "FACTURA" alineado a la derecha
+        // Título "RECIBO" alineado a la derecha
         doc.setFontSize(24)
         doc.setTextColor(79, 70, 229) // Indigo
-        doc.text('FACTURA', 196, 22, { align: 'right' })
+        doc.text('RECIBO', 196, 22, { align: 'right' })
 
         doc.setFontSize(12)
         doc.setTextColor(100, 100, 100)
-        doc.text(`#${invoice.folio}`, 196, 30, { align: 'right' })
+        doc.text(`#${documentFolio}`, 196, 30, { align: 'right' })
 
         // Cuerpo: Datos del residente
         doc.setFontSize(10)
         doc.setTextColor(100, 100, 100)
-        doc.text('FACTURAR A:', 14, 50)
+        doc.text('RECIBO A:', 14, 50)
         
         doc.setFontSize(12)
         doc.setTextColor(0, 0, 0)
@@ -200,9 +218,10 @@ export default function InvoiceDetailPage() {
         doc.text(`Emisión: ${formatDate(invoice.created_at)}`, 196, 50, { align: 'right' })
         doc.text(`Vencimiento: ${formatDate(invoice.due_date)}`, 196, 56, { align: 'right' })
 
-        if (isPaid && invoice.paid_at) {
+        if (isPaid && (primaryPayment?.paid_at || invoice.paid_at)) {
             doc.setTextColor(16, 185, 129)
-            doc.text(`Pagada el: ${formatDate(invoice.paid_at)}`, 196, 62, { align: 'right' })
+            doc.text(`Pagado el: ${formatDate(primaryPayment?.paid_at || invoice.paid_at)}`, 196, 62, { align: 'right' })
+            doc.text(`Método de pago: ${formatPaymentMethod(primaryPayment?.payment_method)}`, 196, 68, { align: 'right' })
         } else if (isOverdue) {
             doc.setTextColor(225, 29, 72)
             doc.text(`Días de atraso: ${daysOverdue} días`, 196, 62, { align: 'right' })
@@ -222,7 +241,7 @@ export default function InvoiceDetailPage() {
         }
 
         autoTable(doc, {
-            startY: 75,
+            startY: 80,
             head: [['Concepto', 'Importe']],
             body: tableBody,
             theme: 'grid',
@@ -244,9 +263,9 @@ export default function InvoiceDetailPage() {
         doc.setTextColor(100, 100, 100)
         doc.text('Agradecemos su valiosa contribución para el mantenimiento de nuestro condominio.', 14, finalY + 22)
         doc.text('Para cualquier duda o aclaración sobre este documento, por favor contacte a la administración.', 14, finalY + 28)
-        doc.text(`Referencia de documento: ${invoice.folio}`, 14, finalY + 34)
+        doc.text(`Referencia de documento: ${documentFolio}`, 14, finalY + 34)
 
-        doc.save(`Factura_${invoice.folio || 'Documento'}.pdf`)
+        doc.save(`Recibo_${documentFolio || 'Documento'}.pdf`)
     }
 
     return (
@@ -284,7 +303,7 @@ export default function InvoiceDetailPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
                 <Link href="/dashboard/finance/billing">
                     <Button variant="ghost" className="text-zinc-400 hover:text-white pl-0 gap-2 hover:bg-transparent">
-                        <ArrowLeft size={16} /> Volver a Facturas
+                        <ArrowLeft size={16} /> Volver a Recibos
                     </Button>
                 </Link>
                 <div className="flex flex-wrap items-center gap-2">
@@ -331,7 +350,7 @@ export default function InvoiceDetailPage() {
                                         <StatusIcon size={14} className="animate-pulse" />
                                         <span className="text-xs font-bold uppercase tracking-wider">{currentStatus.label}</span>
                                     </div>
-                                    <span className="text-zinc-400 font-mono text-sm">#{invoice.folio}</span>
+                                    <span className="text-zinc-400 font-mono text-sm">#{documentFolio}</span>
                                 </div>
                             </div>
 
@@ -341,7 +360,7 @@ export default function InvoiceDetailPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                 <div className="space-y-4">
                                     <div className="space-y-1">
-                                        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Facturar A</p>
+                                        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Recibo A</p>
                                         <p className="text-base font-semibold text-white">
                                             {residentName || `Residente ${invoice.unit_number ? `de Unidad ${invoice.unit_number}` : ''}`}
                                         </p>
@@ -444,13 +463,16 @@ export default function InvoiceDetailPage() {
                                                     <CheckCircle size={18} className="shrink-0 text-emerald-300" />
                                                 </div>
                                                 <span className="text-center leading-relaxed text-xs">
-                                                    Factura pagada el <span className="block text-emerald-300 font-bold mt-0.5 text-sm">{formatDate(invoice.paid_at || invoice.updated_at)}</span>
+                                                    Recibo pagado el <span className="block text-emerald-300 font-bold mt-0.5 text-sm">{formatDate(primaryPayment?.paid_at || invoice.paid_at || invoice.updated_at)}</span>
+                                                </span>
+                                                <span className="text-center leading-relaxed text-xs pt-1 border-t border-emerald-500/20 w-full">
+                                                    Método de pago<span className="block text-emerald-300 font-bold mt-0.5 text-sm">{formatPaymentMethod(primaryPayment?.payment_method)}</span>
                                                 </span>
                                             </div>
                                         </motion.div>
                                     ) : isOverdue ? (
                                         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="pt-2">
-                                            <p className="text-sm font-medium text-rose-400">Esta factura tiene {daysOverdue} días de atraso. Se recomienda pagar para evitar recargos adicionales.</p>
+                                            <p className="text-sm font-medium text-rose-400">Este recibo tiene {daysOverdue} días de atraso. Se recomienda pagar para evitar recargos adicionales.</p>
                                         </motion.div>
                                     ) : (
                                         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="pt-2">

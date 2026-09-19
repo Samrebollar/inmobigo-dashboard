@@ -97,10 +97,14 @@ function ResidentsContent() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            const response = await fetch('/api/auth/org-user')
-            const { orgUser } = await response.json()
+            // Se usa /api/properties/list (admin client) en vez de consultar
+            // "condominiums"/"organization_users" desde el navegador: esas tablas
+            // tienen una política RLS rota que produce "infinite recursion detected
+            // in policy for relation organization_users" y deja el select en null.
+            const response = await fetch('/api/properties/list')
+            const result = await response.json()
 
-            if (!orgUser) {
+            if (!result.organizationId) {
                 if (isDemo) {
                     setOrganizationId('demo-org-id')
                     const demoCondos = demoDb.getProperties()
@@ -113,16 +117,9 @@ function ResidentsContent() {
                 return
             }
 
-            setOrganizationId(orgUser.organization_id)
+            setOrganizationId(result.organizationId)
 
-            const { data: condos } = await supabase
-                .from('condominiums')
-                .select('id, name')
-                .eq('organization_id', orgUser.organization_id)
-                .eq('status', 'active')
-                .order('name')
-
-            let allCondos = condos || []
+            let allCondos: Condominium[] = (result.properties || []).map((p: any) => ({ id: p.id, name: p.name }))
             if (isDemo) {
                 const demoCondos = demoDb.getProperties()
                 // Merge without duplicates

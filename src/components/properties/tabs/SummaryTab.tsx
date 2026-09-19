@@ -8,7 +8,6 @@ import { Condominium } from '@/types/properties'
 import { demoDb } from '@/utils/demo-db'
 import { motion } from 'framer-motion'
 import { useUserRole } from '@/hooks/use-user-role'
-import { createClient } from '@/utils/supabase/client'
 import { calculateCondoMonthlyFinancials, getLocalDateParts } from '@/utils/finance-utils'
 
 interface SummaryTabProps {
@@ -34,48 +33,26 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
         if (!condo.id || isDemo) return
         
         const fetchMetrics = async () => {
-            const supabase = createClient()
-            
             try {
                 const now = new Date()
                 const currentMonth = now.getMonth()
                 const currentYear = now.getFullYear()
 
-                // 1. Fetch units
-                const { data: unitsData, error: unitsError } = await supabase
-                    .from('units')
-                    .select('id, monto_mensual, facturacion_activa, unit_number')
-                    .eq('condominium_id', condo.id)
-                    .neq('billing_status', 'suspended')
+                const response = await fetch(`/api/properties/${condo.id}/summary`)
+                if (!response.ok) {
+                    throw new Error(`Error fetching summary metrics (${response.status})`)
+                }
 
-                if (unitsError) throw unitsError
-
-                // 2. Fetch residents
-                const { data: residentsData, error: residentsError } = await supabase
-                    .from('residents')
-                    .select('id, unit_id, first_name, last_name, fecha_ingreso, status')
-                    .eq('condominium_id', condo.id)
-
-                if (residentsError) throw residentsError
-
-                // 3. Fetch resident_invoices for the current year, filtered by due_date
-                //    due_date is the billing-period reference — always use it over created_at
-                const yearStart = new Date(currentYear, 0, 1).toISOString().substring(0, 10)
-                const yearEnd   = new Date(currentYear, 11, 31).toISOString().substring(0, 10)
-                const { data: invoicesData, error: invoiceError } = await supabase
-                    .from('resident_invoices')
-                    .select('id, amount, balance_due, status, resident_id, unit_id, invoice_type, created_at, due_date, paid_at')
-                    .eq('condominium_id', condo.id)
-                    .gte('due_date', yearStart)
-                    .lte('due_date', yearEnd)
-
-                if (invoiceError) throw invoiceError
+                const resData = await response.json()
+                const unitsData: any[] = resData.units || []
+                const residentsData: any[] = resData.residents || []
+                const invoicesData: any[] = resData.invoices || []
 
                 // ── Metrics ──────────────────────────────────────────────
                 const condoFinancials = calculateCondoMonthlyFinancials({
-                    units: unitsData || [],
-                    residents: residentsData || [],
-                    invoices: invoicesData || [],
+                    units: unitsData,
+                    residents: residentsData,
+                    invoices: invoicesData,
                     selectedMonth: currentMonth,
                     selectedYear: currentYear
                 })
@@ -96,9 +73,9 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                     return parts.year === currentYear && parts.month === currentMonth
                 }
 
-                const invoices = invoicesData || []
-                const residents = residentsData || []
-                const units = unitsData || []
+                const invoices: any[] = invoicesData
+                const residents: any[] = residentsData
+                const units: any[] = unitsData
 
                 // Fast look-up maps
                 const residentById   = new Map<string, any>(residents.map(r => [r.id, r]))

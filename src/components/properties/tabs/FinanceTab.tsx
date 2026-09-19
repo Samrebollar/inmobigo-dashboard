@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
 import { calculateCondoMonthlyFinancials, formatLocalDate } from '@/utils/finance-utils'
 import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -24,7 +23,6 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 export function FinanceTab() {
     const params = useParams()
     const condoId = params.id as string
-    const supabase = createClient()
 
     const [loading, setLoading] = useState(true)
     const [recentInvoices, setRecentInvoices] = useState<any[]>([])
@@ -211,34 +209,9 @@ export function FinanceTab() {
                 return
             }
 
-            // 1. Fetch units
-            const { data: unitsData, error: unitsError } = await supabase
-                .from('units')
-                .select('id, monto_mensual, facturacion_activa')
-                .eq('condominium_id', condoId)
-                .neq('billing_status', 'suspended')
-
-            if (unitsError) throw unitsError
-
-            // 2. Fetch residents
-            const { data: residentsData, error: residentsError } = await supabase
-                .from('residents')
-                .select('id, unit_id, fecha_ingreso, status')
-                .eq('condominium_id', condoId)
-
-            if (residentsError) throw residentsError
-
-            // 3. Fetch resident invoices — use due_date range for the selected year
-            const yearStart = new Date(selectedPeriod.year, 0, 1).toISOString().substring(0, 10)
-            const yearEnd = new Date(selectedPeriod.year, 11, 31).toISOString().substring(0, 10)
-            const { data: invoicesData, error: invoiceError } = await supabase
-                .from('resident_invoices')
-                .select('amount, balance_due, status, resident_id, invoice_type, created_at, due_date')
-                .eq('condominium_id', condoId)
-                .gte('due_date', yearStart)
-                .lte('due_date', yearEnd)
-
-            if (invoiceError) throw invoiceError
+            const response = await fetch(`/api/properties/${condoId}/finance?action=billing&year=${selectedPeriod.year}&month=${selectedPeriod.month}`)
+            if (!response.ok) throw new Error(`HTTP error ${response.status}`)
+            const { units: unitsData, residents: residentsData, invoices: invoicesData } = await response.json()
 
             const condoFinancials = calculateCondoMonthlyFinancials({
                 units: unitsData || [],
@@ -284,33 +257,13 @@ export function FinanceTab() {
                 return
             }
 
-            // Real DB query
-            let query = supabase
-                .from('resident_invoices')
-                .select(`
-                    id, folio, paid_at, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type,
-                    residents (
-                        first_name, last_name, phone,
-                        units (unit_number)
-                    )
-                `)
-                .eq('condominium_id', condoId)
-
-            if (selectedPeriod.month !== -1) {
-                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString().substring(0, 10)
-                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0).toISOString().substring(0, 10)
-                query = query.gte('due_date', startOfPeriod).lte('due_date', endOfPeriod)
-                query = query.eq('invoice_type', 'maintenance')
-            }
-
-            const { data: invoicesData, error: invoiceError } = await query
-                .order('created_at', { ascending: false })
-                .limit(100)
-
-            if (invoiceError) {
-                console.error('Error fetching resident_invoices details:', JSON.stringify(invoiceError, null, 2))
+            // Real DB query via API route to bypass RLS recursion
+            const response = await fetch(`/api/properties/${condoId}/finance?action=invoices&year=${selectedPeriod.year}&month=${selectedPeriod.month}`)
+            if (!response.ok) {
+                console.error(`[fetchInvoices] API returned status ${response.status}`)
                 return
             }
+            const { invoices: invoicesData } = await response.json()
 
             if (invoicesData) {
                 const mappedInvoices = invoicesData.map((inv: any) => {
@@ -735,13 +688,14 @@ export function FinanceTab() {
                                                                     setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
                                                                     return
                                                                 }
-                                                                const { error } = await supabase
-                                                                    .from('resident_invoices')
-                                                                    .update({ status: 'paid', balance_due: 0, paid_at: nowIso })
-                                                                    .eq('id', inv.id)
-                                                                if (!error) {
+                                                                const res = await fetch(`/api/properties/${condoId}/finance`, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ action: 'mark_paid', invoiceId: inv.id, paidAt: nowIso })
+                                                                })
+                                                                if (res.ok) {
                                                                     setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
-                                                                    fetchBillingData() // Actualiza KPIs arrriba
+                                                                    fetchBillingData() // Actualiza KPIs arriba
                                                                 }
                                                             }}
                                                         >

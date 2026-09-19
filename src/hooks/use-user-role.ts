@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { Role, Permission, ROLE_PERMISSIONS, UserRoleContext } from '@/types/auth'
 
 export function useUserRole(): UserRoleContext {
@@ -17,34 +16,21 @@ export function useUserRole(): UserRoleContext {
         can: () => false
     })
 
-    const supabase = createClient()
-
     useEffect(() => {
         const fetchRole = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (!user) {
+                const response = await fetch('/api/auth/org-user')
+                if (!response.ok) {
                     setContext(prev => ({ ...prev, loading: false }))
                     return
                 }
 
-                // Fetch org user to get role and organization business type
-                const { data: orgUser, error } = await supabase
-                    .from('organization_users')
-                    .select(`
-                        role_new, 
-                        organization_id,
-                        organizations (
-                            business_type
-                        )
-                    `)
-                    .eq('user_id', user.id)
-                    .single()
+                const { orgUser } = await response.json()
 
-                if (orgUser && !error) {
-                    const role = orgUser.role_new as Role
+                if (orgUser) {
+                    const role = (orgUser.role_new || 'viewer') as Role
                     const permissions = ROLE_PERMISSIONS[role] || []
-                    const businessType = (orgUser.organizations as any)?.business_type || 'condominio'
+                    const businessType = orgUser.organizations?.business_type || 'condominio'
 
                     setContext({
                         role,
@@ -58,7 +44,6 @@ export function useUserRole(): UserRoleContext {
                         can: (permission: Permission) => permissions.includes(permission)
                     })
                 } else {
-                    // Fallback if no org user found (or error)
                     setContext(prev => ({ ...prev, loading: false }))
                 }
             } catch (error) {

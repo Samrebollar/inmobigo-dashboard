@@ -83,13 +83,20 @@ export default async function AvisosPage() {
       .order('created_at', { ascending: false })
       .limit(50)
 
-    const { data: initialAlerts } = await adminSupabase
+    const { data: initialAlerts, error: alertsError } = await adminSupabase
       .from('package_alerts')
       .select('*, units(condominium_id)')
       .eq('organization_id', finalOrganizationId)
       .in('status', ['pending', 'received'])
       .order('created_at', { ascending: false })
       .limit(50)
+
+    console.log('[AvisosPage] finalOrganizationId:', finalOrganizationId)
+    console.log('[AvisosPage] package_alerts fetched:', initialAlerts?.length ?? 0, 'rows')
+    if (alertsError) console.error('[AvisosPage] package_alerts error:', alertsError)
+    if (initialAlerts) {
+      initialAlerts.forEach(a => console.log('[AvisosPage] alert:', a.id, 'status:', a.status, 'org_id:', a.organization_id, 'unit_id:', a.unit_id))
+    }
 
     const admin = {
       ...user,

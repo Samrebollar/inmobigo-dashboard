@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,12 +58,18 @@ const getPaymentMethod = (inv: any) => {
 }
 
 
-export default function BillingPage() {
+function BillingPageContent() {
     const supabase = createClient()
+    const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [invoices, setInvoices] = useState<Invoice[]>([])
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState<string>('all')
+    const [condominiums, setCondominiums] = useState<{ id: string, name: string }[]>([])
+    // Si se llega desde "Detalles" en el resumen de Finanzas con un condominio
+    // seleccionado, este historial arranca ya filtrado a ese mismo condominio.
+    const [condoFilter, setCondoFilter] = useState<string>(searchParams.get('condo') || 'all')
+    const [periodFilter, setPeriodFilter] = useState<string>('all')
     const { checkAction, isDemo, loading: demoLoading } = useDemoMode()
 
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
@@ -108,6 +115,13 @@ export default function BillingPage() {
             let data: Invoice[] = []
             if (orgUser) {
                 data = await financeService.getGlobalInvoices(orgUser.organization_id)
+
+                const { data: condoRows } = await supabase
+                    .from('condominiums')
+                    .select('id, name')
+                    .eq('organization_id', orgUser.organization_id)
+                    .order('name')
+                setCondominiums(condoRows || [])
             }
 
             if (isDemo && data.length === 0) {
@@ -186,6 +200,7 @@ export default function BillingPage() {
             'Vencimiento': formatDate(inv.due_date),
             'Creación': formatDate(inv.created_at),
             'Monto': inv.amount,
+            'Saldo Pendiente': Number(inv.balance_due) || 0,
             'Estado': inv.status === 'paid' ? 'Pagado' : inv.status === 'overdue' ? 'Vencido' : inv.status === 'pending' ? 'Pendiente' : inv.status
         }))
         const csv = Papa.unparse(data)
@@ -212,12 +227,13 @@ export default function BillingPage() {
             inv.description || '-',
             formatDate(inv.due_date),
             `$${inv.amount.toLocaleString()}`,
+            `$${(Number(inv.balance_due) || 0).toLocaleString()}`,
             inv.status === 'paid' ? 'Pagado' : inv.status === 'overdue' ? 'Vencido' : inv.status === 'pending' ? 'Pendiente' : inv.status
         ])
 
         autoTable(doc, {
             startY: 30,
-            head: [['Folio', 'Condominio', 'Unidad', 'Residente', 'Concepto', 'Vencimiento', 'Monto', 'Estado']],
+            head: [['Folio', 'Condominio', 'Unidad', 'Residente', 'Concepto', 'Vencimiento', 'Monto', 'Saldo Pendiente', 'Estado']],
             body: tableData,
             theme: 'grid',
             headStyles: { fillColor: [79, 70, 229] },
@@ -430,6 +446,23 @@ export default function BillingPage() {
         }
     }
 
+    // Periodos (mes/año) disponibles según las fechas de vencimiento reales de
+    // los recibos cargados — evita mostrar un selector con meses sin datos.
+    const periodOptions = useMemo(() => {
+        const keys = new Set<string>()
+        invoices.forEach(inv => {
+            if (!inv.due_date) return
+            const d = new Date(inv.due_date)
+            if (isNaN(d.getTime())) return
+            keys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+        })
+        return Array.from(keys).sort().reverse().map(key => {
+            const [year, month] = key.split('-')
+            const label = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+            return { key, label: label.charAt(0).toUpperCase() + label.slice(1) }
+        })
+    }, [invoices])
+
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch =
             (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -437,8 +470,16 @@ export default function BillingPage() {
             (inv.unit_number || '').toLowerCase().includes(search.toLowerCase())
 
         const matchesStatus = statusFilter === 'all' || inv.status === statusFilter
+        const matchesCondo = condoFilter === 'all' || inv.condominium_id === condoFilter
 
-        return matchesSearch && matchesStatus
+        let matchesPeriod = true
+        if (periodFilter !== 'all') {
+            const d = inv.due_date ? new Date(inv.due_date) : null
+            const key = d && !isNaN(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null
+            matchesPeriod = key === periodFilter
+        }
+
+        return matchesSearch && matchesStatus && matchesCondo && matchesPeriod
     })
 
     const totalAmount = filteredInvoices.reduce((acc, inv) => acc + inv.amount, 0)
@@ -446,7 +487,7 @@ export default function BillingPage() {
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6">
             <div className="flex items-center gap-4">
-                <Link href="/dashboard/finance" className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+                <Link href="/seguridad/finance" className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
                     <ArrowLeft size={20} />
                 </Link>
                 <div>
@@ -477,6 +518,26 @@ export default function BillingPage() {
                         <option value="pending">Pendiente</option>
                         <option value="overdue">Vencido</option>
                         <option value="cancelled">Cancelado</option>
+                    </select>
+                    <select
+                        className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
+                        value={condoFilter}
+                        onChange={(e) => setCondoFilter(e.target.value)}
+                    >
+                        <option value="all">Todos los condominios</option>
+                        {condominiums.map(condo => (
+                            <option key={condo.id} value={condo.id}>{condo.name}</option>
+                        ))}
+                    </select>
+                    <select
+                        className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
+                        value={periodFilter}
+                        onChange={(e) => setPeriodFilter(e.target.value)}
+                    >
+                        <option value="all">Todos los periodos</option>
+                        {periodOptions.map(period => (
+                            <option key={period.key} value={period.key}>{period.label}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="flex gap-3">
@@ -642,6 +703,11 @@ export default function BillingPage() {
                                                 </td>
                                                 <td className="px-6 py-4 font-medium text-white min-w-[120px]">
                                                     ${inv.amount.toLocaleString()}
+                                                    {inv.status !== 'paid' && inv.status !== 'cancelled' && Number(inv.balance_due) > 0 && Number(inv.balance_due) < Number(inv.amount) && (
+                                                        <div className="text-xs text-amber-400 font-normal mt-0.5">
+                                                            Saldo: ${Number(inv.balance_due).toLocaleString()}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-zinc-300 min-w-[150px]">
                                                     {getPaymentMethod(inv)}
@@ -809,12 +875,20 @@ export default function BillingPage() {
                 </div>
             </Modal>
 
-            <CashRegisterArqueoModal 
+            <CashRegisterArqueoModal
                 isOpen={isArqueoOpen}
                 onClose={() => setIsArqueoOpen(false)}
                 invoices={invoices}
                 getPaymentMethod={getPaymentMethod}
             />
         </div>
+    )
+}
+
+export default function BillingPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-zinc-500">Cargando historial de recibos...</div>}>
+            <BillingPageContent />
+        </Suspense>
     )
 }

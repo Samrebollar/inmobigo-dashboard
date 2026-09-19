@@ -21,6 +21,12 @@ export default function AdminFinanceClient({
     const [isReportModalOpen, setIsReportModalOpen] = useState(false)
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
 
+    // El Historial de Recibos hereda el condominio seleccionado aquí, en vez de
+    // mandar siempre a ver todo el portafolio.
+    const billingHref = selectedCondoId
+        ? `/seguridad/finance/billing?condo=${selectedCondoId}`
+        : '/seguridad/finance/billing'
+
     return (
         <div className="space-y-6 md:space-y-8 p-4 md:p-8">
             {/* Header */}
@@ -58,7 +64,7 @@ export default function AdminFinanceClient({
                         <Download size={16} />
                         Reporte
                     </button>
-                    <Link href="/seguridad/finance/billing" className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all flex-[2] sm:flex-none">
+                    <Link href={billingHref} className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all flex-[2] sm:flex-none">
                         <FileText size={16} />
                         <span>Detalles</span>
                     </Link>
@@ -77,7 +83,7 @@ export default function AdminFinanceClient({
 
             {/* Quick Link to Detailed Billing */}
             <div className="flex justify-end">
-                <Link href="/seguridad/finance/billing" className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                <Link href={billingHref} className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
                     Ver historial completo <ArrowRight size={14} />
                 </Link>
             </div>

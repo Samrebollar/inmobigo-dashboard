@@ -178,7 +178,7 @@ export default function ResidentMovementsPage() {
         if (!method) return 'Pago en línea'
         const m = method.toLowerCase()
         if (m.includes('efectivo')) return 'Efectivo'
-        if (m.includes('transferencia')) return 'Transferencia'
+        if (m.includes('transferencia')) return 'Transferencia Bancaria'
         return 'Pago en línea'
     }
 
@@ -811,11 +811,9 @@ export default function ResidentMovementsPage() {
                                         {formatMoney(inv.status === 'paid' ? (inv.amount - (inv.balance_due ?? 0)) : (inv.balance_due ?? inv.amount))}
                                     </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
-                                    <td className="px-6 py-4 text-zinc-400">
-                                        {inv.status === 'paid'
-                                            ? formatPaymentMethod(inv.payment_method)
-                                            : '-'
-                                        }
+                                    <td className="px-6 py-4 text-zinc-600">
+                                        {/* El método de pago solo aplica al recibo de pago (renglón hijo), no al cargo. */}
+                                        -
                                     </td>
                                     <td className="px-6 py-4">
                                         {inv.status === 'paid' ? (
@@ -828,15 +826,6 @@ export default function ResidentMovementsPage() {
                                         }
                                     </td>
                                     <td className="px-6 py-4 flex items-center justify-end gap-2">
-                                        <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Recibo">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
-                                                className="h-8 w-8 p-0 text-purple-400 bg-purple-500/10 border border-purple-500/20 hover:text-purple-200 hover:bg-purple-500/30 hover:border-purple-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:rotate-12 active:scale-95"
-                                            >
-                                                <Receipt size={16} className="transition-transform duration-300" />
-                                            </Button>
-                                        </Link>
                                         {inv.status !== 'paid' && (
                                             <Button
                                                 onClick={() => setPaymentModalInvoice(inv)}
@@ -887,7 +876,17 @@ export default function ResidentMovementsPage() {
                                                 <td className="px-6 py-2.5 text-zinc-600">-</td>
                                                 <td className="px-6 py-2.5 text-zinc-500">{formatPaymentMethod(payment.payment_method)}</td>
                                                 <td className="px-6 py-2.5 text-zinc-600">-</td>
-                                                <td className="px-6 py-2.5"></td>
+                                                <td className="px-6 py-2.5 flex items-center justify-end">
+                                                    <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Recibo">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-7 w-7 p-0 text-purple-400 bg-purple-500/10 border border-purple-500/20 hover:text-purple-200 hover:bg-purple-500/30 hover:border-purple-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:rotate-12 active:scale-95"
+                                                        >
+                                                            <Receipt size={14} className="transition-transform duration-300" />
+                                                        </Button>
+                                                    </Link>
+                                                </td>
                                             </tr>
                                         )
                                     })

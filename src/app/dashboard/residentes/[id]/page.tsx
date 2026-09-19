@@ -778,8 +778,6 @@ export default function ResidentMovementsPage() {
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4">Monto</th>
                                 <th className="px-6 py-4">Vencimiento</th>
-                                <th className="px-6 py-4">Fecha Pago</th>
-                                <th className="px-6 py-4">Folio de Pago</th>
                                 <th className="px-6 py-4">Método de Pago</th>
                                 <th className="px-6 py-4">Días de atraso</th>
                                 <th className="px-6 py-4 text-right">Acciones</th>
@@ -814,32 +812,23 @@ export default function ResidentMovementsPage() {
                                     </td>
                                     <td className="px-6 py-4 text-zinc-400">{formatDate(inv.due_date)}</td>
                                     <td className="px-6 py-4 text-zinc-400">
-                                        {inv.status === 'paid' ? (inv.updated_at ? formatDate(inv.updated_at) : formatDate(inv.created_at)) : '-'}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {inv.status === 'paid'
-                                            ? (
-                                                <span className="font-mono text-xs text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md">
-                                                    {inv.payment_folio || inv.folio || '-'}
-                                                </span>
-                                            )
-                                            : <span className="text-zinc-600">-</span>
-                                        }
-                                    </td>
-                                    <td className="px-6 py-4 text-zinc-400">
                                         {inv.status === 'paid'
                                             ? formatPaymentMethod(inv.payment_method)
                                             : '-'
                                         }
                                     </td>
                                     <td className="px-6 py-4">
-                                        {(inv.status === 'overdue' || (inv.status === 'pending' && new Date() > parseISO(inv.due_date)))
+                                        {inv.status === 'paid' ? (
+                                            inv.paid_at && differenceInDays(parseISO(inv.paid_at), parseISO(inv.due_date)) > 0
+                                                ? <span className="text-zinc-400 font-medium">{differenceInDays(parseISO(inv.paid_at), parseISO(inv.due_date))} días</span>
+                                                : <span className="text-zinc-600">-</span>
+                                        ) : new Date() > parseISO(inv.due_date)
                                             ? <span className="text-red-400 font-medium">{Math.max(0, differenceInDays(new Date(), parseISO(inv.due_date)))} días</span>
                                             : <span className="text-zinc-600">-</span>
                                         }
                                     </td>
                                     <td className="px-6 py-4 flex items-center justify-end gap-2">
-                                        <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Factura">
+                                        <Link href={`/dashboard/invoices/${inv.id}`} title="Ver Recibo">
                                             <Button 
                                                 variant="ghost" 
                                                 size="sm" 
@@ -872,36 +861,42 @@ export default function ResidentMovementsPage() {
                                         )}
                                     </td>
                                 </tr>
-                                {payments.filter(p => p.invoice_id === inv.id).map(payment => (
-                                    <tr key={payment.id} className="bg-zinc-950/40 hover:bg-zinc-800/30 transition-colors text-xs">
-                                        <td className="px-6 py-2.5 text-zinc-500 pl-10">↳ {formatDate(payment.paid_at)}</td>
-                                        <td className="px-6 py-2.5 text-zinc-500 font-mono">{payment.folio}</td>
-                                        <td className="px-6 py-2.5 text-zinc-400 max-w-[200px] truncate">
-                                            Abono a {inv.description || inv.folio}
-                                        </td>
-                                        <td className="px-6 py-2.5">
-                                            <Badge variant="outline" className="border-0 px-2.5 py-0.5 bg-sky-500/15 text-sky-400 text-[11px]">
-                                                Abono
-                                            </Badge>
-                                        </td>
-                                        <td className="px-6 py-2.5 text-emerald-400 font-medium">{formatMoney(payment.amount)}</td>
-                                        <td className="px-6 py-2.5 text-zinc-600">-</td>
-                                        <td className="px-6 py-2.5 text-zinc-500">{formatDate(payment.paid_at)}</td>
-                                        <td className="px-6 py-2.5">
-                                            <span className="font-mono text-[11px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
-                                                {payment.folio}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-2.5 text-zinc-500">{formatPaymentMethod(payment.payment_method)}</td>
-                                        <td className="px-6 py-2.5 text-zinc-600">-</td>
-                                        <td className="px-6 py-2.5"></td>
-                                    </tr>
-                                ))}
+                                {(() => {
+                                    const invoicePayments = payments.filter(p => p.invoice_id === inv.id)
+                                    const lastPaymentId = invoicePayments.length > 0
+                                        ? invoicePayments.reduce((latest, p) => new Date(p.paid_at) > new Date(latest.paid_at) ? p : latest, invoicePayments[0]).id
+                                        : null
+                                    return invoicePayments.map(payment => {
+                                        const isSettlement = inv.status === 'paid' && payment.id === lastPaymentId
+                                        const concept = isSettlement
+                                            ? `Recibo de pago completo de ${inv.description || 'la cuota de mantenimiento'}`
+                                            : `Abono a ${inv.description || 'la cuota de mantenimiento'}`
+                                        return (
+                                            <tr key={payment.id} className="bg-zinc-950/40 hover:bg-zinc-800/30 transition-colors text-xs">
+                                                <td className="px-6 py-2.5 text-zinc-500 pl-10">↳ {formatDate(payment.paid_at)}</td>
+                                                <td className="px-6 py-2.5 text-zinc-500 font-mono">{payment.folio}</td>
+                                                <td className="px-6 py-2.5 text-zinc-400 max-w-[200px] truncate" title={concept}>
+                                                    {concept}
+                                                </td>
+                                                <td className="px-6 py-2.5">
+                                                    <Badge variant="outline" className="border-0 px-2.5 py-0.5 bg-emerald-500/15 text-emerald-400 text-[11px]">
+                                                        Pagado
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-6 py-2.5 text-emerald-400 font-medium">{formatMoney(payment.amount)}</td>
+                                                <td className="px-6 py-2.5 text-zinc-600">-</td>
+                                                <td className="px-6 py-2.5 text-zinc-500">{formatPaymentMethod(payment.payment_method)}</td>
+                                                <td className="px-6 py-2.5 text-zinc-600">-</td>
+                                                <td className="px-6 py-2.5"></td>
+                                            </tr>
+                                        )
+                                    })
+                                })()}
                                 </Fragment>
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
-                                    <td colSpan={11} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron resultados.
                                     </td>
                                 </tr>

@@ -534,7 +534,14 @@ export function calculateCondoMonthlyFinancials({
     // Filter operational maintenance invoices — use due_date as the billing month reference
     // filter strictly within the [firstMonth, lastMonth] range of selectedYear
     const maintenanceInvoices = invoices.filter(inv => inv.invoice_type === 'maintenance')
-    const filteredInvoices = maintenanceInvoices.filter(inv => {
+
+    // Facturas correspondientes al periodo, de CUALQUIER tipo (pagadas, pendientes y
+    // vencidas) — porCobrar/vencido deben salir de este mismo conjunto que totalPeriodo/
+    // recaudado más abajo. Antes solo se recorrían las de tipo 'maintenance', así que una
+    // factura de otro tipo (ej. 'initial_balance', 'manual_payment') que aún tuviera saldo
+    // pendiente sí sumaba en totalPeriodo/recaudado pero nunca en porCobrar/vencido,
+    // haciendo que Total del Periodo no cuadrara con Recaudado + Pendiente + Morosidad.
+    const allInvoicesForPeriod = invoices.filter(inv => {
         const dateStr = inv.due_date || inv.created_at
         if (!dateStr) return false
         const parts = getLocalDateParts(dateStr)
@@ -543,7 +550,7 @@ export function calculateCondoMonthlyFinancials({
         return parts.month >= firstMonth && parts.month <= lastMonth
     })
 
-    filteredInvoices.forEach(inv => {
+    allInvoicesForPeriod.forEach(inv => {
         const bal = Number(inv.balance_due || 0)
         if (bal <= 0) return
 
@@ -570,16 +577,6 @@ export function calculateCondoMonthlyFinancials({
                 debtorResidents.add(inv.resident_id)
             }
         }
-    })
-
-    // Facturas correspondientes al periodo (pagadas, pendientes y vencidas)
-    const allInvoicesForPeriod = invoices.filter(inv => {
-        const dateStr = inv.due_date || inv.created_at
-        if (!dateStr) return false
-        const parts = getLocalDateParts(dateStr)
-        if (!parts) return false
-        if (parts.year !== selectedYear) return false
-        return parts.month >= firstMonth && parts.month <= lastMonth
     })
 
     // Recaudado: suma de la porción pagada (amount - balance_due) de todas las facturas del periodo

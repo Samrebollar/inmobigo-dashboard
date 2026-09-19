@@ -193,6 +193,7 @@ function ResidentsContent() {
                 const unit = unitMap.get(resident.unit_id || '')
                 const monthlyFee = Number(unit?.monto_mensual || 0)
                 let feeBasedDebt = 0
+                let paymentSurplus = 0
                 if (monthlyFee > 0 && resident.status === 'active' && unit?.facturacion_activa !== false) {
                     const startDateStr = resident.fecha_ingreso ?? resident.created_at
                     const startDate = startDateStr ? new Date(startDateStr) : null
@@ -215,10 +216,17 @@ function ResidentsContent() {
                         return sum + paidAmt
                     }, 0)
                     feeBasedDebt = Math.max(0, annualTarget - totalPaid)
+                    paymentSurplus = Math.max(0, totalPaid - annualTarget)
                 }
 
                 // Use the greater of the two: invoice-based or fee-based debt
-                const debt = Math.max(invoiceDebt, feeBasedDebt) + Number(resident.debt_amount || 0)
+                // debt_amount es un saldo inicial "manual" (heredado, sin factura propia).
+                // Si el residente ya pagó de más contra su cuota real (paymentSurplus), ese
+                // excedente absorbe primero el saldo inicial pendiente, para no contarlo dos
+                // veces (una vez como feeBasedDebt/invoiceDebt y otra vez sumando debt_amount
+                // completo aunque ya se haya cubierto con pagos reales).
+                const remainingDebtAmount = Math.max(0, Number(resident.debt_amount || 0) - paymentSurplus)
+                const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount
 
                 // Last payment date: use updated_at of the most recent paid invoice
                 const lastPayment = paidInvoices.length > 0

@@ -1,20 +1,21 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus } from 'lucide-react'
+import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, HandCoins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Resident } from '@/types/residents'
-import { Invoice } from '@/types/finance'
+import { Invoice, ResidentInvoicePayment } from '@/types/finance'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { propertiesService } from '@/services/properties-service'
 import { notificationsService } from '@/services/notifications-service'
 import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
+import { RegisterPaymentModal } from '@/components/finance/register-payment-modal'
 import { CommunicationLog } from '@/types/residents'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -49,9 +50,11 @@ export default function ResidentMovementsPage() {
     const [loading, setLoading] = useState(true)
     const [resident, setResident] = useState<Resident | null>(null)
     const [invoices, setInvoices] = useState<Invoice[]>([])
+    const [payments, setPayments] = useState<ResidentInvoicePayment[]>([])
     const [logs, setLogs] = useState<CommunicationLog[]>([])
     const [search, setSearch] = useState('')
     const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false)
+    const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null)
     const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
     const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getMonth().toString())
@@ -127,6 +130,9 @@ export default function ResidentMovementsPage() {
             invoicesByResident.forEach(inv => invoiceMap.set(inv.id, inv))
             invoicesData = Array.from(invoiceMap.values())
             setInvoices(invoicesData)
+
+            const paymentsData = await financeService.getPaymentsByInvoiceIds(invoicesData.map(inv => inv.id))
+            setPayments(paymentsData)
 
                                     const totalBilled = invoicesData.reduce((sum, inv) => sum + inv.amount, 0) + Number(residentData?.debt_amount || 0)
             const totalPaid = invoicesData
@@ -337,8 +343,9 @@ export default function ResidentMovementsPage() {
         amount?: number
     }
 
-    const getHistory = (invoices: Invoice[], logs: CommunicationLog[]): HistoryEvent[] => {
+    const getHistory = (invoices: Invoice[], logs: CommunicationLog[], payments: ResidentInvoicePayment[]): HistoryEvent[] => {
         const events: HistoryEvent[] = []
+        const invoiceById = new Map(invoices.map(inv => [inv.id, inv]))
 
         // Add Logs
         logs.forEach(log => {
@@ -346,6 +353,18 @@ export default function ResidentMovementsPage() {
                 date: log.created_at,
                 type: 'reminder', // Map all logs to reminder type for now, or distinguish if needed
                 description: `[${log.method.toUpperCase()}] Recordatorio ${log.message_type}: ${log.metadata?.invoice_folio || ''} (${log.days_overdue} días atraso)`
+            })
+        })
+
+        // Event: one entry per individual payment/abono (soporta pagos parciales:
+        // cada abono queda registrado con su propio recibo y fecha)
+        payments.forEach(payment => {
+            const relatedInvoice = invoiceById.get(payment.invoice_id)
+            events.push({
+                date: payment.paid_at,
+                type: 'payment',
+                description: `Pago registrado (recibo ${payment.folio}) de ${relatedInvoice?.folio || 'S/N'}${relatedInvoice?.description ? ` — ${relatedInvoice.description}` : ''}`,
+                amount: payment.amount
             })
         })
 
@@ -357,16 +376,6 @@ export default function ResidentMovementsPage() {
                 description: `Se generó el recibo ${inv.folio}`,
                 amount: inv.amount
             })
-
-            // Event: Payment (resident_invoices has no paid_at - use updated_at as payment date proxy)
-            if (inv.status === 'paid') {
-                events.push({
-                    date: inv.updated_at || inv.created_at,
-                    type: 'payment',
-                    description: `Pago registrado correctamente del recibo ${inv.folio || 'S/N'}`,
-                    amount: inv.amount
-                })
-            }
 
             // Event: Overdue (Mock derivation)
             if (inv.status === 'overdue') {
@@ -778,7 +787,8 @@ export default function ResidentMovementsPage() {
                         </thead>
                         <tbody className="divide-y divide-zinc-800">
                             {filteredInvoices.map((inv) => (
-                                <tr key={inv.id} className="hover:bg-zinc-800/50 transition-colors">
+                                <Fragment key={inv.id}>
+                                <tr className="hover:bg-zinc-800/50 transition-colors">
                                     <td className="px-6 py-4 text-zinc-400">
                                         {formatDate(inv.created_at)}
                                     </td>
@@ -839,10 +849,21 @@ export default function ResidentMovementsPage() {
                                             </Button>
                                         </Link>
                                         {inv.status !== 'paid' && (
-                                            <Button 
+                                            <Button
+                                                onClick={() => setPaymentModalInvoice(inv)}
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Registrar Pago"
+                                                className="h-8 w-8 p-0 text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:text-amber-200 hover:bg-amber-500/30 hover:border-amber-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 active:scale-95"
+                                            >
+                                                <HandCoins size={16} className="transition-transform duration-300" />
+                                            </Button>
+                                        )}
+                                        {inv.status !== 'paid' && (
+                                            <Button
                                                 onClick={() => setShowCreateInvoiceModal(true)}
-                                                variant="ghost" 
-                                                size="sm" 
+                                                variant="ghost"
+                                                size="sm"
                                                 title="Crear Recibo"
                                                 className="h-8 w-8 p-0 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:text-emerald-200 hover:bg-emerald-500/30 hover:border-emerald-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 hover:-rotate-12 active:scale-95"
                                             >
@@ -851,6 +872,32 @@ export default function ResidentMovementsPage() {
                                         )}
                                     </td>
                                 </tr>
+                                {payments.filter(p => p.invoice_id === inv.id).map(payment => (
+                                    <tr key={payment.id} className="bg-zinc-950/40 hover:bg-zinc-800/30 transition-colors text-xs">
+                                        <td className="px-6 py-2.5 text-zinc-500 pl-10">↳ {formatDate(payment.paid_at)}</td>
+                                        <td className="px-6 py-2.5 text-zinc-500 font-mono">{payment.folio}</td>
+                                        <td className="px-6 py-2.5 text-zinc-400 max-w-[200px] truncate">
+                                            Abono a {inv.description || inv.folio}
+                                        </td>
+                                        <td className="px-6 py-2.5">
+                                            <Badge variant="outline" className="border-0 px-2.5 py-0.5 bg-sky-500/15 text-sky-400 text-[11px]">
+                                                Abono
+                                            </Badge>
+                                        </td>
+                                        <td className="px-6 py-2.5 text-emerald-400 font-medium">{formatMoney(payment.amount)}</td>
+                                        <td className="px-6 py-2.5 text-zinc-600">-</td>
+                                        <td className="px-6 py-2.5 text-zinc-500">{formatDate(payment.paid_at)}</td>
+                                        <td className="px-6 py-2.5">
+                                            <span className="font-mono text-[11px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                                                {payment.folio}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-2.5 text-zinc-500">{formatPaymentMethod(payment.payment_method)}</td>
+                                        <td className="px-6 py-2.5 text-zinc-600">-</td>
+                                        <td className="px-6 py-2.5"></td>
+                                    </tr>
+                                ))}
+                                </Fragment>
                             ))}
                             {filteredInvoices.length === 0 && (
                                 <tr>
@@ -873,7 +920,7 @@ export default function ResidentMovementsPage() {
 
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-8 shadow-inner">
                     <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-0 md:before:left-48 before:h-full before:w-0.5 before:bg-zinc-800">
-                        {getHistory(invoices, logs).map((event, index) => (
+                        {getHistory(invoices, logs, payments).map((event, index) => (
                             <div key={index} className="relative flex items-center gap-10 group">
                                 {/* Date (Left Side) - Widened and Separated */}
                                 <div className="hidden md:block w-48 text-right shrink-0 pr-10">
@@ -927,6 +974,13 @@ export default function ResidentMovementsPage() {
                     />
                 )
             }
+            <RegisterPaymentModal
+                isOpen={!!paymentModalInvoice}
+                onClose={() => setPaymentModalInvoice(null)}
+                condominiumId={resident.condominium_id || ''}
+                invoice={paymentModalInvoice}
+                onSuccess={() => fetchData(id)}
+            />
         </div >
     )
 }

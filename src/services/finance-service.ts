@@ -5,6 +5,7 @@ import {
     FinancialSummary,
     FinancialDashboard,
     ResidentDebtAging,
+    ResidentInvoicePayment,
     generateFolio,
     getPaidAmount,
     Invoice
@@ -369,6 +370,57 @@ export const financeService = {
         }
 
         return enrichInvoice(data)
+    },
+
+    // ── REGISTER PAYMENT (abono parcial o total) ─────────────────────────────
+    // Genera un renglón propio en resident_invoice_payments con su propio
+    // folio de recibo, y descuenta el monto de balance_due. La factura solo
+    // pasa a 'paid' cuando el saldo llega a 0; si queda saldo, conserva su
+    // status actual (pending/overdue) para no romper los reportes/KPIs que
+    // filtran por status.
+    async registerPayment(condominiumId: string, params: {
+        invoiceId: string
+        amount: number
+        paymentMethod?: string
+        notes?: string
+        paidAt?: string
+    }): Promise<{ payment: ResidentInvoicePayment; invoice: ResidentInvoice }> {
+        if (condominiumId.startsWith('demo-') || params.invoiceId.startsWith('demo-')) {
+            throw new Error('No se pueden registrar pagos en modo demostración.')
+        }
+
+        const res = await fetch(`/api/properties/${condominiumId}/finance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'register_payment', ...params })
+        })
+
+        const data = await res.json()
+        if (!res.ok) {
+            throw new Error(data.error || 'Error al registrar el pago')
+        }
+
+        return { payment: data.payment, invoice: enrichInvoice(data.invoice) }
+    },
+
+    // ── GET PAYMENTS FOR A SET OF INVOICES ───────────────────────────────────
+    async getPaymentsByInvoiceIds(invoiceIds: string[]): Promise<ResidentInvoicePayment[]> {
+        const realIds = invoiceIds.filter(id => !id.startsWith('demo-'))
+        if (realIds.length === 0) return []
+
+        const supabase = createClient()
+        const { data, error } = await supabase
+            .from('resident_invoice_payments')
+            .select('*')
+            .in('invoice_id', realIds)
+            .order('paid_at', { ascending: true })
+
+        if (error) {
+            console.error('[financeService.getPaymentsByInvoiceIds]', error)
+            return []
+        }
+
+        return data || []
     },
 
     // ── GET GLOBAL INVOICES (all org) ────────────────────────────────────────

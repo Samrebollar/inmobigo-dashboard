@@ -205,8 +205,12 @@ function ResidentsContent() {
                     const lastBilledMonth = dayOfMonth > 10 ? currentMonthIndex : currentMonthIndex - 1
                     const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
                     const annualTarget = monthlyFee * activeMonths
-                    // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
-                    const totalPaid = paidInvoices.reduce((sum, inv) => {
+                    // paid_amount = amount - balance_due (no paid_amount column en resident_invoices).
+                    // Se calcula sobre TODAS las facturas de la unidad, no solo las 'paid':
+                    // un abono parcial deja la factura en 'pending' con balance_due reducido,
+                    // y ese abono ya cuenta como pagado (si solo se contara lo 'paid', el
+                    // saldo pendiente mostrado duplicaría el abono parcial).
+                    const totalPaid = unitInvoices.reduce((sum, inv) => {
                         const paidAmt = Math.max(0, Number(inv.amount || 0) - Number((inv as any).balance_due || 0))
                         return sum + paidAmt
                     }, 0)

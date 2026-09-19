@@ -125,9 +125,8 @@ export function RegisterPaymentModal({ isOpen, onClose, condominiumId, invoice, 
                             onChange={(e) => setMethod(e.target.value)}
                         >
                             <option value="Efectivo">Efectivo</option>
-                            <option value="Transferencia">Transferencia</option>
-                            <option value="Cheque">Cheque</option>
-                            <option value="Tarjeta">Tarjeta Crédito/Débito</option>
+                            <option value="Transferencia Bancaria">Transferencia Bancaria (cuenta de la privada)</option>
+                            <option value="Pago en Línea">Pago en Línea (Mercado Pago)</option>
                         </select>
                     </div>
                 </div>

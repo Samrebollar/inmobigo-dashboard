@@ -158,6 +158,18 @@ function ResidentsContent() {
                 unitsService.getByCondominium(condoId)
             ])
 
+            // Pagos reales (resident_invoice_payments) de todas las facturas del
+            // condominio, agrupados por residente — para que "Último pago" refleje
+            // la fecha real del pago más reciente en vez de un campo de la factura
+            // (created_at/updated_at) que no tiene nada que ver con cuándo se pagó.
+            const paymentsData = await financeService.getPaymentsByInvoiceIds(invoicesData.map(inv => inv.id))
+            const paymentsByResident = new Map<string, typeof paymentsData>()
+            paymentsData.forEach(p => {
+                const arr = paymentsByResident.get(p.resident_id) || []
+                arr.push(p)
+                paymentsByResident.set(p.resident_id, arr)
+            })
+
             setUnits(unitsData)
 
             // Build a unit map for quick fee lookup
@@ -177,11 +189,6 @@ function ResidentsContent() {
 
                 const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
                 const overdueInvoices = unitInvoices.filter(i => i.status === 'overdue')
-                // Sort paid invoices by updated_at (no paid_at in resident_invoices)
-                const paidInvoices = unitInvoices.filter(i => i.status === 'paid').sort((a, b) =>
-                    new Date((b as any).updated_at || b.created_at || '').getTime() -
-                    new Date((a as any).updated_at || a.created_at || '').getTime()
-                )
 
                 // Invoices-based debt (facturas reales en BD)
                 const invoiceDebt = pendingInvoices.reduce((sum, inv) => {
@@ -229,9 +236,14 @@ function ResidentsContent() {
                 // Use the greater of the two: invoice-based or fee-based debt
                 const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount
 
-                // Last payment date: use updated_at of the most recent paid invoice
-                const lastPayment = paidInvoices.length > 0
-                    ? ((paidInvoices[0] as any).updated_at || paidInvoices[0].created_at)
+                // Last payment date: fecha real del pago más reciente registrado en
+                // resident_invoice_payments (no created_at/updated_at de la factura,
+                // que no refleja cuándo se pagó de verdad).
+                const residentPayments = paymentsByResident.get(resident.id) || []
+                const lastPayment = residentPayments.length > 0
+                    ? residentPayments.reduce((latest, p) =>
+                        new Date(p.paid_at) > new Date(latest.paid_at) ? p : latest
+                      , residentPayments[0]).paid_at
                     : undefined
 
                 // Calculate overdue count: if fee-based shows debt but no explicit overdue invoices, estimate

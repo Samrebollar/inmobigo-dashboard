@@ -35,12 +35,14 @@ interface PackageAlert {
     created_at: string
 }
 
-export function PackageAlertsAdmin({ 
-    admin, 
-    initialAlerts = [] 
-}: { 
-    admin: any, 
-    initialAlerts?: PackageAlert[] 
+export function PackageAlertsAdmin({
+    admin,
+    initialAlerts = [],
+    onDeleted
+}: {
+    admin: any,
+    initialAlerts?: PackageAlert[],
+    onDeleted?: (id: string) => void
 }) {
     const supabase = createClient()
     const [alerts, setAlerts] = useState<PackageAlert[]>(initialAlerts)
@@ -127,6 +129,10 @@ export function PackageAlertsAdmin({
             
             toast.success('Alerta eliminada definitivamente')
             setAlerts(prev => prev.filter(a => a.id !== alertToDelete.id))
+            // Avisa al padre para que también quite el registro de su propio estado:
+            // si no, el siguiente re-render del padre vuelve a mandar la lista vieja
+            // (todavía con esta alerta) vía initialAlerts y la resucita en pantalla.
+            onDeleted?.(alertToDelete.id)
             setAlertToDelete(null)
         } catch (error: any) {
             console.error('Error deleting alert:', error)

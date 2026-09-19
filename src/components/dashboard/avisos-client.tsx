@@ -1133,11 +1133,19 @@ export function AvisosClient({
                     )}
 
                     {activeTab === 'packages' && !isPropiedades && (
-                        <PackageAlertsAdmin admin={admin} initialAlerts={filteredAlertsList} />
+                        <PackageAlertsAdmin
+                            admin={admin}
+                            initialAlerts={filteredAlertsList}
+                            onDeleted={(id) => setPackageAlerts(prev => prev.filter(a => a.id !== id))}
+                        />
                     )}
 
                     {activeTab === 'access' && !isPropiedades && (
-                        <VisitorPassesAdmin admin={admin} initialPasses={filteredPassesList} />
+                        <VisitorPassesAdmin
+                            admin={admin}
+                            initialPasses={filteredPassesList}
+                            onDeleted={(id) => setVisitorPasses(prev => prev.filter(p => p.id !== id))}
+                        />
                     )}
 
                     {activeTab === 'contracts' && isPropiedades && (

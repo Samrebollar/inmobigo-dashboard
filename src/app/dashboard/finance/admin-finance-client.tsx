@@ -78,7 +78,7 @@ export default function AdminFinanceClient({
             {/* Quick Link to Detailed Billing */}
             <div className="flex justify-end">
                 <Link href="/dashboard/finance/billing" className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
-                    Ver historial completo de facturación <ArrowRight size={14} />
+                    Ver historial completo <ArrowRight size={14} />
                 </Link>
             </div>
 

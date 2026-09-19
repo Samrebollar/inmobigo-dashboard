@@ -77,6 +77,10 @@ export interface CondoFinancials {
     recaudado: number
     porCobrar: number
     vencido: number
+    // Saldo inicial / arrastre: morosidad que un residente trae de antes (invoice_type
+    // distinto de 'maintenance' — saldo inicial, ajustes manuales, etc.), reportada
+    // aparte porque no es una cuota mensual y no debe inflar totalPeriodo/recaudado.
+    saldoInicialPendiente: number
     morososCount: number
 }
 
@@ -529,19 +533,17 @@ export function calculateCondoMonthlyFinancials({
 
     let porCobrar = 0
     let vencido = 0
+    let saldoInicialPendiente = 0
     const debtorResidents = new Set<string>()
 
     // Filter operational maintenance invoices — use due_date as the billing month reference
     // filter strictly within the [firstMonth, lastMonth] range of selectedYear
     const maintenanceInvoices = invoices.filter(inv => inv.invoice_type === 'maintenance')
 
-    // Facturas correspondientes al periodo, de CUALQUIER tipo (pagadas, pendientes y
-    // vencidas) — porCobrar/vencido deben salir de este mismo conjunto que totalPeriodo/
-    // recaudado más abajo. Antes solo se recorrían las de tipo 'maintenance', así que una
-    // factura de otro tipo (ej. 'initial_balance', 'manual_payment') que aún tuviera saldo
-    // pendiente sí sumaba en totalPeriodo/recaudado pero nunca en porCobrar/vencido,
-    // haciendo que Total del Periodo no cuadrara con Recaudado + Pendiente + Morosidad.
-    const allInvoicesForPeriod = invoices.filter(inv => {
+    // "Cuotas mensuales" del periodo: Total del Periodo, Recaudado, Pendiente y Morosidad
+    // se calculan TODOS sobre este mismo conjunto (solo invoice_type = 'maintenance'),
+    // para que cuadren entre sí como la cobranza real de la cuota recurrente.
+    const maintenanceInvoicesForPeriod = maintenanceInvoices.filter(inv => {
         const dateStr = inv.due_date || inv.created_at
         if (!dateStr) return false
         const parts = getLocalDateParts(dateStr)
@@ -550,7 +552,30 @@ export function calculateCondoMonthlyFinancials({
         return parts.month >= firstMonth && parts.month <= lastMonth
     })
 
-    allInvoicesForPeriod.forEach(inv => {
+    // Lo que un residente trae arrastrando de antes (saldo inicial, ajustes manuales, etc. —
+    // cualquier invoice_type distinto de 'maintenance'). Es morosidad real del residente,
+    // pero no es "cuota mensual": se reporta aparte para no inflar el Total del Periodo con
+    // algo que no es una cuota del mes, y para no diluirlo entre todos los residentes.
+    const otherInvoicesForPeriod = invoices.filter(inv => {
+        if (inv.invoice_type === 'maintenance') return false
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return false
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return false
+        if (parts.year !== selectedYear) return false
+        return parts.month >= firstMonth && parts.month <= lastMonth
+    })
+    otherInvoicesForPeriod.forEach(inv => {
+        const bal = Number(inv.balance_due || 0)
+        if (bal > 0) {
+            saldoInicialPendiente += bal
+            if (inv.resident_id) {
+                debtorResidents.add(inv.resident_id)
+            }
+        }
+    })
+
+    maintenanceInvoicesForPeriod.forEach(inv => {
         const bal = Number(inv.balance_due || 0)
         if (bal <= 0) return
 
@@ -579,14 +604,16 @@ export function calculateCondoMonthlyFinancials({
         }
     })
 
-    // Recaudado: suma de la porción pagada (amount - balance_due) de todas las facturas del periodo
-    const recaudado = allInvoicesForPeriod.reduce(
+    // Recaudado: suma de la porción pagada (amount - balance_due) de las cuotas mensuales del periodo
+    const recaudado = maintenanceInvoicesForPeriod.reduce(
         (sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)),
         0
     )
 
-    // Total del periodo: suma del monto total (amount) de TODAS las facturas del periodo (pagadas, pendientes y vencidas)
-    const totalPeriodo = allInvoicesForPeriod.reduce(
+    // Total del periodo: suma del monto total (amount) de las cuotas mensuales del periodo
+    // (pagadas, pendientes y vencidas) — no incluye saldos iniciales/ajustes que no son
+    // una cuota del mes.
+    const totalPeriodo = maintenanceInvoicesForPeriod.reduce(
         (sum, inv) => sum + Number(inv.amount || 0),
         0
     )
@@ -621,7 +648,7 @@ export function calculateCondoMonthlyFinancials({
 
             // No invoices generated for this month — project the full expected income as debt
             // Subtract any amount already collected for this month (e.g., manual payments)
-            const paidThisMonth = allInvoicesForPeriod.filter(inv => {
+            const paidThisMonth = invoices.filter(inv => {
                 const dateStr = inv.due_date || inv.created_at
                 if (!dateStr) return false
                 const parts = getLocalDateParts(dateStr)
@@ -651,6 +678,7 @@ export function calculateCondoMonthlyFinancials({
         recaudado,
         porCobrar,
         vencido,
+        saldoInicialPendiente,
         morososCount: debtorResidents.size
     }
 }

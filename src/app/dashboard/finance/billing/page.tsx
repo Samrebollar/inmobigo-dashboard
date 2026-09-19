@@ -58,11 +58,16 @@ const getPaymentMethod = (inv: any) => {
 }
 
 
+const PAGE_SIZE = 25
+
 function BillingPageContent() {
     const supabase = createClient()
     const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [invoices, setInvoices] = useState<Invoice[]>([])
+    const [totalCount, setTotalCount] = useState(0)
+    const [page, setPage] = useState(1)
+    const [organizationId, setOrganizationId] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState<string>('all')
     const [condominiums, setCondominiums] = useState<{ id: string, name: string }[]>([])
@@ -85,13 +90,18 @@ function BillingPageContent() {
 
     const [isArqueoOpen, setIsArqueoOpen] = useState(false)
     const [isArqueoMenuOpen, setIsArqueoMenuOpen] = useState(false)
+    const [isLoadingArqueo, setIsLoadingArqueo] = useState(false)
+    const [arqueoInvoices, setArqueoInvoices] = useState<Invoice[]>([])
 
     useEffect(() => {
         if (!demoLoading) {
             fetchGlobalInvoices()
         }
-    }, [demoLoading, isDemo])
+    }, [demoLoading, isDemo, page, statusFilter, condoFilter, periodFilter])
 
+    // El Historial de Recibos de una organización puede acumular miles de
+    // registros con el tiempo — en vez de traerlos todos de un jalón, se pide
+    // por página con los filtros aplicados en la base de datos.
     const fetchGlobalInvoices = async () => {
         try {
             setLoading(true)
@@ -99,8 +109,10 @@ function BillingPageContent() {
 
             if (!user) {
                 if (isDemo) {
-                    const data = await financeService.getGlobalInvoices('demo-org-id')
+                    setOrganizationId('demo-org-id')
+                    const { data, count } = await financeService.getGlobalInvoicesPaged('demo-org-id')
                     setInvoices(data)
+                    setTotalCount(count)
                 }
                 setLoading(false)
                 return
@@ -113,8 +125,18 @@ function BillingPageContent() {
                 .maybeSingle()
 
             let data: Invoice[] = []
+            let count = 0
             if (orgUser) {
-                data = await financeService.getGlobalInvoices(orgUser.organization_id)
+                setOrganizationId(orgUser.organization_id)
+                const result = await financeService.getGlobalInvoicesPaged(orgUser.organization_id, {
+                    condominiumId: condoFilter,
+                    status: statusFilter,
+                    periodKey: periodFilter,
+                    page,
+                    pageSize: PAGE_SIZE,
+                })
+                data = result.data
+                count = result.count
 
                 const { data: condoRows } = await supabase
                     .from('condominiums')
@@ -125,7 +147,10 @@ function BillingPageContent() {
             }
 
             if (isDemo && data.length === 0) {
-                data = await financeService.getGlobalInvoices('demo-org-id')
+                setOrganizationId('demo-org-id')
+                const demoResult = await financeService.getGlobalInvoicesPaged('demo-org-id')
+                data = demoResult.data
+                count = demoResult.count
             }
 
             // Adjunta el método y folio del último pago real registrado en
@@ -145,6 +170,7 @@ function BillingPageContent() {
             }
 
             setInvoices(data)
+            setTotalCount(count)
         } catch (error) {
             console.error(error)
         } finally {
@@ -163,6 +189,23 @@ function BillingPageContent() {
     const cancelDelete = () => {
         setIsDeleteModalOpen(false)
         setInvoiceToDelete(null)
+    }
+
+    // El Arqueo Diario necesita ver TODOS los recibos de hoy, no solo la
+    // página cargada en la tabla (que puede estar filtrada a otro
+    // condominio/estado/periodo). Se pide aparte, sin paginación.
+    const openArqueo = async () => {
+        setIsArqueoMenuOpen(false)
+        if (organizationId) {
+            setIsLoadingArqueo(true)
+            try {
+                const data = await financeService.getTodayInvoices(organizationId)
+                setArqueoInvoices(data)
+            } finally {
+                setIsLoadingArqueo(false)
+            }
+        }
+        setIsArqueoOpen(true)
     }
 
     const invoiceToDeleteObj = invoices.find(inv => inv.id === invoiceToDelete)
@@ -190,8 +233,26 @@ function BillingPageContent() {
         }
     }
 
-    const handleExportCSV = () => {
-        const data = filteredInvoices.map(inv => ({
+    // La tabla en pantalla solo tiene la página actual cargada — exportar debe
+    // traer TODOS los recibos que cumplan los filtros activos (condominio,
+    // estado, periodo, texto), sin el límite de paginación.
+    const getAllFilteredInvoicesForExport = async (): Promise<Invoice[]> => {
+        if (!organizationId) return filteredInvoices
+        const { data } = await financeService.getGlobalInvoicesPaged(organizationId, {
+            condominiumId: condoFilter,
+            status: statusFilter,
+            periodKey: periodFilter,
+        })
+        return data.filter(matchesSearchTerm)
+    }
+
+    const handleExportCSV = async () => {
+        const exportInvoices = await getAllFilteredInvoicesForExport()
+        if (exportInvoices.length === 0) {
+            alert('No hay recibos para exportar con los filtros actuales.')
+            return
+        }
+        const data = exportInvoices.map(inv => ({
             'Folio': inv.folio,
             'Condominio': inv.condominium_name || '-',
             'Unidad': inv.unit_number || 'N/A',
@@ -214,12 +275,17 @@ function BillingPageContent() {
         document.body.removeChild(link)
     }
 
-    const handleExportListPDF = () => {
+    const handleExportListPDF = async () => {
+        const exportInvoices = await getAllFilteredInvoicesForExport()
+        if (exportInvoices.length === 0) {
+            alert('No hay recibos para exportar con los filtros actuales.')
+            return
+        }
         const doc = new jsPDF()
         doc.setFontSize(16)
         doc.text('Historial de Recibos', 14, 20)
-        
-        const tableData = filteredInvoices.map(inv => [
+
+        const tableData = exportInvoices.map(inv => [
             inv.folio || 'N/A',
             inv.condominium_name || '-',
             inv.unit_number || 'N/A',
@@ -446,43 +512,33 @@ function BillingPageContent() {
         }
     }
 
-    // Periodos (mes/año) disponibles según las fechas de vencimiento reales de
-    // los recibos cargados — evita mostrar un selector con meses sin datos.
+    // Periodos (mes/año) para el selector: una ventana fija de los últimos 24
+    // meses. Ya no se deriva de los recibos cargados porque, con paginación,
+    // la página actual no representa todo el historial disponible.
     const periodOptions = useMemo(() => {
-        const keys = new Set<string>()
-        invoices.forEach(inv => {
-            if (!inv.due_date) return
-            const d = new Date(inv.due_date)
-            if (isNaN(d.getTime())) return
-            keys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-        })
-        return Array.from(keys).sort().reverse().map(key => {
-            const [year, month] = key.split('-')
-            const label = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
-            return { key, label: label.charAt(0).toUpperCase() + label.slice(1) }
-        })
-    }, [invoices])
-
-    const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch =
-            (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
-            (inv.condominium_name || '').toLowerCase().includes(search.toLowerCase()) ||
-            (inv.unit_number || '').toLowerCase().includes(search.toLowerCase())
-
-        const matchesStatus = statusFilter === 'all' || inv.status === statusFilter
-        const matchesCondo = condoFilter === 'all' || inv.condominium_id === condoFilter
-
-        let matchesPeriod = true
-        if (periodFilter !== 'all') {
-            const d = inv.due_date ? new Date(inv.due_date) : null
-            const key = d && !isNaN(d.getTime()) ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null
-            matchesPeriod = key === periodFilter
+        const now = new Date()
+        const options: { key: string, label: string }[] = []
+        for (let i = 0; i < 24; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            const label = d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+            options.push({ key, label: label.charAt(0).toUpperCase() + label.slice(1) })
         }
+        return options
+    }, [])
 
-        return matchesSearch && matchesStatus && matchesCondo && matchesPeriod
-    })
+    // El texto libre no tiene equivalente directo en una columna real (el
+    // folio se genera del id), así que se sigue aplicando en el cliente, sobre
+    // la página ya filtrada por condominio/estado/periodo en el servidor.
+    const matchesSearchTerm = (inv: Invoice) =>
+        (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
+        (inv.condominium_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (inv.unit_number || '').toLowerCase().includes(search.toLowerCase())
+
+    const filteredInvoices = invoices.filter(matchesSearchTerm)
 
     const totalAmount = filteredInvoices.reduce((acc, inv) => acc + inv.amount, 0)
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6">
@@ -511,7 +567,7 @@ function BillingPageContent() {
                     <select
                         className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
                     >
                         <option value="all">Todos los estados</option>
                         <option value="paid">Pagado</option>
@@ -522,7 +578,7 @@ function BillingPageContent() {
                     <select
                         className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
                         value={condoFilter}
-                        onChange={(e) => setCondoFilter(e.target.value)}
+                        onChange={(e) => { setCondoFilter(e.target.value); setPage(1) }}
                     >
                         <option value="all">Todos los condominios</option>
                         {condominiums.map(condo => (
@@ -532,7 +588,7 @@ function BillingPageContent() {
                     <select
                         className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
                         value={periodFilter}
-                        onChange={(e) => setPeriodFilter(e.target.value)}
+                        onChange={(e) => { setPeriodFilter(e.target.value); setPage(1) }}
                     >
                         <option value="all">Todos los periodos</option>
                         {periodOptions.map(period => (
@@ -542,7 +598,7 @@ function BillingPageContent() {
                 </div>
                 <div className="flex gap-3">
                     <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 rounded-md border border-zinc-800">
-                        <span className="text-sm text-zinc-400">Total en vista:</span>
+                        <span className="text-sm text-zinc-400">Total en esta página:</span>
                         <span className="font-medium text-white">${totalAmount.toLocaleString()}</span>
                     </div>
                         <div className="relative mr-2">
@@ -563,7 +619,7 @@ function BillingPageContent() {
                                     <div className="absolute right-0 mt-2 w-56 rounded-md shadow-[0_0_15px_rgba(79,70,229,0.15)] bg-zinc-900 ring-1 ring-black ring-opacity-5 border border-indigo-500/20 z-50 overflow-hidden">
                                         <div className="py-1" role="menu">
                                             <button
-                                                onClick={() => { setIsArqueoMenuOpen(false); setIsArqueoOpen(true); }}
+                                                onClick={openArqueo}
                                                 className="w-full text-left flex items-center px-4 py-2 text-sm text-indigo-300 hover:bg-indigo-500/10 hover:text-indigo-200 transition-colors"
                                                 role="menuitem"
                                             >
@@ -781,6 +837,36 @@ function BillingPageContent() {
                 </div>
             </Card>
 
+            {/* Paginación */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm text-zinc-400">
+                <div>
+                    {totalCount > 0
+                        ? `Mostrando ${(page - 1) * PAGE_SIZE + 1}-${(page - 1) * PAGE_SIZE + filteredInvoices.length} de ${totalCount} recibos`
+                        : 'Sin recibos para los filtros actuales'}
+                </div>
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                        disabled={page <= 1 || loading}
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                    >
+                        Anterior
+                    </Button>
+                    <span>Página {page} de {totalPages}</span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                        disabled={page >= totalPages || loading}
+                        onClick={() => setPage(p => p + 1)}
+                    >
+                        Siguiente
+                    </Button>
+                </div>
+            </div>
+
             <Modal isOpen={isEditModalOpen} onClose={closeEditModal} title="Editar Recibo">
                 <div className="space-y-4">
                     <div>
@@ -878,7 +964,7 @@ function BillingPageContent() {
             <CashRegisterArqueoModal
                 isOpen={isArqueoOpen}
                 onClose={() => setIsArqueoOpen(false)}
-                invoices={invoices}
+                invoices={arqueoInvoices}
                 getPaymentMethod={getPaymentMethod}
             />
         </div>

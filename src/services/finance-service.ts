@@ -510,6 +510,123 @@ export const financeService = {
         return (data || []).map(enrichInvoice)
     },
 
+    // ── GET GLOBAL INVOICES, PAGED (all org) ──────────────────────────────────
+    // Igual que getGlobalInvoices, pero con filtros aplicados en la base de
+    // datos (condominio, estado, periodo) y paginación real vía .range(), en
+    // vez de traer siempre el historial completo de la organización. Si se
+    // omiten page/pageSize, trae todos los registros que cumplan los filtros
+    // (usado para exportar CSV/PDF con los mismos filtros de la tabla).
+    async getGlobalInvoicesPaged(organizationId: string, options: {
+        condominiumId?: string
+        status?: string
+        periodKey?: string // 'YYYY-MM'
+        page?: number
+        pageSize?: number
+    } = {}): Promise<{ data: ResidentInvoice[]; count: number }> {
+        if (organizationId === 'demo-org-id') {
+            const all = await this.getGlobalInvoices(organizationId)
+            return { data: all, count: all.length }
+        }
+
+        const supabase = createClient()
+
+        const { data: condos } = await supabase
+            .from('condominiums')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .eq('status', 'active')
+
+        const condoIds = condos?.map(c => c.id) || []
+        if (condoIds.length === 0) return { data: [], count: 0 }
+
+        let query = supabase
+            .from('resident_invoices')
+            .select(`
+                *,
+                residents (
+                    first_name,
+                    last_name,
+                    units (unit_number)
+                ),
+                condominiums (name, logo_url)
+            `, { count: 'exact' })
+            .in('condominium_id', condoIds)
+
+        if (options.condominiumId && options.condominiumId !== 'all') {
+            query = query.eq('condominium_id', options.condominiumId)
+        }
+        if (options.status && options.status !== 'all') {
+            query = query.eq('status', options.status)
+        }
+        if (options.periodKey && options.periodKey !== 'all') {
+            const [year, month] = options.periodKey.split('-').map(Number)
+            const startOfPeriod = new Date(year, month - 1, 1).toISOString()
+            const endOfPeriod = new Date(year, month, 0, 23, 59, 59).toISOString()
+            query = query.gte('due_date', startOfPeriod).lte('due_date', endOfPeriod)
+        }
+
+        query = query.order('created_at', { ascending: false })
+
+        if (options.page && options.pageSize) {
+            const from = (options.page - 1) * options.pageSize
+            const to = from + options.pageSize - 1
+            query = query.range(from, to)
+        }
+
+        const { data, error, count } = await query
+
+        if (error) {
+            console.error('[financeService.getGlobalInvoicesPaged]', error)
+            return { data: [], count: 0 }
+        }
+
+        return { data: (data || []).map(enrichInvoice), count: count || 0 }
+    },
+
+    // ── GET TODAY'S INVOICES (para Arqueo Diario) ─────────────────────────────
+    // El Arqueo Diario necesita ver todos los recibos creados hoy, sin
+    // importar la paginación/filtros de la tabla de Historial de Recibos.
+    async getTodayInvoices(organizationId: string): Promise<ResidentInvoice[]> {
+        if (organizationId === 'demo-org-id') {
+            return await this.getGlobalInvoices(organizationId)
+        }
+
+        const supabase = createClient()
+
+        const { data: condos } = await supabase
+            .from('condominiums')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .eq('status', 'active')
+
+        const condoIds = condos?.map(c => c.id) || []
+        if (condoIds.length === 0) return []
+
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+
+        const { data, error } = await supabase
+            .from('resident_invoices')
+            .select(`
+                *,
+                residents (
+                    first_name,
+                    last_name,
+                    units (unit_number)
+                ),
+                condominiums (name, logo_url)
+            `)
+            .in('condominium_id', condoIds)
+            .gte('created_at', startOfToday.toISOString())
+
+        if (error) {
+            console.error('[financeService.getTodayInvoices]', error)
+            return []
+        }
+
+        return (data || []).map(enrichInvoice)
+    },
+
     // ── GET INVOICES FOR REPORT ───────────────────────────────────────────────
     async getInvoicesForReport(organizationId: string, condominiumId: string | 'all', startDate: string, endDate: string): Promise<ResidentInvoice[]> {
         if (organizationId === 'demo-org-id') {

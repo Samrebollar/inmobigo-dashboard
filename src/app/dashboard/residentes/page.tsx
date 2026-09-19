@@ -262,7 +262,10 @@ function ResidentsContent() {
                 return {
                     ...resident,
                     calculatedDebt: debt,
-                    calculatedCredit: resident.credit_amount || 0,
+                    // Igual que en el detalle del residente: el saldo a favor es lo que
+                    // ya pagó de más contra su cuota real (paymentSurplus), no solo el
+                    // campo credit_amount (que casi nunca se usa/actualiza manualmente).
+                    calculatedCredit: paymentSurplus + Number(resident.credit_amount || 0),
                     overdueCount: overdueCountFinal,
                     lastPaymentDate: lastPayment,
                     maxDaysOverdue: maxDays,

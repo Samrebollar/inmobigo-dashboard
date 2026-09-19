@@ -257,7 +257,9 @@ export function FinanceTab() {
                 return
             }
 
-            // Real DB query via API route to bypass RLS recursion
+            // Real DB query via API route (server usa admin client, evita la
+            // recursión de RLS que da resident_invoices consultado directo
+            // desde el navegador)
             const response = await fetch(`/api/properties/${condoId}/finance?action=invoices&year=${selectedPeriod.year}&month=${selectedPeriod.month}`)
             if (!response.ok) {
                 console.error(`[fetchInvoices] API returned status ${response.status}`)
@@ -270,6 +272,8 @@ export function FinanceTab() {
                     const resident = inv.residents
                     const unitName = resident?.units?.unit_number || 'S/N'
                     const phone = resident?.phone || ''
+                    // Folio real guardado en resident_invoices; solo si faltara (facturas viejas)
+                    // caemos al identificador visual derivado del id.
                     const folio = inv.folio || `FAC-${inv.id.substring(0, 8).toUpperCase()}`
                     const concept = inv.description || 'Cuota de mantenimiento'
 
@@ -331,12 +335,13 @@ export function FinanceTab() {
         }
         setIsGenerating(true)
         try {
-            const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || ''
+            // Llamada del mismo origen hecha por un admin ya logueado: el servidor
+            // valida la sesión y que administre este condominio, no hace falta
+            // (ni se debe) mandar ningún secreto desde el navegador.
             const res = await fetch('/api/cron/generate-monthly-invoices', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(cronSecret ? { 'Authorization': `Bearer ${cronSecret}` } : {})
                 },
                 body: JSON.stringify({ month, year, condominiumId: condoId })
             })
@@ -609,7 +614,7 @@ export function FinanceTab() {
                                                 </Badge>
                                             </td>
                                             <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
-                                                {inv.paid_at ? formatLocalDate(inv.paid_at, 'short') : '-'}
+                                                {inv.paid_at ? formatLocalDate(inv.paid_at, 'short') : <span className="text-zinc-500">-</span>}
                                             </td>
                                             <td className="px-4 py-3 font-medium">
                                                 {inv.estado !== 'paid' ? (

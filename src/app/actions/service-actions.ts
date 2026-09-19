@@ -43,15 +43,16 @@ export async function updatePackageAlertStatusAction(params: {
     try {
         const adminClient = createAdminClient()
         
-        const updateData: any = { 
-            status: status
+        const updateData: any = {
+            status: status,
+            handled_by: adminUserId
         }
-        
-        // Remove handled_by and received_at until DB columns are confirmed
-        // updateData.handled_by = adminUserId
-        // if (status === 'received') {
-        //     updateData.received_at = new Date().toISOString()
-        // }
+
+        // received_at es lo que el workflow de n8n "10b - Notificar Paquete
+        // Recibido" usa para saber que hay que avisarle al residente por WhatsApp.
+        if (status === 'received') {
+            updateData.received_at = new Date().toISOString()
+        }
 
         const { error } = await adminClient
             .from('package_alerts')

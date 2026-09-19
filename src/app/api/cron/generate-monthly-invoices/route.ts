@@ -1,22 +1,27 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { createClient } from '@/utils/supabase/server'
 
 /**
  * GET /api/cron/generate-monthly-invoices
  * POST /api/cron/generate-monthly-invoices
  *
- * Genera facturas de cuota de mantenimiento para todos los residentes activos
- * de todos los condominios. Se ejecuta el día 1 de cada mes vía Vercel Cron.
+ * Genera facturas de cuota de mantenimiento para residentes activos.
+ * Se ejecuta el día 1 de cada mes vía Vercel Cron (todos los condominios).
  *
- * También puede llamarse manualmente desde la UI del admin.
+ * También puede llamarse manualmente desde la UI del admin — en ese caso
+ * SIEMPRE debe traer un condominiumId y quien llama debe ser un admin
+ * autenticado de la organización dueña de ese condominio.
  *
  * Parámetros opcionales (query o body JSON):
  *   - month: 0-11 (por defecto el mes actual)
  *   - year:  YYYY (por defecto el año actual)
- *   - condominiumId: UUID (por defecto todos los condominios)
+ *   - condominiumId: UUID (obligatorio salvo para la llamada de Vercel Cron)
  *
- * Seguridad: requiere Bearer CRON_SECRET en el header Authorization
- * (o puede omitirse si CRON_SECRET no está configurado)
+ * Seguridad: la corrida global (sin condominiumId) SOLO se permite con
+ * Bearer CRON_SECRET en el header Authorization. Una corrida manual para
+ * un condominio puntual requiere sesión activa + que el usuario administre
+ * la organización dueña de ese condominio.
  */
 export async function GET(request: Request) {
     return handleRequest(request)
@@ -27,34 +32,68 @@ export async function POST(request: Request) {
 }
 
 async function handleRequest(request: Request) {
+    const admin = createAdminClient()
+
+    // ── Parámetros (los necesitamos antes de autenticar, para saber a qué condominio se pide acceso) ──
+    const now = new Date()
+    const url = new URL(request.url)
+    let month = parseInt(url.searchParams.get('month') ?? String(now.getMonth()))
+    let year  = parseInt(url.searchParams.get('year')  ?? String(now.getFullYear()))
+    let filterCondoId = url.searchParams.get('condominiumId') || null
+
+    if (request.method === 'POST') {
+        try {
+            const body = await request.json()
+            if (body.month !== undefined) month = parseInt(body.month)
+            if (body.year  !== undefined) year  = parseInt(body.year)
+            if (body.condominiumId)       filterCondoId = body.condominiumId
+        } catch (_) {
+            // body vacío o no es JSON — usar valores de query
+        }
+    }
+
     // ── Autenticación ───────────────────────────────────────────────────────────
     const authHeader = request.headers.get('authorization')
     const cronSecret = process.env.CRON_SECRET
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const isCronCall = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`
+
+    if (!isCronCall) {
+        // No es la llamada automática de Vercel Cron. Solo se permite una corrida
+        // manual acotada a UN condominio, y solo si el usuario logueado lo administra.
+        if (!filterCondoId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const { data: condo } = await admin
+            .from('condominiums')
+            .select('organization_id')
+            .eq('id', filterCondoId)
+            .maybeSingle()
+
+        if (!condo) {
+            return NextResponse.json({ error: 'Condominio no encontrado' }, { status: 404 })
+        }
+
+        const { data: orgUser } = await admin
+            .from('organization_users')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .eq('organization_id', condo.organization_id)
+            .maybeSingle()
+
+        if (!orgUser) {
+            return NextResponse.json({ error: 'No administras este condominio' }, { status: 403 })
+        }
     }
 
     try {
-        const supabase = createAdminClient()
-        const now = new Date()
-
-        // ── Parámetros ──────────────────────────────────────────────────────────
-        const url = new URL(request.url)
-        let month = parseInt(url.searchParams.get('month') ?? String(now.getMonth()))
-        let year  = parseInt(url.searchParams.get('year')  ?? String(now.getFullYear()))
-        let filterCondoId = url.searchParams.get('condominiumId') || null
-
-        // Si es POST, leer body
-        if (request.method === 'POST') {
-            try {
-                const body = await request.json()
-                if (body.month !== undefined) month = parseInt(body.month)
-                if (body.year  !== undefined) year  = parseInt(body.year)
-                if (body.condominiumId)       filterCondoId = body.condominiumId
-            } catch (_) {
-                // body vacío o no es JSON — usar valores de query
-            }
-        }
+        const supabase = admin
 
         // Rango del mes a facturar
         // Build ISO date strings directly to avoid UTC timezone-offset bugs

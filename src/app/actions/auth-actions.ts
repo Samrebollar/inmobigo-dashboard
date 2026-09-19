@@ -83,7 +83,7 @@ export async function resetPasswordWithCodeAction(
         // VERIFICACIÓN FINAL: ¿Tenemos sesión ahora?
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-            // Ya no lanzamos error aquí para permitir que el cliente intente el MODO ADMIN
+            // Sin sesión verificada no se cambia la contraseña bajo ninguna circunstancia.
             return { success: false, error: 'SESSION_MISSING' };
         }
 
@@ -98,52 +98,6 @@ export async function resetPasswordWithCodeAction(
 
     } catch (error: any) {
         console.error('🔴 [resetPasswordWithCodeAction] ERROR CRÍTICO:', error.message);
-        return { success: false, error: error.message };
-    }
-}
-
-export async function adminResetPasswordAction(userId?: string, password?: string, email?: string) {
-    console.log(`🛠️ [adminResetPasswordAction] Iniciando cambio forzado... ID: ${userId || 'N/A'}, Email: ${email || 'N/A'}`);
-    const admin = createAdminClient();
-
-    try {
-        if (!password) throw new Error('La contraseña es requerida');
-        
-        let targetUserId = userId;
-
-        // Si no tenemos el ID, lo buscamos directamente en nuestra tabla de residentes (más rápido y seguro)
-        if (!targetUserId && email) {
-            const { data: residentData, error: dbError } = await admin
-                .from('residents')
-                .select('auth_user_id')
-                .eq('email', email.toLowerCase())
-                .single();
-
-            if (dbError || !residentData?.auth_user_id) {
-                console.log('   ⚠️ No se encontró en tabla residents, intentando búsqueda global en Auth...');
-                // Respaldo: Búsqueda global si no está en la tabla de residentes
-                const { data: { users }, error: authError } = await admin.auth.admin.listUsers();
-                const user = users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
-                if (!user) throw new Error('No se pudo localizar tu cuenta. Por favor verifica que el enlace sea el más reciente enviado a tu correo.');
-                targetUserId = user.id;
-            } else {
-                targetUserId = residentData.auth_user_id;
-            }
-        }
-
-        if (!targetUserId) throw new Error('Identificación de seguridad no encontrada.');
-
-        // Forzar el cambio de contraseña con privilegios de administrador
-        const { error: updateError } = await admin.auth.admin.updateUserById(targetUserId, {
-            password: password
-        });
-
-        if (updateError) throw updateError;
-
-        console.log(`✅ [adminResetPasswordAction] Contraseña actualizada con éxito para: ${targetUserId}`);
-        return { success: true };
-    } catch (error: any) {
-        console.error('🔴 [adminResetPasswordAction] ERROR CRÍTICO:', error.message);
         return { success: false, error: error.message };
     }
 }

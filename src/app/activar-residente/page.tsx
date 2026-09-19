@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Lock, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react'
-import { adminResetPasswordAction } from '@/app/actions/auth-actions'
+import { resetPasswordWithCodeAction } from '@/app/actions/auth-actions'
 
 function ActivarResidenteContent() {
     const [password, setPassword] = useState('')
@@ -13,15 +13,26 @@ function ActivarResidenteContent() {
     const [error, setError] = useState('')
     const router = useRouter()
     const searchParams = useSearchParams()
-    
+
+    // Solo para mostrar en pantalla ("Activando cuenta de X") — nunca se usa como prueba
+    // de identidad. La identidad se verifica con el code/token_hash/access_token reales
+    // que emite Supabase al generar la invitación.
     const email = searchParams.get('e')
-    const uid = searchParams.get('uid')
+
+    const code = searchParams.get('code')
+    const token_hash = searchParams.get('token_hash')
+    const type = searchParams.get('type')
+
+    const [hashAccessToken, setHashAccessToken] = useState<string | null>(null)
+    const [checkedHash, setCheckedHash] = useState(false)
 
     useEffect(() => {
-        if (!email && !uid) {
-            setError('Enlace inválido. Por favor, solicita una nueva invitación.')
-        }
-    }, [email, uid])
+        const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
+        setHashAccessToken(new URLSearchParams(hash).get('access_token'))
+        setCheckedHash(true)
+    }, [])
+
+    const linkValid = Boolean(code || token_hash || hashAccessToken)
 
     const handleActivate = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -38,13 +49,20 @@ function ActivarResidenteContent() {
         setError('')
 
         try {
-            // USAMOS EL MODO ADMIN DIRECTO (Sin pasar por el sistema de invitaciones roto de Supabase)
-            const result = await adminResetPasswordAction(uid || undefined, password, email || undefined)
+            const result = await resetPasswordWithCodeAction(
+                password,
+                code || undefined,
+                token_hash || undefined,
+                type || undefined,
+                hashAccessToken || undefined
+            )
 
-            if (!result.success) throw new Error(result.error)
+            if (!result.success) {
+                throw new Error('Este enlace de invitación no es válido o ya expiró. Solicita uno nuevo a tu administrador.')
+            }
 
             setSuccess(true)
-            setTimeout(() => { router.push('/login') }, 3000)
+            setTimeout(() => { router.push('/dashboard') }, 3000)
         } catch (err: any) {
             setError(err.message || 'No se pudo activar la cuenta')
         } finally {
@@ -62,6 +80,30 @@ function ActivarResidenteContent() {
                 </div>
                 <h1 className="text-2xl font-bold text-white">¡Cuenta Activada!</h1>
                 <p className="text-zinc-400">Ya puedes iniciar sesión en la aplicación.</p>
+            </div>
+        )
+    }
+
+    if (!checkedHash) {
+        return (
+            <div className="flex justify-center p-10">
+                <Loader2 className="h-10 w-10 text-indigo-500 animate-spin" />
+            </div>
+        )
+    }
+
+    if (!linkValid) {
+        return (
+            <div className="text-center space-y-6 animate-fade-in">
+                <div className="flex justify-center">
+                    <div className="h-20 w-20 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30">
+                        <ShieldCheck className="h-10 w-10 text-red-400" />
+                    </div>
+                </div>
+                <h1 className="text-2xl font-bold text-white">Enlace inválido</h1>
+                <p className="text-zinc-400 text-sm">
+                    Este enlace de invitación no es válido o ya expiró. Solicita uno nuevo a tu administrador.
+                </p>
             </div>
         )
     }

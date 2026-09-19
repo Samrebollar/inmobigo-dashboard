@@ -3,8 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Lock, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react'
-import { adminResetPasswordAction } from '@/app/actions/auth-actions'
-import { createClient } from '@/utils/supabase/client'
+import { resetPasswordWithCodeAction } from '@/app/actions/auth-actions'
 
 function ResetPasswordForm() {
     const [password, setPassword] = useState('')
@@ -14,13 +13,29 @@ function ResetPasswordForm() {
     const [error, setError] = useState('')
     const router = useRouter()
     const searchParams = useSearchParams()
-    
-    const [manualEmail, setManualEmail] = useState('')
-    
-    // Prioridad: URL > Manual
-    const queryEmail = searchParams.get('e')
-    const uid = searchParams.get('uid')
-    const email = queryEmail || manualEmail
+
+    // Únicas fuentes válidas de identidad: un código/token emitido por Supabase.
+    // Nunca un email o user id sueltos en la URL — cualquiera podría escribirlos a mano.
+    const code = searchParams.get('code')
+    const token_hash = searchParams.get('token_hash')
+    const type = searchParams.get('type')
+
+    // Respaldo para cuando el navegador pierde la cookie de sesión (ej. salto móvil
+    // correo -> navegador): los tokens reales viajan en el fragmento de la URL, nunca
+    // en query string, y solo los pone ahí /auth/confirm tras verificar el enlace.
+    const [hashAccessToken, setHashAccessToken] = useState<string | null>(null)
+    const [checkedHash, setCheckedHash] = useState(false)
+
+    useEffect(() => {
+        const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
+        setHashAccessToken(new URLSearchParams(hash).get('access_token'))
+        setCheckedHash(true)
+    }, [])
+
+    // Solo se puede intentar el cambio de contraseña si llegó un identificador
+    // verificable por Supabase (code / token_hash / access_token). Un email o uid
+    // sueltos en la URL NO cuentan como prueba de identidad.
+    const linkValid = Boolean(code || token_hash || hashAccessToken)
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -37,32 +52,24 @@ function ResetPasswordForm() {
         setError('')
 
         try {
-            const finalEmail = email || manualEmail;
-            if (!uid && !finalEmail) {
-                throw new Error('Por seguridad, ingresa tu correo electrónico.');
+            const result = await resetPasswordWithCodeAction(
+                password,
+                code || undefined,
+                token_hash || undefined,
+                type || undefined,
+                hashAccessToken || undefined
+            )
+
+            if (!result.success) {
+                throw new Error(
+                    'Este enlace no es válido o ya expiró. Por favor solicita uno nuevo desde la pantalla de inicio de sesión.'
+                )
             }
-
-            const result = await adminResetPasswordAction(uid || undefined, password, finalEmail || undefined)
-
-            if (!result.success) throw new Error(result.error)
-
-            // Auto-login inmediato para llevarlo a su panel sin pasar por el login
-            const supabase = createClient()
-            const { error: signInError } = await supabase.auth.signInWithPassword({
-                email: finalEmail!,
-                password: password,
-            })
 
             setSuccess(true)
-            
-            if (signInError) {
-                console.error("Auto-login failed:", signInError.message)
-                setTimeout(() => { router.push('/login') }, 2000)
-            } else {
-                setTimeout(() => { router.push('/dashboard') }, 2000)
-            }
+            setTimeout(() => { router.push('/dashboard') }, 2000)
         } catch (err: any) {
-            setError(err.message || 'No se pudo activar la cuenta')
+            setError(err.message || 'No se pudo actualizar la contraseña')
         } finally {
             setLoading(false)
         }
@@ -84,6 +91,32 @@ function ResetPasswordForm() {
         )
     }
 
+    if (!checkedHash) {
+        return (
+            <div className="flex justify-center p-10">
+                <Loader2 className="h-10 w-10 text-indigo-500 animate-spin" />
+            </div>
+        )
+    }
+
+    if (!linkValid) {
+        return (
+            <div className="text-center space-y-6 animate-fade-in p-2">
+                <div className="flex justify-center">
+                    <div className="h-20 w-20 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30">
+                        <ShieldCheck className="h-10 w-10 text-red-400" />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <h1 className="text-2xl font-black text-white leading-tight uppercase">Enlace inválido</h1>
+                    <p className="text-zinc-400 font-medium text-sm">
+                        Este enlace de recuperación no es válido o ya expiró. Solicita uno nuevo desde la pantalla de inicio de sesión.
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-8 animate-fade-in-up">
             <div className="text-center space-y-3">
@@ -94,7 +127,7 @@ function ResetPasswordForm() {
                 </div>
                 <h1 className="text-3xl font-black text-white tracking-tighter uppercase leading-none">CONFIGURAR ACCESO</h1>
                 <p className="text-zinc-500 text-[10px] uppercase tracking-[0.3em] font-bold opacity-70">
-                    {email || 'Verificación Médica / Residencial'}
+                    Verificación de Identidad
                 </p>
             </div>
 
@@ -106,21 +139,6 @@ function ResetPasswordForm() {
 
             <form onSubmit={handleSave} className="space-y-4">
                 <div className="space-y-3">
-                    {/* CAMPO DE EMAIL MANUAL - Solo se muestra si no lo detectamos en la URL */}
-                    {(!queryEmail && !uid) && (
-                        <div className="relative group animate-fade-in">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-indigo-400 group-focus-within:text-white transition-colors flex items-center justify-center font-bold">@</div>
-                            <input
-                                type="email"
-                                placeholder="CONFIRMA TU CORREO"
-                                className="w-full bg-[#1e293b]/80 border-2 border-indigo-500/30 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 transition-all font-bold text-sm"
-                                value={manualEmail}
-                                onChange={(e) => setManualEmail(e.target.value)}
-                                required
-                            />
-                        </div>
-                    )}
-
                     <div className="relative group">
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-white transition-colors" />
                         <input

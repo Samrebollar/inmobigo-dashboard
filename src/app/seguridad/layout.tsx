@@ -215,13 +215,6 @@ export default async function DashboardLayout({
                             <span>Planes</span>
                         </Link>
                         <Link
-                            href="/seguridad/integrations"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
-                        >
-                            <Zap size={18} />
-                            <span>Integraciones</span>
-                        </Link>
-                        <Link
                             href="/seguridad/configuracion"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                         >

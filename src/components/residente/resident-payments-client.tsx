@@ -26,6 +26,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 interface ResidentPaymentsClientProps {
     resident: any
@@ -36,6 +38,7 @@ interface ResidentPaymentsClientProps {
         monto_mensual?: number
         payment_deadline?: number
     } | null
+    directPayments?: any[]
 }
 
 const CUOTA_FIJA = 2500
@@ -64,7 +67,76 @@ function mapStatus(status: string) {
     return map[status] || status
 }
 
-export default function ResidentPaymentsClient({ resident, invoices: dbInvoices = [], unit }: ResidentPaymentsClientProps) {
+async function generateReceiptForResident(payment: any, residentName: string, condoName: string) {
+    try {
+        const folio = payment.folio
+        if (!folio) return
+
+        const doc = new jsPDF()
+        // Header
+        doc.setFillColor(79, 70, 229)
+        doc.rect(0, 0, 210, 35, 'F')
+        doc.setFontSize(22)
+        doc.setTextColor(255, 255, 255)
+        doc.setFont('helvetica', 'bold')
+        doc.text('RECIBO DE PAGO', 14, 22)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Folio: ${folio}`, 150, 16)
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
+        // Resident info
+        doc.setFontSize(12)
+        doc.setTextColor(40, 40, 40)
+        doc.setFont('helvetica', 'bold')
+        doc.text('INFORMACIÓN DEL RESIDENTE', 14, 50)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Nombre: ${residentName}`, 14, 60)
+        if (condoName) doc.text(`Condominio: ${condoName}`, 14, 66)
+        doc.setDrawColor(220, 220, 220)
+        doc.line(14, 76, 196, 76)
+        // Payment details
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(40, 40, 40)
+        doc.text('DETALLES DEL PAGO', 14, 88)
+        const tableRows = [[
+            payment.concept || 'Cuota de Mantenimiento',
+            `$${Number(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+            'Transferencia / Depósito',
+            payment.date
+        ]]
+        autoTable(doc, {
+            head: [['Concepto', 'Monto Pagado', 'Forma de Pago', 'Fecha']],
+            body: tableRows,
+            startY: 94,
+            styles: { fontSize: 10, cellPadding: 5 },
+            headStyles: { fillColor: [79, 70, 229] },
+            alternateRowStyles: { fillColor: [245, 245, 245] },
+        })
+        const finalY = (doc as any).lastAutoTable.finalY + 15
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(60, 60, 60)
+        doc.text(`Total Procesado: $${Number(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
+        // Footer
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.setFont('helvetica', 'normal')
+        doc.text('Este documento es un comprobante de operación digital generado por InmobiGo SaaS.', 14, 275)
+        doc.text('Conserve este recibo para cualquier aclaración futura.', 14, 281)
+        doc.save(`Recibo_${folio}.pdf`)
+    } catch (e) {
+        console.error('[Residente] Error al generar recibo PDF:', e)
+    }
+}
+
+export default function ResidentPaymentsClient({ 
+    resident, 
+    invoices: dbInvoices = [], 
+    unit,
+    directPayments = []
+}: ResidentPaymentsClientProps) {
     const today = new Date()
     const dayOfMonth = today.getDate()
 
@@ -121,6 +193,27 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                     .eq('resident_id', resident.id)
                     .order('created_at', { ascending: false })
                 if (data) {
+                    // ── Cruzar folios reales desde payment_validations ──────────────
+                    const validationIds = data
+                        .map((i: any) => {
+                            const m = (i.notes || '').match(/^validation:(.+)$/)
+                            return m ? m[1] : null
+                        })
+                        .filter(Boolean) as string[]
+
+                    const folioByValidationId: Record<string, string> = {}
+                    if (validationIds.length > 0) {
+                        const { data: pvRows } = await supabase
+                            .from('payment_validations')
+                            .select('id, folio')
+                            .in('id', validationIds)
+                        if (pvRows) {
+                            for (const row of pvRows) {
+                                if (row.folio) folioByValidationId[row.id] = row.folio
+                            }
+                        }
+                    }
+
                     setLiveInvoices(data.map((inv: any) => {
                         const baseDate = new Date(inv.due_date || inv.created_at)
                         const limitDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), paymentDeadline, 23, 59, 59)
@@ -131,13 +224,21 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                         }
                         // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
                         const paid_amount = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
-                        return { ...inv, atraso, paid_amount }
+
+                        // Inyectar folio real desde payment_validations si existe
+                        const validationMatch = (inv.notes || '').match(/^validation:(.+)$/)
+                        const realFolio = validationMatch
+                            ? (folioByValidationId[validationMatch[1]] || inv.folio || null)
+                            : (inv.folio || null)
+
+                        return { ...inv, folio: realFolio, atraso, paid_amount }
                     }))
                 }
             })
             .subscribe()
         return () => { supabase.removeChannel(ch) }
     }, [resident?.id])
+
     
     // Lógica de estado basada en deuda y fecha
     const isOverdue = dayOfMonth > paymentDeadline && resident.debt_amount > 0
@@ -548,13 +649,28 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                                         </td>
                                         <td className="px-10 py-8">
                                             <div className="flex justify-end">
-                                                <motion.button 
-                                                    whileHover={{ scale: 1.2, rotate: 12 }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                    className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all shadow-[0_0_20px_rgba(16,185,129,0)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-                                                >
-                                                    <Receipt size={20} />
-                                                </motion.button>
+                                                {payment.folio && payment.folio !== '—' ? (
+                                                    <motion.button
+                                                        title={`Descargar recibo ${payment.folio}`}
+                                                        whileHover={{ scale: 1.2, rotate: 12 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        onClick={() => generateReceiptForResident(
+                                                            payment,
+                                                            resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
+                                                            resident.condominiums?.name || ''
+                                                        )}
+                                                        className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all shadow-[0_0_20px_rgba(16,185,129,0)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                                                    >
+                                                        <Receipt size={20} />
+                                                    </motion.button>
+                                                ) : (
+                                                    <div
+                                                        title="Recibo pendiente de aprobación"
+                                                        className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/30 text-zinc-600 cursor-default"
+                                                    >
+                                                        <Receipt size={20} />
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                     </motion.tr>
@@ -562,6 +678,92 @@ export default function ResidentPaymentsClient({ resident, invoices: dbInvoices 
                             </AnimatePresence>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            {/* 3.5. HISTORIAL DE PAGOS REALIZADOS (DE LA TABLA PAYMENTS) */}
+            <div className="space-y-6 pt-4">
+                <div className="flex flex-col md:flex-row items-center justify-between border-b border-white/5 pb-6 gap-4">
+                    <h2 className="text-2xl font-black text-white italic tracking-tight flex items-center gap-3">
+                        <div className="p-2.5 bg-emerald-500/10 rounded-2xl text-emerald-400 border border-emerald-500/20">
+                            <CreditCard className="h-6 w-6" />
+                        </div>
+                        Historial de Pagos Realizados (Transacciones)
+                    </h2>
+                    <span className="text-xs font-bold text-zinc-400 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl">
+                        Registros en tabla <code className="text-emerald-400 font-mono">payments</code>
+                    </span>
+                </div>
+
+                <div className="bg-zinc-900/30 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
+                    {directPayments.length === 0 ? (
+                        <div className="py-12 px-6 text-center">
+                            <div className="flex flex-col items-center justify-center gap-3">
+                                <div className="p-4 bg-zinc-900 rounded-full text-zinc-600 border border-zinc-800">
+                                    <Receipt size={28} />
+                                </div>
+                                <p className="text-zinc-400 font-bold text-sm">No hay transacciones registradas en el historial directo.</p>
+                                <p className="text-zinc-600 text-xs">Los pagos efectuados por Mercado Pago o Transferencia se registrarán aquí.</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-white/[0.02]">
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Concepto</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Método de Pago</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Folio / Transacción</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-right">Monto</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/[0.03]">
+                                    {directPayments.map((pay: any, idx: number) => {
+                                        const normStatus = (pay.status || '').toLowerCase()
+                                        const isPaid = ['approved', 'completed', 'paid', 'aprobado'].includes(normStatus)
+                                        const isPending = ['pending', 'in_process', 'pendiente'].includes(normStatus)
+                                        return (
+                                            <tr key={pay.id || idx} className="group hover:bg-white/[0.02] transition-colors">
+                                                <td className="px-8 py-6">
+                                                    <span className="text-zinc-300 font-bold text-xs">{formatDate(pay.created_at)}</span>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <span className="text-white font-medium text-xs">{pay.concept || 'Cuota de Mantenimiento'}</span>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <Badge className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold text-[10px] uppercase tracking-wider">
+                                                        {pay.payment_method || pay.provider || 'Mercado Pago'}
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    <span className="text-zinc-400 font-mono text-xs">{pay.folio || pay.id?.slice(0, 10)}</span>
+                                                </td>
+                                                <td className="px-8 py-6 text-right">
+                                                    <span className="text-emerald-400 font-black text-lg tracking-tight">
+                                                        ${Number(pay.amount || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-6 text-center">
+                                                    <Badge className={cn(
+                                                        "px-4 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest border",
+                                                        isPaid
+                                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                            : isPending
+                                                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                                    )}>
+                                                        {isPaid ? 'Completado' : isPending ? 'Pendiente' : pay.status}
+                                                    </Badge>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </div>
 

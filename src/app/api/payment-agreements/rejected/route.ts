@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { agreement_id, reason } = body
+    const { agreement_id, reason, admin_user_id } = body
 
     if (!agreement_id) {
       return NextResponse.json(
@@ -19,52 +20,62 @@ export async function POST(request: Request) {
       )
     }
 
-    const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK
-    if (!webhookUrl) {
-      console.error('❌ N8N_CONVENIO_ADMIN_WEBHOOK no está configurado')
+    // 1️⃣ Actualizar el estado en la base de datos PRIMERO (Operación Principal)
+    const supabase = createAdminClient()
+    const { data: updatedAgreement, error: dbError } = await supabase
+      .from('payment_agreements')
+      .update({
+        status: 'rejected',
+        rejection_reason: reason,
+        approved_by: admin_user_id || null,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', agreement_id)
+      .select()
+      .single()
+
+    if (dbError) {
+      console.error('❌ [rejected] Error al actualizar estado en Supabase:', dbError)
       return NextResponse.json(
-        { success: false, error: 'Webhook no configurado' },
+        { success: false, error: dbError.message || 'Error al actualizar el convenio en base de datos' },
         { status: 500 }
       )
     }
 
-    console.log(`📤 [rejected] Enviando agreement_id=${agreement_id} a webhook: ${webhookUrl}`)
-
+    // 2️⃣ Notificar al Webhook de n8n de forma opcional (sin romper si falla o no está configurado)
+    const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/convenio-decision'
     let webhookSuccess = false
     let webhookError = ''
 
-    try {
-      const webhookResponse = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agreement_id,
-          action: 'rejected',
-          reason,
-        }),
-      })
-
-      const responseStatus = webhookResponse.status
-      let responseBody = ''
+    if (webhookUrl) {
       try {
-        responseBody = await webhookResponse.text()
-      } catch {
-        responseBody = '(no se pudo leer el cuerpo de la respuesta)'
-      }
+        console.log(`📤 [rejected] Enviando agreement_id=${agreement_id} a webhook: ${webhookUrl}`)
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agreement_id,
+            action: 'rejected',
+            reason,
+          }),
+        })
 
-      console.log(`📥 [rejected] Webhook respondió con status ${responseStatus}: ${responseBody}`)
-
-      webhookSuccess = webhookResponse.ok
-      if (!webhookSuccess) {
-        webhookError = `Webhook respondió con status ${responseStatus}`
+        webhookSuccess = webhookResponse.ok
+        if (!webhookSuccess) {
+          webhookError = `Webhook respondió con status ${webhookResponse.status}`
+        }
+      } catch (fetchError: any) {
+        console.error('❌ [rejected] Error de red al contactar webhook:', fetchError.message)
+        webhookError = fetchError.message || 'Error de red al contactar webhook'
       }
-    } catch (fetchError: any) {
-      console.error('❌ [rejected] Error de red al contactar webhook:', fetchError.message)
-      webhookError = fetchError.message || 'Error de red al contactar webhook'
+    } else {
+      console.warn('⚠️ N8N_CONVENIO_ADMIN_WEBHOOK no configurado, omitiendo notificación')
+      webhookError = 'Webhook no configurado'
     }
 
     return NextResponse.json({
       success: true,
+      data: updatedAgreement,
       webhook_sent: webhookSuccess,
       webhook_error: webhookError || undefined,
     })

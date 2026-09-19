@@ -44,6 +44,23 @@ export const propertiesService = {
     },
 
     async getById(id: string): Promise<Condominium | null> {
+        if (id?.startsWith('demo-')) {
+            const { demoDb } = await import('@/utils/demo-db')
+            return demoDb.getProperties().find(p => p.id === id) || null
+        }
+
+        try {
+            const response = await fetch(`/api/properties/${id}`)
+            if (response.ok) {
+                const result = await response.json()
+                if (result.property) return result.property
+            } else {
+                console.warn(`[propertiesService.getById] API returned status ${response.status}`)
+            }
+        } catch (apiError) {
+            console.error('[propertiesService.getById] API error, trying fallback:', apiError)
+        }
+
         const supabase = createClient()
         const { data, error } = await supabase
             .from('condominiums')

@@ -155,11 +155,7 @@ export const cronService = {
         }
 
         try {
-            const n8nUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL
-            if (!n8nUrl) {
-                console.log(`[Cron Mock] Payload ${tipo} generado:`, JSON.stringify(payload, null, 2))
-                return
-            }
+            const n8nUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || 'https://n8n.inmobigo.mx/webhook/send-morosidad-whatsapp'
             await fetch(n8nUrl, {
                 method: 'POST',
                 headers: {

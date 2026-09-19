@@ -1,41 +1,75 @@
 import { createClient } from '@/utils/supabase/server'
+import { AdminPaymentsClient } from '@/components/finance/admin-payments-client'
+
+export const dynamic = 'force-dynamic'
 
 export default async function PaymentsPage() {
-  const supabase = await createClient()
+    const supabase = await createClient()
 
-  const { data: payments } = await supabase
-    .from('payments')
-    .select('*')
-    .order('created_at', { ascending: false })
+    // 1. Leer pagos de la tabla payments
+    const { data: paymentsRaw } = await supabase
+        .from('payments')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Pagos</h1>
+    const payments = paymentsRaw || []
 
-      {payments?.length === 0 && (
-        <p>No hay pagos registrados.</p>
-      )}
+    // 2. Extraer invoice_ids únicos
+    const invoiceIds = Array.from(
+        new Set(payments.map(p => p.invoice_id).filter(Boolean))
+    ) as string[]
 
-      <div className="space-y-4">
-        {payments?.map((payment) => (
-          <div
-            key={payment.id}
-            className="p-4 rounded-lg bg-gray-800 border border-gray-700"
-          >
-            <p className="font-semibold">
-              ${payment.amount}
-            </p>
+    let invoiceMap: Record<string, any> = {}
 
-            <p className="text-sm text-gray-400">
-              Método: {payment.provider}
-            </p>
+    if (invoiceIds.length > 0) {
+        const { data: invoicesData } = await supabase
+            .from('resident_invoices')
+            .select(`
+                id,
+                description,
+                status,
+                due_date,
+                notes,
+                residents (
+                    first_name,
+                    last_name,
+                    units (unit_number),
+                    condominiums (name)
+                )
+            `)
+            .in('id', invoiceIds)
 
-            <p className="text-sm text-gray-400">
-              Fecha: {payment.created_at}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+        if (invoicesData) {
+            for (const inv of invoicesData) {
+                invoiceMap[inv.id] = inv
+            }
+        }
+    }
+
+    // 3. Enriquecer los pagos
+    const enrichedPayments = payments.map((p) => {
+        const inv = invoiceMap[p.invoice_id]
+        const resident = inv?.residents
+        const unit = resident?.units
+        const condo = resident?.condominiums
+
+        const residentName = resident
+            ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
+            : null
+
+        return {
+            ...p,
+            concept: inv?.description || 'Cuota de Mantenimiento',
+            resident_name: residentName,
+            unit_number: unit?.unit_number || null,
+            condominium_name: condo?.name || null,
+            payment_method: p.payment_method || p.provider || 'Mercado Pago',
+        }
+    })
+
+    return (
+        <div className="p-8 max-w-7xl mx-auto">
+            <AdminPaymentsClient payments={enrichedPayments} />
+        </div>
+    )
 }

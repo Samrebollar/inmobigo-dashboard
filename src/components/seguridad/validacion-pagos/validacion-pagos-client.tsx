@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, FileText, Filter, Eye, Loader2, CheckCircle, AlertTriangle, Receipt, Trash, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import { getValidations, updateValidationStatus, deleteValidation, syncApprovedValidations } from '@/app/actions/payment-validation-actions'
+import { getValidations, updateValidationStatus, deleteValidation, syncApprovedValidations, ensureValidationFolioAction } from '@/app/actions/payment-validation-actions'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -26,6 +26,10 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
     const [selectedProof, setSelectedProof] = useState<string | null>(null)
     const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null)
     const [observations, setObservations] = useState<{ [key: string]: string }>({})
+    const [rejectModalItem, setRejectModalItem] = useState<any | null>(null)
+    const [rejectReason, setRejectReason] = useState<string>('')
+    const [showRejectConfirmStep, setShowRejectConfirmStep] = useState<boolean>(false)
+    const [approveConfirmationItem, setApproveConfirmationItem] = useState<any | null>(null)
 
     const [propertyFilter, setPropertyFilter] = useState<string>('todos')
     const [properties, setProperties] = useState<any[]>([])
@@ -144,13 +148,58 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             toast.success(`Pago ${status === 'aprobado' ? 'aprobado' : 'rechazado'} con éxito`)
             if (status === 'aprobado') {
                 const item = validations.find(v => v.id === id)
-                if (item) generateReceipt(item)
+                if (item) await generateReceipt(item, res.folio)
             }
             await fetchData()
         } else {
             toast.error(res.error)
         }
         setActionLoading(null)
+    }
+
+    const openRejectModal = (item: any) => {
+        setRejectModalItem(item)
+        setRejectReason('')
+        setShowRejectConfirmStep(false)
+    }
+
+    const handleRejectNext = (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!rejectReason.trim()) {
+            toast.error('El motivo de rechazo es obligatorio')
+            return
+        }
+        setShowRejectConfirmStep(true)
+    }
+
+    const handleRejectSubmit = async () => {
+        if (!rejectModalItem) return
+        if (!rejectReason.trim()) {
+            toast.error('El motivo de rechazo es obligatorio')
+            return
+        }
+
+        const id = rejectModalItem.id
+        setActionLoading(id)
+        const res = await updateValidationStatus(id, 'rechazado', rejectReason.trim())
+        if (res.success) {
+            toast.success('Comprobante rechazado correctamente')
+            setRejectModalItem(null)
+            setRejectReason('')
+            setShowRejectConfirmStep(false)
+            await fetchData()
+        } else {
+            toast.error(res.error)
+        }
+        setActionLoading(null)
+    }
+
+    const handleApproveSubmit = async () => {
+        if (!approveConfirmationItem) return
+        const item = approveConfirmationItem
+        const id = item.id
+        setApproveConfirmationItem(null)
+        await handleAction(id, 'aprobado')
     }
 
     const confirmDelete = async () => {
@@ -178,8 +227,19 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
         toast.success('Descarga iniciada')
     }
 
-    const generateReceipt = (item: any) => {
+    const generateReceipt = async (item: any, overrideFolio?: string) => {
         try {
+            let receiptFolio = overrideFolio || item.folio
+            if (!receiptFolio || receiptFolio.trim() === '') {
+                const folioRes = await ensureValidationFolioAction(item.id)
+                if (folioRes.success && folioRes.folio) {
+                    receiptFolio = folioRes.folio
+                }
+            }
+            if (!receiptFolio) {
+                receiptFolio = `REC-${Date.now().toString().slice(-6)}`
+            }
+
             const doc = new jsPDF()
             doc.setFillColor(79, 70, 229)
             doc.rect(0, 0, 210, 35, 'F')
@@ -189,7 +249,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             doc.text('RECIBO DE PAGO', 14, 22)
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
-            doc.text(`Folio: REC-${Date.now().toString().slice(-6)}`, 150, 16)
+            doc.text(`Folio: ${receiptFolio}`, 150, 16)
             doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
             doc.setFontSize(12)
             doc.setTextColor(40, 40, 40)
@@ -311,8 +371,8 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                                 <button onClick={() => setSelectedProof(item.comprobante_url)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-indigo-400 transition-all"><Eye size={18} /></button>
                                                 {item.status === 'pendiente' ? (
                                                     <>
-                                                        <button onClick={() => handleAction(item.id, 'aprobado')} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
-                                                        <button onClick={() => handleAction(item.id, 'rechazado')} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
+                                                        <button onClick={() => setApproveConfirmationItem(item)} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
+                                                        <button onClick={() => openRejectModal(item)} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
                                                     </>
                                                 ) : null}
                                                 <button onClick={() => setDeleteConfirmation(item.id)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-rose-400 transition-all"><Trash size={18} /></button>
@@ -446,6 +506,130 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                 <button onClick={() => setDeleteConfirmation(null)} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-bold text-sm">Cancelar</button>
                                 <button onClick={confirmDelete} className="flex-1 py-4 rounded-2xl bg-rose-600 text-white font-bold text-sm shadow-xl shadow-rose-600/20">Sí, Eliminar</button>
                             </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Approval Confirmation Modal */}
+            <AnimatePresence>
+                {approveConfirmationItem && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setApproveConfirmationItem(null)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8 text-center shadow-2xl">
+                            <div className="p-4 bg-emerald-500/10 rounded-full w-fit mx-auto mb-6 text-emerald-500">
+                                <CheckCircle size={40} />
+                            </div>
+                            <h3 className="text-2xl font-black text-white mb-2">¿Aprobar Comprobante?</h3>
+                            <p className="text-zinc-300 text-sm mb-4 leading-relaxed">
+                                Por favor confirma que los datos del comprobante de <strong className="text-white">{approveConfirmationItem.resident_name}</strong> (Unidad {approveConfirmationItem.unit}) por <strong className="text-emerald-400">${Number(approveConfirmationItem.amount).toLocaleString('es-MX')}</strong> son correctos.
+                            </p>
+                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-300 mb-6 text-left font-medium">
+                                ⚠️ <strong>Atención:</strong> Una vez aceptado y aprobado, se actualizará la cuenta del residente y se generará el recibo en PDF. Esta acción no se podrá deshacer.
+                            </div>
+                            <div className="flex gap-4">
+                                <button onClick={() => setApproveConfirmationItem(null)} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-bold text-sm hover:bg-zinc-700 transition-all">Cancelar</button>
+                                <button onClick={handleApproveSubmit} disabled={actionLoading === approveConfirmationItem.id} className="flex-1 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-600/20 transition-all flex items-center justify-center gap-2">
+                                    {actionLoading === approveConfirmationItem.id ? <Loader2 className="animate-spin" size={18} /> : 'Sí, Aprobar'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Rejection Modal (2 Steps) */}
+            <AnimatePresence>
+                {rejectModalItem && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setRejectModalItem(null); setShowRejectConfirmStep(false); }} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-[3rem] p-8 shadow-2xl overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-rose-600 via-pink-600 to-rose-600" />
+                            
+                            {!showRejectConfirmStep ? (
+                                /* Paso 1: Ingreso del Motivo */
+                                <>
+                                    <h3 className="text-2xl font-black text-white mb-2 flex items-center gap-3">
+                                        <div className="p-3 bg-rose-500/10 rounded-2xl text-rose-500"><X size={24} /></div>
+                                        Rechazar Comprobante
+                                    </h3>
+                                    <p className="text-zinc-400 text-xs mb-6">
+                                        Especifica el motivo de rechazo para <strong className="text-white">{rejectModalItem.resident_name}</strong> (Unidad {rejectModalItem.unit}). El asistente de WhatsApp usará este motivo para explicarle al residente la razón.
+                                    </p>
+                                    <form onSubmit={handleRejectNext} className="space-y-6">
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                                                <span>Motivo del Rechazo <span className="text-rose-500">*</span></span>
+                                                <span className="text-[10px] text-rose-400 font-normal uppercase tracking-wider">Obligatorio</span>
+                                            </label>
+                                            <textarea
+                                                value={rejectReason}
+                                                onChange={(e) => setRejectReason(e.target.value)}
+                                                rows={4}
+                                                className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-white text-sm focus:outline-none focus:border-rose-500 transition-all font-medium placeholder:text-zinc-600 resize-none"
+                                                placeholder="Ej: El comprobante no muestra la fecha de transferencia completa, por favor vuelve a subirlo..."
+                                                required
+                                            />
+                                            {!rejectReason.trim() && (
+                                                <p className="text-[11px] text-rose-400/80 font-medium">Debes escribir una razón para poder continuar.</p>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-4 pt-2">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => { setRejectModalItem(null); setShowRejectConfirmStep(false); }} 
+                                                className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-black text-sm hover:bg-zinc-700 transition-all"
+                                            >
+                                                Cancelar
+                                            </button>
+                                            <button 
+                                                type="submit" 
+                                                disabled={!rejectReason.trim()} 
+                                                className="flex-1 py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:hover:bg-rose-600 text-white font-black text-sm shadow-xl shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                Continuar a Confirmación →
+                                            </button>
+                                        </div>
+                                    </form>
+                                </>
+                            ) : (
+                                /* Paso 2: Mensaje de Confirmación Definitiva */
+                                <div className="text-center space-y-6">
+                                    <div className="p-4 bg-rose-500/10 rounded-full w-fit mx-auto text-rose-500">
+                                        <AlertTriangle size={40} className="animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black text-white mb-2">¿Confirmar Rechazo Definitivo?</h3>
+                                        <p className="text-zinc-300 text-sm leading-relaxed">
+                                            Estás a punto de rechazar el comprobante de <strong className="text-white">{rejectModalItem.resident_name}</strong> por un monto de <strong className="text-rose-400">${Number(rejectModalItem.amount).toLocaleString('es-MX')}</strong>.
+                                        </p>
+                                    </div>
+                                    <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 text-xs text-zinc-300 text-left">
+                                        <span className="font-bold text-zinc-500 block mb-1 uppercase tracking-wider text-[10px]">Motivo especificado:</span>
+                                        <p className="italic text-zinc-200">"{rejectReason}"</p>
+                                    </div>
+                                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-xs text-rose-300 text-left font-medium">
+                                        ⚠️ <strong>Atención:</strong> Una vez confirmado, no podrás deshacer esta acción. El residente recibirá una notificación de rechazo con la razón registrada.
+                                    </div>
+                                    <div className="flex gap-4 pt-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowRejectConfirmStep(false)} 
+                                            className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-bold text-sm hover:bg-zinc-700 transition-all"
+                                        >
+                                            ← Editar Motivo
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={handleRejectSubmit} 
+                                            disabled={actionLoading === rejectModalItem.id} 
+                                            className="flex-1 py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-sm shadow-xl shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            {actionLoading === rejectModalItem.id ? <Loader2 className="animate-spin" size={18} /> : 'Sí, Rechazar'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </motion.div>
                     </div>
                 )}

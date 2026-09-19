@@ -283,7 +283,7 @@ export function FinanceTab() {
             let query = supabase
                 .from('resident_invoices')
                 .select(`
-                    id, amount, balance_due, status, created_at, due_date, description, invoice_type,
+                    id, folio, paid_at, amount, balance_due, status, created_at, due_date, description, invoice_type,
                     residents (
                         first_name, last_name, phone,
                         units (unit_number)
@@ -312,7 +312,7 @@ export function FinanceTab() {
                     const resident = inv.residents
                     const unitName = resident?.units?.unit_number || 'S/N'
                     const phone = resident?.phone || ''
-                    const folio = `FAC-${inv.id.substring(0, 8).toUpperCase()}`
+                    const folio = inv.folio || `FAC-${inv.id.substring(0, 8).toUpperCase()}`
                     const concept = inv.description || 'Cuota de mantenimiento'
 
                     // paid_amount calculated from amount - balance_due
@@ -341,6 +341,7 @@ export function FinanceTab() {
                         monto: monto,
                         paid_amount: paidAmount,
                         estado: inv.status,
+                        paid_at: inv.paid_at || null,
                         telefono: phone,
                         atraso: delayDays,
                         reminder_sent: false,
@@ -551,6 +552,7 @@ export function FinanceTab() {
                                     <th className="px-4 py-3 font-medium">Monto</th>
                                     <th className="px-4 py-3 font-medium">Atraso</th>
                                     <th className="px-4 py-3 font-medium">Estado</th>
+                                    <th className="px-4 py-3 font-medium">Fecha de Pago</th>
                                     <th className="px-4 py-3 font-medium">Recordatorio</th>
                                     <th className="px-4 py-3 font-medium text-center">Acciones</th>
                                 </tr>
@@ -558,7 +560,7 @@ export function FinanceTab() {
                             <tbody className="divide-y divide-zinc-800/50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                                             Cargando facturas recientes...
                                         </td>
                                     </tr>
@@ -596,6 +598,9 @@ export function FinanceTab() {
                                                     {inv.estado === 'overdue' ? 'Vencida' : inv.estado === 'paid' ? 'Pagada' : 'Pendiente'}
                                                 </Badge>
                                             </td>
+                                            <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
+                                                {inv.paid_at ? formatLocalDate(inv.paid_at, 'short') : '-'}
+                                            </td>
                                             <td className="px-4 py-3 font-medium">
                                                 {inv.estado !== 'paid' ? (
                                                     inv.reminder_sent ? (
@@ -619,7 +624,7 @@ export function FinanceTab() {
                                                             onClick={async () => {
                                                                 setSendingReminderId(inv.id)
                                                                 try {
-                                                                    const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+                                                                    const webhookUrl = process.env.NEXT_PUBLIC_N8N_MOROSIDAD_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/send-morosidad-whatsapp'
                                                                     console.log('Enviando recordatorio a:', webhookUrl)
 
                                                                     const payload = {
@@ -668,16 +673,17 @@ export function FinanceTab() {
                                                             title="Marcar como pagada"
                                                             className="h-10 w-10 rounded-full bg-zinc-900/50 hover:bg-emerald-500/20 transition-all duration-300 transform hover:scale-110 active:scale-95 group"
                                                             onClick={async () => {
+                                                                const nowIso = new Date().toISOString()
                                                                 if (condoId.startsWith('demo-')) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
                                                                     return
                                                                 }
                                                                 const { error } = await supabase
                                                                     .from('resident_invoices')
-                                                                    .update({ status: 'paid', balance_due: 0 })
+                                                                    .update({ status: 'paid', balance_due: 0, paid_at: nowIso })
                                                                     .eq('id', inv.id)
                                                                 if (!error) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid'} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
                                                                     fetchBillingData() // Actualiza KPIs arrriba
                                                                 }
                                                             }}
@@ -701,7 +707,7 @@ export function FinanceTab() {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                                             Aún no hay facturas registradas.
                                         </td>
                                     </tr>

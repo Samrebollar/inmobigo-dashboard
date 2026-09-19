@@ -242,8 +242,8 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
         const displayStatus = getDisplayStatus(pass)
         const matchesStatus = filterStatus === 'all' || displayStatus === filterStatus
         const matchesType = filterType === 'all' || pass.access_type === filterType
-        const matchesSearch = pass.visitor_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                             pass.unit_name.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesSearch = (pass.visitor_name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             (pass.unit_name ?? '').toLowerCase().includes(searchTerm.toLowerCase())
         return matchesStatus && matchesType && matchesSearch
     })
 
@@ -384,7 +384,7 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
                                                     <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Vigencia Termina</p>
                                                     <div className="flex items-center gap-1.5 text-emerald-500/80">
                                                         <Clock size={10} />
-                                                        <p className="text-xs font-bold">{pass.end_time.substring(0,5)} HS</p>
+                                                        <p className="text-xs font-bold">{pass.end_time?.substring(0,5) ?? '--:--'} HS</p>
                                                     </div>
                                                 </div>
                                             </div>

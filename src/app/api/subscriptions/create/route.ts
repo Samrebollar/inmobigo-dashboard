@@ -216,6 +216,14 @@ export async function POST(req: Request) {
         }
 
         // 7️⃣ Crear preapproval en MercadoPago (Manual para permitir hosted checkout sin card_token_id)
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://inmobigo.mx'
+        const backUrl = baseUrl.includes('localhost') 
+            ? 'https://inmobigo.mx/dashboard?subscription=success' 
+            : `${baseUrl}/dashboard?subscription=success`
+        const notificationUrl = baseUrl.includes('localhost')
+            ? 'https://inmobigo.mx/api/subscriptions/webhook'
+            : `${baseUrl}/api/subscriptions/webhook`
+
         const mpResponse = await fetch(
             'https://api.mercadopago.com/preapproval',
             {
@@ -230,9 +238,8 @@ export async function POST(req: Request) {
                     payer_email: (user.email?.includes('admin') || user.email?.includes('sam32') || user.email?.includes('inmobigo'))
                         ? 'test_user_mx@testuser.com' 
                         : user.email,
-                    back_url: process.env.NEXT_PUBLIC_APP_URL?.includes('localhost') 
-                        ? 'https://inmobigo.mx/dashboard?subscription=success' 
-                        : `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?subscription=success`,
+                    back_url: backUrl,
+                    notification_url: notificationUrl,
                     auto_recurring: {
                         frequency: 1,
                         frequency_type: 'months',

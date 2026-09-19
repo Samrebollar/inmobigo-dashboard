@@ -565,9 +565,8 @@ export function calculateCondoMonthlyFinancials({
         }
     })
 
-    // Calculate collected amount (recaudado) — use due_date for month assignment,
-    // filter strictly within the [firstMonth, lastMonth] range of selectedYear
-    const paidInvoicesForPeriod = invoices.filter(inv => {
+    // Facturas correspondientes al periodo (pagadas, pendientes y vencidas)
+    const allInvoicesForPeriod = invoices.filter(inv => {
         const dateStr = inv.due_date || inv.created_at
         if (!dateStr) return false
         const parts = getLocalDateParts(dateStr)
@@ -576,12 +575,17 @@ export function calculateCondoMonthlyFinancials({
         return parts.month >= firstMonth && parts.month <= lastMonth
     })
 
-    const recaudado = paidInvoicesForPeriod.reduce(
+    // Recaudado: suma de la porción pagada (amount - balance_due) de todas las facturas del periodo
+    const recaudado = allInvoicesForPeriod.reduce(
         (sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)),
         0
     )
 
-    const totalPeriodo = expectedMonthlyIncome * numMonths
+    // Total del periodo: suma del monto total (amount) de TODAS las facturas del periodo (pagadas, pendientes y vencidas)
+    const totalPeriodo = allInvoicesForPeriod.reduce(
+        (sum, inv) => sum + Number(inv.amount || 0),
+        0
+    )
 
     // ── PROJECT DEBT FOR MONTHS WITH NO INVOICES GENERATED ──────────────────────
     // When invoices haven't been generated (e.g., the cron didn't run this month),
@@ -613,7 +617,7 @@ export function calculateCondoMonthlyFinancials({
 
             // No invoices generated for this month — project the full expected income as debt
             // Subtract any amount already collected for this month (e.g., manual payments)
-            const paidThisMonth = paidInvoicesForPeriod.filter(inv => {
+            const paidThisMonth = allInvoicesForPeriod.filter(inv => {
                 const dateStr = inv.due_date || inv.created_at
                 if (!dateStr) return false
                 const parts = getLocalDateParts(dateStr)

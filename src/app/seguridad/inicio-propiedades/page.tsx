@@ -28,12 +28,14 @@ export default async function DashboardPage({
 
   if (!user) return <div>No autenticado</div>
 
+  const adminSupabase = createAdminClient()
+
   // 1. Get Profile for Name and Avatar
-  const { data: profile } = await supabase
+  const { data: profile } = await adminSupabase
     .from('profiles')
     .select('full_name, avatar_url')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
   const metaFirstName = user.user_metadata?.first_name
   const metaLastName = user.user_metadata?.last_name
@@ -41,8 +43,6 @@ export default async function DashboardPage({
   
   const fullName = profile?.full_name || metaFullName || (metaFirstName ? `${metaFirstName} ${metaLastName || ''}` : '') || ''
   const firstName = fullName ? fullName.trim().split(' ')[0] : (user.email?.split('@')[0] || 'Usuario')
-
-  const adminSupabase = createAdminClient()
 
   // 2. Determine Identity (Admin vs Resident)
   // Check if Admin (Owner/Staff)

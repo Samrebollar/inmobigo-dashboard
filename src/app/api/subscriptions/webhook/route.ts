@@ -10,19 +10,53 @@ const PLAN_LIMITS: Record<string, number> = {
     'CORPORATE PLUS': 400,
 }
 
-export async function POST(req: Request) {
+async function handleWebhook(req: Request) {
     try {
-        const body = await req.json()
+        const url = new URL(req.url)
+        let body: any = {}
 
-        if (
-            (body.type !== 'preapproval' && body.type !== 'subscription_preapproval') ||
-            !body.data?.id
-        ) {
-            return NextResponse.json({ message: 'Evento ignorado' })
+        if (req.method === 'POST') {
+            try {
+                body = await req.json()
+            } catch (e) {
+                // Si el body es multipart o vacio
+            }
         }
 
-        const preapprovalId = body.data.id
+        const id = body.data?.id || body.id || url.searchParams.get('id') || url.searchParams.get('data.id')
+        const type = body.type || body.topic || url.searchParams.get('type') || url.searchParams.get('topic')
 
+        console.log('MercadoPago Webhook received:', { id, type, body, search: url.search })
+
+        if (!id) {
+            return NextResponse.json({ message: 'No ID provided' }, { status: 200 })
+        }
+
+        let preapprovalId = id
+        let externalReference = body.external_reference || null
+
+        // Si es una notificacion de pago individual, consultar el pago para obtener preapproval_id o external_reference
+        if (type === 'payment' || body.action?.startsWith('payment')) {
+            const paymentRes = await fetch(
+                `https://api.mercadopago.com/v1/payments/${id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+                    },
+                }
+            )
+            if (paymentRes.ok) {
+                const paymentData = await paymentRes.json()
+                if (paymentData.metadata?.preapproval_id) {
+                    preapprovalId = paymentData.metadata.preapproval_id
+                }
+                if (paymentData.external_reference) {
+                    externalReference = paymentData.external_reference
+                }
+            }
+        }
+
+        // Consultar estado en MercadoPago
         const mpResponse = await fetch(
             `https://api.mercadopago.com/preapproval/${preapprovalId}`,
             {
@@ -33,8 +67,9 @@ export async function POST(req: Request) {
         )
 
         if (!mpResponse.ok) {
+            console.error('MercadoPago preapproval check failed:', mpResponse.statusText)
             return NextResponse.json(
-                { error: 'No se pudo validar con MercadoPago' },
+                { error: 'No se pudo validar la suscripción con MercadoPago' },
                 { status: 500 }
             )
         }
@@ -42,7 +77,8 @@ export async function POST(req: Request) {
         const mpData = await mpResponse.json()
 
         if (mpData.status !== 'authorized') {
-            return NextResponse.json({ message: 'No autorizado' })
+            console.log(`Suscripción ${preapprovalId} tiene estado ${mpData.status}, ignorando activación.`)
+            return NextResponse.json({ message: `Estado: ${mpData.status}` }, { status: 200 })
         }
 
         const supabase = createClient(
@@ -50,21 +86,24 @@ export async function POST(req: Request) {
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         )
 
-        const { data: subscription } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .or(`mercado_subscription_id.eq.${preapprovalId},id.eq.${mpData.external_reference}`)
-            .maybeSingle()
+        // Buscar la suscripción correspondiente en DB
+        const refId = externalReference || mpData.external_reference
+        let query = supabase.from('subscriptions').select('*')
 
-        if (!subscription) {
-            return NextResponse.json(
-                { error: 'Suscripción no encontrada' },
-                { status: 404 }
-            )
+        if (refId) {
+            query = query.or(`mercado_subscription_id.eq.${preapprovalId},id.eq.${refId}`)
+        } else {
+            query = query.eq('mercado_subscription_id', preapprovalId)
         }
 
-        if (subscription.subscription_status === 'active') {
-            return NextResponse.json({ message: 'Ya activada (idempotente)' })
+        const { data: subscription, error: subError } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
+
+        if (subError || !subscription) {
+            console.error('Subscription not found in DB:', { preapprovalId, refId, subError })
+            return NextResponse.json(
+                { error: 'Suscripción no encontrada en base de datos' },
+                { status: 404 }
+            )
         }
 
         const now = new Date()
@@ -79,6 +118,7 @@ export async function POST(req: Request) {
                 last_payment_date: now.toISOString(),
                 next_payment_date: nextPayment.toISOString(),
                 amount_paid: subscription.price,
+                mercado_subscription_id: preapprovalId
             })
             .eq('id', subscription.id)
 
@@ -93,12 +133,21 @@ export async function POST(req: Request) {
             })
             .eq('id', subscription.organization_id)
 
-        return NextResponse.json({ message: 'Suscripción activada' })
-    } catch (error) {
-        console.error(error)
+        console.log(`Suscripción ${subscription.id} para la organización ${subscription.organization_id} activada exitosamente.`)
+        return NextResponse.json({ message: 'Suscripción activada exitosamente' })
+    } catch (error: any) {
+        console.error('Error procesando webhook de MercadoPago:', error)
         return NextResponse.json(
-            { error: 'Error interno del servidor' },
+            { error: 'Error interno del servidor', details: error.message },
             { status: 500 }
         )
     }
+}
+
+export async function POST(req: Request) {
+    return handleWebhook(req)
+}
+
+export async function GET(req: Request) {
+    return handleWebhook(req)
 }

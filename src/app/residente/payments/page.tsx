@@ -37,6 +37,8 @@ export default async function PaymentsPage() {
 
     // Cargar facturas reales del residente desde resident_invoices
     let invoices: any[] = []
+    let directPayments: any[] = []
+
     if (resident?.id) {
         const { data: inv, error } = await supabase
             .from('resident_invoices')
@@ -49,22 +51,29 @@ export default async function PaymentsPage() {
             today.setHours(23, 59, 59, 0)
             const paymentDeadline = resident?.units?.payment_deadline || 10
 
-            invoices = inv.map((invoice: any) => {
-                /*
-                 * LÓGICA DE ATRASO:
-                 *
-                 * La fecha límite oficial es el día `paymentDeadline` del mes
-                 * al que CORRESPONDE la factura (determinado por due_date).
-                 *
-                 * paid_amount se calcula como amount - balance_due (no hay campo paid_at
-                 * ni paid_amount en resident_invoices).
-                 *
-                 * Si está PAGADA → sin atraso (no tenemos fecha de pago exacta).
-                 * Si está PENDIENTE/VENCIDA → comparamos HOY contra la fecha límite.
-                 */
+            // ── Cruzar folios reales desde payment_validations ──────────────────
+            const validationIds = inv
+                .map((i: any) => {
+                    const m = (i.notes || '').match(/^validation:(.+)$/)
+                    return m ? m[1] : null
+                })
+                .filter(Boolean) as string[]
 
+            const folioByValidationId: Record<string, string> = {}
+            if (validationIds.length > 0) {
+                const { data: pvRows } = await supabase
+                    .from('payment_validations')
+                    .select('id, folio')
+                    .in('id', validationIds)
+                if (pvRows) {
+                    for (const row of pvRows) {
+                        if (row.folio) folioByValidationId[row.id] = row.folio
+                    }
+                }
+            }
+
+            invoices = inv.map((invoice: any) => {
                 const invoiceDate = new Date(invoice.due_date || invoice.created_at)
-                
                 const limitDate = new Date(
                     invoiceDate.getFullYear(),
                     invoiceDate.getMonth(),
@@ -78,18 +87,55 @@ export default async function PaymentsPage() {
                     atraso = Math.floor(diffMs / (1000 * 60 * 60 * 24))
                 }
 
-                // Compute paid_amount from amount - balance_due
                 const paid_amount = Math.max(0, Number(invoice.amount || 0) - Number(invoice.balance_due || 0))
 
-                return { ...invoice, atraso, paid_amount }
+                const validationMatch = (invoice.notes || '').match(/^validation:(.+)$/)
+                const realFolio = validationMatch
+                    ? (folioByValidationId[validationMatch[1]] || invoice.folio || null)
+                    : (invoice.folio || null)
+
+                return { ...invoice, folio: realFolio, atraso, paid_amount }
             })
+
+            // ── Cargar pagos directos desde la tabla payments ──────────────────
+            const invoiceIds = inv.map(i => i.id)
+            if (invoiceIds.length > 0) {
+                const { data: payRows } = await supabase
+                    .from('payments')
+                    .select('*')
+                    .in('invoice_id', invoiceIds)
+                    .order('created_at', { ascending: false })
+
+                if (payRows && payRows.length > 0) {
+                    const invMap: Record<string, any> = {}
+                    for (const i of inv) {
+                        invMap[i.id] = i
+                    }
+
+                    directPayments = payRows.map(p => {
+                        const relatedInv = invMap[p.invoice_id]
+                        return {
+                            ...p,
+                            concept: relatedInv?.description || 'Cuota de Mantenimiento',
+                            folio: relatedInv?.notes?.match(/^validation:(.+)$/) 
+                                ? (folioByValidationId[relatedInv.notes.match(/^validation:(.+)$/)[1]] || relatedInv.folio || p.id?.slice(0, 8))
+                                : (relatedInv?.folio || p.id?.slice(0, 8)),
+                            payment_method: p.payment_method || p.provider || 'Mercado Pago'
+                        }
+                    })
+                }
+            }
         }
     }
 
-    // Datos de la unidad para tiempo real
     const unit = resident?.units || null
 
     return (
-        <ResidentPaymentsClient resident={mockResident} invoices={invoices} unit={unit} />
+        <ResidentPaymentsClient 
+            resident={mockResident} 
+            invoices={invoices} 
+            unit={unit} 
+            directPayments={directPayments}
+        />
     )
 }

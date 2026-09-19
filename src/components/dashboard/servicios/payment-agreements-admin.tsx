@@ -135,24 +135,40 @@ export function PaymentAgreementsAdmin({
     const handleApproveAgreement = async (id: string) => {
         try {
             setActionLoadingId(id)
+            const adminUserId = admin?.user_id || admin?.id
             
-            // 1. Send to n8n webhook via our API
+            // 1. Send to API (which updates DB AND notifies webhook)
             const res = await fetch('/api/payment-agreements/approved', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ agreement_id: id }),
+                body: JSON.stringify({ agreement_id: id, admin_user_id: adminUserId }),
             })
             const data = await res.json()
             if (!data.success) {
-                throw new Error(data.error || 'Error al aprobar el convenio')
+                // Fallback: update DB via Server Action if API route failed
+                const fallbackRes = await updatePaymentAgreementStatusAction({
+                    id,
+                    status: 'approved',
+                    adminUserId
+                })
+                if (!fallbackRes.success) {
+                    throw new Error(data.error || fallbackRes.error || 'Error al aprobar el convenio')
+                }
+            } else {
+                toast.success('Convenio aprobado correctamente')
+                setAgreements(prev => prev.map(ag => 
+                    ag.id === id 
+                        ? { ...ag, status: 'approved', approved_by: adminUserId, approved_at: new Date().toISOString() } 
+                        : ag
+                ))
+                if (selectedAgreement && selectedAgreement.id === id) {
+                    setSelectedAgreement(prev => prev ? { ...prev, status: 'approved' } : null)
+                }
             }
 
-            // 2. Update Supabase via server action
-            await handleUpdateStatus(id, 'approved')
-
-            // 3. Show warning toast if webhook failed
+            // 2. Show warning toast if webhook failed
             if (data.webhook_sent === false) {
-                toast.warning('Convenio aprobado en base de datos, pero la notificación por WhatsApp no se pudo enviar (Webhook n8n inactivo o fallido).')
+                toast.warning('Convenio aprobado en base de datos, pero la notificación por WhatsApp no se pudo enviar (Webhook n8n inactivo o no configurado).')
             }
         } catch (error: any) {
             console.error('Error approving agreement:', error)
@@ -165,27 +181,44 @@ export function PaymentAgreementsAdmin({
     const handleRejectAgreement = async (id: string, reason: string) => {
         try {
             setActionLoadingId(id)
+            const adminUserId = admin?.user_id || admin?.id
             
-            // 1. Send to n8n webhook via our API
+            // 1. Send to API (which updates DB AND notifies webhook)
             const res = await fetch('/api/payment-agreements/rejected', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ agreement_id: id, reason }),
+                body: JSON.stringify({ agreement_id: id, reason, admin_user_id: adminUserId }),
             })
             const data = await res.json()
             if (!data.success) {
-                throw new Error(data.error || 'Error al rechazar el convenio')
+                // Fallback: update DB via Server Action if API route failed
+                const fallbackRes = await updatePaymentAgreementStatusAction({
+                    id,
+                    status: 'rejected',
+                    adminUserId,
+                    rejectionReason: reason
+                })
+                if (!fallbackRes.success) {
+                    throw new Error(data.error || fallbackRes.error || 'Error al rechazar el convenio')
+                }
+            } else {
+                toast.success('Convenio rechazado correctamente')
+                setAgreements(prev => prev.map(ag => 
+                    ag.id === id 
+                        ? { ...ag, status: 'rejected', approved_by: adminUserId, approved_at: new Date().toISOString(), rejection_reason: reason } 
+                        : ag
+                ))
+                if (selectedAgreement && selectedAgreement.id === id) {
+                    setSelectedAgreement(prev => prev ? { ...prev, status: 'rejected', rejection_reason: reason } : null)
+                }
             }
 
-            // 2. Update Supabase via server action
-            await handleUpdateStatus(id, 'rejected')
-
-            // 3. Show warning toast if webhook failed
+            // 2. Show warning toast if webhook failed
             if (data.webhook_sent === false) {
-                toast.warning('Convenio rechazado en base de datos, pero la notificación por WhatsApp no se pudo enviar (Webhook n8n inactivo o fallido).')
+                toast.warning('Convenio rechazado en base de datos, pero la notificación por WhatsApp no se pudo enviar (Webhook n8n inactivo o no configurado).')
             }
 
-            // 4. Reset rejection UI state
+            // 3. Reset rejection UI state
             setIsRejecting(false)
             setRejectionReason('')
         } catch (error: any) {

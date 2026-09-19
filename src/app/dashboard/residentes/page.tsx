@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -55,7 +55,7 @@ interface ResidentWithFinance extends Resident {
 
 
 
-export default function ResidentsPage() {
+function ResidentsContent() {
     const supabase = createClient()
     const { isPropiedades } = useUserRole()
 
@@ -335,7 +335,8 @@ export default function ResidentsPage() {
                     return
                 }
 
-                const res = await fetch('https://n8n.srv1286224.hstgr.cloud/webhook/send-reminder-manual', {
+                const webhookUrl = process.env.NEXT_PUBLIC_N8N_REMINDER_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/send-reminder-manual'
+                const res = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ invoice_id: invoiceId })
@@ -666,5 +667,13 @@ export default function ResidentsPage() {
                 />
             )}
         </div>
+    )
+}
+
+export default function ResidentsPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-zinc-500">Cargando residentes...</div>}>
+            <ResidentsContent />
+        </Suspense>
     )
 }

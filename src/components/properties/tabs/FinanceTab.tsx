@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
 import { calculateCondoMonthlyFinancials, formatLocalDate } from '@/utils/finance-utils'
 import { demoDb } from '@/utils/demo-db'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -24,7 +23,6 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 export function FinanceTab() {
     const params = useParams()
     const condoId = params.id as string
-    const supabase = createClient()
 
     const [loading, setLoading] = useState(true)
     const [recentInvoices, setRecentInvoices] = useState<any[]>([])
@@ -211,34 +209,9 @@ export function FinanceTab() {
                 return
             }
 
-            // 1. Fetch units
-            const { data: unitsData, error: unitsError } = await supabase
-                .from('units')
-                .select('id, monto_mensual, facturacion_activa')
-                .eq('condominium_id', condoId)
-                .neq('billing_status', 'suspended')
-
-            if (unitsError) throw unitsError
-
-            // 2. Fetch residents
-            const { data: residentsData, error: residentsError } = await supabase
-                .from('residents')
-                .select('id, unit_id, fecha_ingreso, status')
-                .eq('condominium_id', condoId)
-
-            if (residentsError) throw residentsError
-
-            // 3. Fetch resident invoices — use due_date range for the selected year
-            const yearStart = new Date(selectedPeriod.year, 0, 1).toISOString().substring(0, 10)
-            const yearEnd = new Date(selectedPeriod.year, 11, 31).toISOString().substring(0, 10)
-            const { data: invoicesData, error: invoiceError } = await supabase
-                .from('resident_invoices')
-                .select('amount, balance_due, status, resident_id, invoice_type, created_at, due_date')
-                .eq('condominium_id', condoId)
-                .gte('due_date', yearStart)
-                .lte('due_date', yearEnd)
-
-            if (invoiceError) throw invoiceError
+            const response = await fetch(`/api/properties/${condoId}/finance?action=billing&year=${selectedPeriod.year}&month=${selectedPeriod.month}`)
+            if (!response.ok) throw new Error(`HTTP error ${response.status}`)
+            const { units: unitsData, residents: residentsData, invoices: invoicesData } = await response.json()
 
             const condoFinancials = calculateCondoMonthlyFinancials({
                 units: unitsData || [],
@@ -264,11 +237,11 @@ export function FinanceTab() {
         try {
             if (condoId.startsWith('demo-')) {
                 const allDemoInvoices = [
-                    { id: '1', folio: 'FAC-DEMO0001', unidad: 'A-101', concepto: 'Mantenimiento Enero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-01-10', fecha: '2026-01-01T08:00:00.000Z' },
-                    { id: '2', folio: 'FAC-DEMO0002', unidad: 'A-102', concepto: 'Mantenimiento Febrero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-02-10', fecha: '2026-02-01T08:00:00.000Z' },
-                    { id: '3', folio: 'FAC-DEMO0003', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2026', monto: 2800, paid_amount: 0, estado: 'overdue', telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2026-03-10', fecha: '2026-03-01T08:00:00.000Z' },
-                    { id: '4', folio: 'FAC-DEMO0004', unidad: 'C-201', concepto: 'Mantenimiento Abril 2026', monto: 3100, paid_amount: 3100, estado: 'paid', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-04-10', fecha: '2026-04-01T08:00:00.000Z' },
-                    { id: '5', folio: 'FAC-DEMO0005', unidad: 'D-404', concepto: 'Mantenimiento Mayo 2026', monto: 3500, paid_amount: 1500, estado: 'pending', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-05-10', fecha: '2026-05-01T08:00:00.000Z' },
+                    { id: '1', folio: 'INV-202601-01', unidad: 'A-101', concepto: 'Mantenimiento Enero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', paid_at: '2026-01-05T10:00:00.000Z', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-01-10', fecha: '2026-01-01T08:00:00.000Z' },
+                    { id: '2', folio: 'INV-202602-02', unidad: 'A-102', concepto: 'Mantenimiento Febrero 2026', monto: 2500, paid_amount: 2500, estado: 'paid', paid_at: '2026-02-08T11:30:00.000Z', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-02-10', fecha: '2026-02-01T08:00:00.000Z' },
+                    { id: '3', folio: 'INV-202603-03', unidad: 'B-103', concepto: 'Mantenimiento Marzo 2026', monto: 2800, paid_amount: 0, estado: 'overdue', paid_at: null, telefono: '5551234567', atraso: 18, reminder_sent: false, due_date: '2026-03-10', fecha: '2026-03-01T08:00:00.000Z' },
+                    { id: '4', folio: 'INV-202604-04', unidad: 'C-201', concepto: 'Mantenimiento Abril 2026', monto: 3100, paid_amount: 3100, estado: 'paid', paid_at: '2026-04-04T09:15:00.000Z', telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-04-10', fecha: '2026-04-01T08:00:00.000Z' },
+                    { id: '5', folio: 'INV-202605-05', unidad: 'D-404', concepto: 'Mantenimiento Mayo 2026', monto: 3500, paid_amount: 1500, estado: 'pending', paid_at: null, telefono: '5551234567', atraso: 0, reminder_sent: false, due_date: '2026-05-10', fecha: '2026-05-01T08:00:00.000Z' },
                 ]
 
                 if (selectedPeriod.month === -1) {
@@ -284,33 +257,15 @@ export function FinanceTab() {
                 return
             }
 
-            // Real DB query
-            let query = supabase
-                .from('resident_invoices')
-                .select(`
-                    id, amount, balance_due, status, created_at, due_date, period_start, description, invoice_type, folio, paid_at,
-                    residents (
-                        first_name, last_name, phone,
-                        units (unit_number)
-                    )
-                `)
-                .eq('condominium_id', condoId)
-
-            if (selectedPeriod.month !== -1) {
-                const startOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month, 1).toISOString().substring(0, 10)
-                const endOfPeriod = new Date(selectedPeriod.year, selectedPeriod.month + 1, 0).toISOString().substring(0, 10)
-                query = query.gte('due_date', startOfPeriod).lte('due_date', endOfPeriod)
-                query = query.eq('invoice_type', 'maintenance')
-            }
-
-            const { data: invoicesData, error: invoiceError } = await query
-                .order('created_at', { ascending: false })
-                .limit(100)
-
-            if (invoiceError) {
-                console.error('Error fetching resident_invoices details:', JSON.stringify(invoiceError, null, 2))
+            // Real DB query via API route (server usa admin client, evita la
+            // recursión de RLS que da resident_invoices consultado directo
+            // desde el navegador)
+            const response = await fetch(`/api/properties/${condoId}/finance?action=invoices&year=${selectedPeriod.year}&month=${selectedPeriod.month}`)
+            if (!response.ok) {
+                console.error(`[fetchInvoices] API returned status ${response.status}`)
                 return
             }
+            const { invoices: invoicesData } = await response.json()
 
             if (invoicesData) {
                 const mappedInvoices = invoicesData.map((inv: any) => {
@@ -348,12 +303,12 @@ export function FinanceTab() {
                         monto: monto,
                         paid_amount: paidAmount,
                         estado: inv.status,
+                        paid_at: inv.paid_at || null,
                         telefono: phone,
                         atraso: delayDays,
                         reminder_sent: false,
                         due_date: dueDate.toISOString(),
                         fecha: inv.period_start || inv.due_date || inv.created_at,
-                        fecha_pago: inv.paid_at || null,
                         resident_name: resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente',
                     }
                 })
@@ -659,7 +614,7 @@ export function FinanceTab() {
                                                 </Badge>
                                             </td>
                                             <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
-                                                {inv.fecha_pago ? formatLocalDate(inv.fecha_pago, 'short') : <span className="text-zinc-500">-</span>}
+                                                {inv.paid_at ? formatLocalDate(inv.paid_at, 'short') : <span className="text-zinc-500">-</span>}
                                             </td>
                                             <td className="px-4 py-3 font-medium">
                                                 {inv.estado !== 'paid' ? (
@@ -684,7 +639,7 @@ export function FinanceTab() {
                                                             onClick={async () => {
                                                                 setSendingReminderId(inv.id)
                                                                 try {
-                                                                    const webhookUrl = 'https://n8n.srv1286224.hstgr.cloud/webhook/send-morosidad-whatsapp'
+                                                                    const webhookUrl = process.env.NEXT_PUBLIC_N8N_MOROSIDAD_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/send-morosidad-whatsapp'
                                                                     console.log('Enviando recordatorio a:', webhookUrl)
 
                                                                     const payload = {
@@ -733,18 +688,19 @@ export function FinanceTab() {
                                                             title="Marcar como pagada"
                                                             className="h-10 w-10 rounded-full bg-zinc-900/50 hover:bg-emerald-500/20 transition-all duration-300 transform hover:scale-110 active:scale-95 group"
                                                             onClick={async () => {
-                                                                const now = new Date().toISOString()
+                                                                const nowIso = new Date().toISOString()
                                                                 if (condoId.startsWith('demo-')) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', fecha_pago: now} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
                                                                     return
                                                                 }
-                                                                const { error } = await supabase
-                                                                    .from('resident_invoices')
-                                                                    .update({ status: 'paid', balance_due: 0, paid_at: now })
-                                                                    .eq('id', inv.id)
-                                                                if (!error) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', fecha_pago: now} : p))
-                                                                    fetchBillingData() // Actualiza KPIs arrriba
+                                                                const res = await fetch(`/api/properties/${condoId}/finance`, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ action: 'mark_paid', invoiceId: inv.id, paidAt: nowIso })
+                                                                })
+                                                                if (res.ok) {
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
+                                                                    fetchBillingData() // Actualiza KPIs arriba
                                                                 }
                                                             }}
                                                         >

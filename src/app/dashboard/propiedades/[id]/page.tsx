@@ -2,8 +2,8 @@
 'use client'
 console.log('Mounting Property Page')
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
     Building, MapPin, Users, Home, TrendingUp, Settings,
@@ -34,6 +34,7 @@ export default function CondominiumPage() {
     const router = useRouter()
     const supabase = createClient()
 
+    const searchParams = useSearchParams()
     const [condo, setCondo] = useState<Condominium | null>(null)
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('summary')
@@ -42,6 +43,15 @@ export default function CondominiumPage() {
     useEffect(() => {
         fetchCondo()
     }, [])
+
+    useEffect(() => {
+        const tab = searchParams.get('tab')
+        const mpConnected = searchParams.get('mp_connected')
+        const mpError = searchParams.get('mp_error')
+        if (tab === 'settings' || mpConnected || mpError) {
+            setActiveTab('settings')
+        }
+    }, [searchParams])
     const [revenueData, setRevenueData] = useState<any[]>([])
 
     const fetchCondo = async () => {

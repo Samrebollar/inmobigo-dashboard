@@ -16,13 +16,20 @@ function PlansContent() {
     const isExpired = searchParams.get('reason') === 'expired'
 
     useEffect(() => {
+        let isMounted = true
         fetch('/api/organizations/status')
             .then(res => res.json())
             .then(data => {
-                setOrgStatus(data)
-                setLoadingStatus(false)
+                if (isMounted) {
+                    setOrgStatus(data)
+                    setLoadingStatus(false)
+                }
             })
-            .catch(() => setLoadingStatus(false))
+            .catch((err) => {
+                if (err?.name === 'AbortError' || err?.message?.includes('aborted')) return
+                if (isMounted) setLoadingStatus(false)
+            })
+        return () => { isMounted = false }
     }, [])
 
     const handleSubscribe = async (planKey: string) => {
@@ -38,11 +45,13 @@ function PlansContent() {
 
             if (res.ok && data.checkoutUrl) {
                 window.location.href = data.checkoutUrl
+                return
             } else {
                 const errorMsg = data.message ? `${data.error}: ${data.message}` : (data.error || 'Error al iniciar suscripción');
                 alert(errorMsg)
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.name === 'DOMException') return
             console.error('Subscription error:', error)
             alert('Error de conexión. Intenta de nuevo.')
         } finally {
@@ -209,7 +218,7 @@ function PlansContent() {
             </div>
 
             <div className="flex flex-wrap gap-8 justify-center items-stretch">
-                {plans.filter(plan => plan.name !== 'CORE PRUEBA').map((plan, index) => {
+                {plans.map((plan, index) => {
                     const c = getColorClasses(plan.color)
                     const isTooSmall = orgStatus && orgStatus.unitUsage > plan.limit
                     const isPreviousPlan = orgStatus && orgStatus.previousPlanName?.toUpperCase() === plan.name.toUpperCase()

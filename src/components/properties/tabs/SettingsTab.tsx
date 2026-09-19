@@ -11,6 +11,7 @@ import { propertiesService } from '@/services/properties-service'
 import { Condominium, UpdateCondominiumDTO } from '@/types/properties'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUserRole } from '@/hooks/use-user-role'
+import { MpCondominioConfig } from '@/components/integrations/mp-condominio-config'
 
 export function SettingsTab() {
     const { isPropiedades } = useUserRole()
@@ -193,6 +194,8 @@ export function SettingsTab() {
                     </motion.div>
                 </CardContent>
             </Card>
+
+            <MpCondominioConfig condominiumId={condominiumId} condominiumName={condo.name} />
 
             <Card className="bg-zinc-900 border-zinc-800">
                 <CardHeader>

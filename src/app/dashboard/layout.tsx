@@ -42,7 +42,7 @@ export default async function DashboardLayout({
     const isPropiedades = businessType === 'propiedades'
 
     // 2. Check if Resident (STRICT: Must be in residents)
-    const { data: resident } = await supabase
+    const { data: resident } = await adminSupabase
         .from('residents')
         .select('id, first_name, last_name, condominiums(organization_id)')
         .eq('user_id', user.id)
@@ -51,7 +51,7 @@ export default async function DashboardLayout({
     const isMetadataResident = user.user_metadata?.role === 'resident'
 
     // 3. Get Profile for Name fallback and Avatar
-    const { data: profile } = await supabase
+    const { data: profile } = await adminSupabase
         .from('profiles')
         .select('full_name, avatar_url, role_new')
         .eq('id', user.id)
@@ -353,13 +353,6 @@ export default async function DashboardLayout({
                         >
                             <CreditCard size={18} />
                             <span>Planes</span>
-                        </Link>
-                        <Link
-                            href="/dashboard/integrations"
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                        >
-                            <Zap size={18} />
-                            <span>Integraciones</span>
                         </Link>
                         <Link
                             href="/dashboard/configuracion"

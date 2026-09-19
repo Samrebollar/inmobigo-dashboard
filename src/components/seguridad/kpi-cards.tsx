@@ -92,7 +92,7 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
         },
         {
             id: 'billed',
-            title: 'Total Facturado del Periodo',
+            title: 'Total por Cobrar del Periodo',
             value: metrics?.total_generado ?? 0,
             prefix: '$',
             change: metrics ? (metrics.total_generado > 0 ? 8.2 : 0) : 0,

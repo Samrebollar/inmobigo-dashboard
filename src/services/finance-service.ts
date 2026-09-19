@@ -1049,7 +1049,7 @@ export const financeService = {
 
         stats.recentActivity = [...aiInvoices, ...aiTickets, ...aiResidents, ...aiExpenses]
             .sort((a, b) => b.date.getTime() - a.date.getTime())
-            .slice(0, 10)
+            .slice(0, 5)
 
         return stats
     }

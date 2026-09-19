@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Papa from 'papaparse'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { RegisterPaymentModal } from '@/components/finance/register-payment-modal'
+import { ResidentInvoice } from '@/types/finance'
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -27,6 +29,7 @@ export function FinanceTab() {
     const [loading, setLoading] = useState(true)
     const [recentInvoices, setRecentInvoices] = useState<any[]>([])
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
+    const [paymentModalInvoice, setPaymentModalInvoice] = useState<ResidentInvoice | null>(null)
     const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
     const [toastMessage, setToastMessage] = useState<{title: string, type: 'success' | 'error'} | null>(null)
     const [isGenerating, setIsGenerating] = useState(false)
@@ -310,6 +313,11 @@ export function FinanceTab() {
                         due_date: dueDate.toISOString(),
                         fecha: inv.period_start || inv.due_date || inv.created_at,
                         resident_name: resident ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim() : 'Residente',
+                        // Valores crudos (sin transformar para display) — se usan para
+                        // registrar pagos parciales con el saldo real pendiente.
+                        raw_amount: Number(inv.amount || 0),
+                        raw_balance_due: Number(inv.balance_due ?? inv.amount ?? 0),
+                        raw_description: inv.description,
                     }
                 })
                 
@@ -682,26 +690,24 @@ export function FinanceTab() {
                                                     )}
                                                     
                                                     {inv.estado !== 'paid' && (
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="icon" 
-                                                            title="Marcar como pagada"
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            title="Registrar Pago"
                                                             className="h-10 w-10 rounded-full bg-zinc-900/50 hover:bg-emerald-500/20 transition-all duration-300 transform hover:scale-110 active:scale-95 group"
-                                                            onClick={async () => {
-                                                                const nowIso = new Date().toISOString()
+                                                            onClick={() => {
                                                                 if (condoId.startsWith('demo-')) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
+                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: new Date().toISOString()} : p))
                                                                     return
                                                                 }
-                                                                const res = await fetch(`/api/properties/${condoId}/finance`, {
-                                                                    method: 'POST',
-                                                                    headers: { 'Content-Type': 'application/json' },
-                                                                    body: JSON.stringify({ action: 'mark_paid', invoiceId: inv.id, paidAt: nowIso })
-                                                                })
-                                                                if (res.ok) {
-                                                                    setRecentInvoices(prev => prev.map(p => p.id === inv.id ? {...p, estado: 'paid', paid_at: nowIso} : p))
-                                                                    fetchBillingData() // Actualiza KPIs arriba
-                                                                }
+                                                                setPaymentModalInvoice({
+                                                                    id: inv.id,
+                                                                    folio: inv.folio,
+                                                                    description: inv.raw_description || inv.concepto,
+                                                                    amount: inv.raw_amount,
+                                                                    balance_due: inv.raw_balance_due,
+                                                                    status: inv.estado,
+                                                                } as ResidentInvoice)
                                                             }}
                                                         >
                                                             <CheckCircle2 className="h-5 w-5 text-zinc-400 group-hover:text-emerald-500 transition-colors" />
@@ -794,6 +800,18 @@ export function FinanceTab() {
                     </div>
                 </div>
             )}
+
+            {/* Modal de Registrar Pago (soporta abonos parciales) */}
+            <RegisterPaymentModal
+                isOpen={!!paymentModalInvoice}
+                onClose={() => setPaymentModalInvoice(null)}
+                condominiumId={condoId}
+                invoice={paymentModalInvoice}
+                onSuccess={() => {
+                    fetchBillingData()
+                    fetchInvoices()
+                }}
+            />
 
             {/* Custom Premium Toast Notification */}
             <AnimatePresence>

@@ -112,10 +112,33 @@ export interface FinancialSummary {
     total_overdue: number
 }
 
+// ─── TABLA: resident_invoice_payments ─────────────────────────────────────────
+// Un renglón por cada abono/pago aplicado a una resident_invoice. Permite pagos
+// parciales: una misma factura puede tener varios pagos, cada uno con su
+// propio folio de recibo, fecha y método.
+export interface ResidentInvoicePayment {
+    id: string
+    invoice_id: string
+    resident_id: string
+    condominium_id: string
+    organization_id: string
+    amount: number
+    folio: string
+    payment_method?: string | null
+    notes?: string | null
+    paid_at: string
+    created_at: string
+}
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 /** Genera un folio visual desde el UUID de la factura */
 export function generateFolio(id: string): string {
     return `FAC-${id.substring(0, 8).toUpperCase()}`
+}
+
+/** Genera el folio de un recibo de pago desde el UUID del pago */
+export function generatePaymentFolio(id: string): string {
+    return `REC-${id.substring(0, 8).toUpperCase()}`
 }
 
 /** Calcula el monto pagado desde amount y balance_due */

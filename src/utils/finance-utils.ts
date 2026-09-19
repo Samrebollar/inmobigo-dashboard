@@ -260,10 +260,13 @@ export function calculateResidentMonthlyFinancials({
             return parts.year === selectedYear && parts.month === m
         })
 
-        // Calculate total paid in this month
+        // Calculate total paid in this month. Se usa amount - balance_due sin filtrar
+        // por status: una factura con abono parcial sigue en 'pending' pero ya tiene
+        // balance_due reducido, y ese monto abonado debe contar aquí — si solo se
+        // contara lo que ya está 'paid', el residuo proyectado más abajo duplicaría
+        // el saldo (contaría el abono parcial como si nunca se hubiera hecho).
         const totalPaidInMonth = dbInvoicesInMonth
-            .filter(inv => inv.status === 'paid' || inv.invoice_type === 'manual_payment')
-            .reduce((sum, inv) => sum + (Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
+            .reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
 
         // Calculate sum of balance_due of existing overdue/pending maintenance invoices in this month
         const sumBalanceDueInMonth = dbInvoicesInMonth
@@ -339,18 +342,20 @@ export function calculateResidentMonthlyFinancials({
     })
 
     if (selectedMonth === 'all') {
-        // totalPaid = ALL real paid invoices in period (maintenance + manual_payment + any type)
+        // totalPaid = suma de amount - balance_due de todas las facturas del año, sin
+        // filtrar por status: una factura con abono parcial sigue 'pending' pero ya
+        // tiene balance_due reducido, y ese abono debe sumar aquí (si solo se contara
+        // lo 'paid', el saldo pendiente/vencido de abajo duplicaría el abono parcial).
         // Use due_date as the primary date for month/year assignment (same logic as the table filter)
-        const allPaidInvoicesForYear = invoices.filter(inv => {
-            if (inv.status !== 'paid') return false
+        const allInvoicesForYear = invoices.filter(inv => {
             const dateStr = inv.due_date || inv.created_at
             if (!dateStr) return false
             const parts = getLocalDateParts(dateStr)
             if (!parts) return false
             return parts.year === selectedYear
         })
-        const totalPaid = allPaidInvoicesForYear
-            .reduce((sum, inv) => sum + (Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
+        const totalPaid = allInvoicesForYear
+            .reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
 
         const pendingSum = kpiInvoices
             .filter(inv => inv.status === 'pending')
@@ -410,18 +415,20 @@ export function calculateResidentMonthlyFinancials({
 
     const isOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > 10)
 
-    // totalPaid = ALL real paid invoices for this month (maintenance + manual_payment + any type)
+    // totalPaid = suma de amount - balance_due de todas las facturas del mes, sin
+    // filtrar por status (ver comentario equivalente en la rama 'all' de arriba):
+    // un abono parcial deja la factura en 'pending' con balance_due reducido, y ese
+    // abono debe contar como pagado para no duplicar el saldo pendiente.
     // Use due_date as the primary date for month/year assignment (same logic as the table filter)
-    const allPaidInvoicesForMonth = invoices.filter(inv => {
-        if (inv.status !== 'paid') return false
+    const allInvoicesForMonth = invoices.filter(inv => {
         const dateStr = inv.due_date || inv.created_at
         if (!dateStr) return false
         const parts = getLocalDateParts(dateStr)
         if (!parts) return false
         return parts.year === selectedYear && parts.month === monthNum
     })
-    const totalPaid = allPaidInvoicesForMonth
-        .reduce((sum, inv) => sum + (Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
+    const totalPaid = allInvoicesForMonth
+        .reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
 
     const explicitDebtThisMonth = kpiInvoices
         .filter(inv => inv.status === 'overdue' || inv.status === 'pending')

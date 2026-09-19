@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 
 export async function GET(
     request: Request,
@@ -89,7 +90,23 @@ export async function GET(
 
             if (invoiceError) throw invoiceError
 
-            return NextResponse.json({ invoices: invoicesData || [] })
+            // Pagos individuales aplicados a estas facturas (soporta abonos
+            // parciales: una factura puede tener varios pagos, cada uno con
+            // su propio folio de recibo).
+            const invoiceIds = (invoicesData || []).map((inv: any) => inv.id)
+            let payments: any[] = []
+            if (invoiceIds.length > 0) {
+                const { data: paymentsData, error: paymentsError } = await adminSupabase
+                    .from('resident_invoice_payments')
+                    .select('id, invoice_id, amount, folio, payment_method, notes, paid_at')
+                    .in('invoice_id', invoiceIds)
+                    .order('paid_at', { ascending: true })
+
+                if (paymentsError) throw paymentsError
+                payments = paymentsData || []
+            }
+
+            return NextResponse.json({ invoices: invoicesData || [], payments })
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
@@ -121,23 +138,70 @@ export async function POST(
 
         const adminSupabase = createAdminClient()
 
-        if (body.action === 'mark_paid') {
-            const { invoiceId, paidAt } = body
-            if (!invoiceId) {
-                return NextResponse.json({ error: 'Invoice ID is required' }, { status: 400 })
+        if (body.action === 'register_payment') {
+            const { invoiceId, amount, paymentMethod, notes, paidAt } = body
+            const paymentAmount = Number(amount)
+
+            if (!invoiceId || !paymentAmount || paymentAmount <= 0) {
+                return NextResponse.json({ error: 'invoiceId y amount (mayor a 0) son requeridos' }, { status: 400 })
             }
 
-            const nowIso = paidAt || new Date().toISOString()
-            const { data: updated, error } = await adminSupabase
+            const { data: invoice, error: invoiceFetchError } = await adminSupabase
                 .from('resident_invoices')
-                .update({ status: 'paid', balance_due: 0, paid_at: nowIso })
+                .select('id, amount, balance_due, status, paid_at, resident_id, condominium_id, organization_id')
                 .eq('id', invoiceId)
+                .single()
+
+            if (invoiceFetchError || !invoice) {
+                return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 })
+            }
+
+            const currentBalance = Number(invoice.balance_due ?? invoice.amount)
+            if (paymentAmount > currentBalance + 0.01) {
+                return NextResponse.json({ error: `El monto excede el saldo pendiente ($${currentBalance.toFixed(2)})` }, { status: 400 })
+            }
+
+            const paymentId = randomUUID()
+            const folio = `REC-${paymentId.substring(0, 8).toUpperCase()}`
+            const paidAtIso = paidAt || new Date().toISOString()
+
+            const { data: payment, error: paymentError } = await adminSupabase
+                .from('resident_invoice_payments')
+                .insert({
+                    id: paymentId,
+                    invoice_id: invoice.id,
+                    resident_id: invoice.resident_id,
+                    condominium_id: invoice.condominium_id,
+                    organization_id: invoice.organization_id,
+                    amount: paymentAmount,
+                    folio,
+                    payment_method: paymentMethod || null,
+                    notes: notes || null,
+                    paid_at: paidAtIso,
+                })
                 .select()
                 .single()
 
-            if (error) throw error
+            if (paymentError) throw paymentError
 
-            return NextResponse.json({ success: true, updated })
+            const newBalance = Math.max(0, currentBalance - paymentAmount)
+            const isFullyPaid = newBalance <= 0.01
+
+            const { data: updatedInvoice, error: updateError } = await adminSupabase
+                .from('resident_invoices')
+                .update({
+                    balance_due: newBalance,
+                    status: isFullyPaid ? 'paid' : invoice.status,
+                    paid_at: isFullyPaid ? paidAtIso : invoice.paid_at,
+                    payment_method: paymentMethod || undefined,
+                })
+                .eq('id', invoice.id)
+                .select()
+                .single()
+
+            if (updateError) throw updateError
+
+            return NextResponse.json({ success: true, payment, invoice: updatedInvoice })
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

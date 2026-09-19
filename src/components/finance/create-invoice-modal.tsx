@@ -202,37 +202,34 @@ export function CreateInvoiceModal({
             const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo'
 
             if (isSettlingDebt) {
-                const firstInvoice = residentInvoices[0]
-                const receiptFolio = firstInvoice 
-                    ? `FAC-${firstInvoice.id.substring(0, 8).toUpperCase()}`
-                    : `REC-${Date.now().toString().slice(-6)}`
+                // Cada abono genera su propio recibo (resident_invoice_payments), con su
+                // propio folio, fecha y método — así un residente que paga en varias
+                // exhibiciones tiene un comprobante independiente por cada pago, en vez
+                // de que el último pago sobreescriba el registro del anterior.
+                // Se liquidan primero las facturas más antiguas.
+                const sortedPending = [...residentInvoices].sort(
+                    (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+                )
 
                 let remainingToApply = parseFloat(paymentAmount)
-                for (const inv of residentInvoices) {
+                let lastPayment: any = null
+                for (const inv of sortedPending) {
                     if (remainingToApply <= 0) break
                     const currentDebt = inv.balance_due ?? inv.amount
-                    if (remainingToApply >= currentDebt) {
-                        remainingToApply -= currentDebt
-                        await financeService.update(inv.id, { 
-                            status: 'paid', 
-                            paid_at: new Date().toISOString(), 
-                            paid_amount: inv.amount, 
-                            balance_due: 0,
-                            payment_method: paymentMethod,
-                            payment_provider: receiptFolio
-                        })
-                        if (!createdInvoice) createdInvoice = { ...inv, folio: receiptFolio }
-                    } else {
-                        const newBalance = currentDebt - remainingToApply
-                        await financeService.update(inv.id, { 
-                            balance_due: newBalance, 
-                            paid_amount: (inv.paid_amount ?? 0) + remainingToApply,
-                            payment_method: paymentMethod,
-                            payment_provider: receiptFolio
-                        })
-                        remainingToApply = 0
-                        if (!createdInvoice) createdInvoice = { ...inv, folio: receiptFolio }
-                    }
+                    if (currentDebt <= 0) continue
+
+                    const amountToApply = Math.min(remainingToApply, currentDebt)
+                    const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
+                        invoiceId: inv.id,
+                        amount: amountToApply,
+                        paymentMethod,
+                        notes: formData.notes || undefined,
+                    })
+                    lastPayment = payment
+                    remainingToApply -= amountToApply
+                }
+                if (lastPayment) {
+                    createdInvoice = { id: lastPayment.invoice_id, folio: lastPayment.folio }
                 }
                 if (remainingToApply > 0 && selectedResident.debt_amount) {
                     const currentInitialDebt = Number(selectedResident.debt_amount)

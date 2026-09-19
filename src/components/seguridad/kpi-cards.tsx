@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, DollarSign, Wallet, AlertCircle, Target } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Receipt, AlertCircle, Target } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -91,15 +91,15 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
             isLoading,
         },
         {
-            id: 'receivable',
-            title: 'Total por cobrar del periodo',
-            value: metrics?.total_por_cobrar ?? 0,
+            id: 'billed',
+            title: 'Total Facturado del Periodo',
+            value: metrics?.total_generado ?? 0,
             prefix: '$',
-            change: metrics ? (metrics.total_por_cobrar > 0 ? 8.2 : 0) : 0,
+            change: metrics ? (metrics.total_generado > 0 ? 8.2 : 0) : 0,
             trend: 'up',
-            icon: Wallet,
+            icon: Receipt,
             color: 'blue',
-            data: makeSparkline(metrics?.total_por_cobrar ?? 0),
+            data: makeSparkline(metrics?.total_generado ?? 0),
             isLoading,
         },
         {

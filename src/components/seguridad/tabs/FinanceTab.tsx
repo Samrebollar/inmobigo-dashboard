@@ -36,7 +36,8 @@ export function FinanceTab() {
         recaudado: 0,
         porCobrar: 0,
         vencido: 0,
-        morosos: 0
+        morosos: 0,
+        saldoInicialPendiente: 0
     })
 
     // Menú de Exportación y Periodo
@@ -127,6 +128,7 @@ export function FinanceTab() {
         doc.text(`Total Recaudado: $${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 40)
         doc.text(`Pendiente: $${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 46)
         doc.text(`Morosidad: $${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 52)
+        doc.text(`Saldo Inicial (Arrastre): $${metrics.saldoInicialPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 14, 58)
 
         const tableColumn = ["Folio", "Unidad", "Concepto", "Monto", "Estado", "Atraso", "Vence"]
         const tableRows: any[] = []
@@ -148,7 +150,7 @@ export function FinanceTab() {
         autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
-            startY: 60,
+            startY: 66,
             styles: { fontSize: 9, cellPadding: 3 },
             headStyles: { fillColor: [79, 70, 229] }, // Color Índigo de InmobiGo
             alternateRowStyles: { fillColor: [245, 245, 245] },
@@ -205,7 +207,8 @@ export function FinanceTab() {
                     recaudado: demoRecaudado,
                     porCobrar: Math.floor(unpaid * 0.3),
                     vencido: Math.floor(unpaid * 0.7),
-                    morosos: morosos
+                    morosos: morosos,
+                    saldoInicialPendiente: 0
                 })
                 return
             }
@@ -248,7 +251,8 @@ export function FinanceTab() {
                 recaudado: condoFinancials.recaudado,
                 porCobrar: condoFinancials.porCobrar,
                 vencido: condoFinancials.vencido,
-                morosos: condoFinancials.morososCount
+                morosos: condoFinancials.morososCount,
+                saldoInicialPendiente: condoFinancials.saldoInicialPendiente
             })
         } catch (err: any) {
             console.error('Fetch billing error:', err?.message || err?.details || err)
@@ -465,7 +469,7 @@ export function FinanceTab() {
                 </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
                 <Card className="bg-zinc-900 border-zinc-800">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
@@ -528,6 +532,21 @@ export function FinanceTab() {
                                 <div className="flex items-center gap-1 text-xs text-rose-500 mt-1">
                                     <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso'}
                                 </div>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card className="bg-zinc-900 border-zinc-800">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-zinc-400">Saldo Inicial (Arrastre)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
+                            <>
+                                <div className="text-2xl font-bold text-violet-400">
+                                    ${metrics.saldoInicialPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <p className="text-xs text-zinc-500 mt-1">Deuda previa, no es cuota del mes</p>
                             </>
                         )}
                     </CardContent>

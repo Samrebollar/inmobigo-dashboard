@@ -61,6 +61,17 @@ export async function updatePackageAlertStatusAction(params: {
 
         if (error) throw error
 
+        // Dispara de inmediato el workflow de n8n "10b - Notificar Paquete Recibido"
+        // en vez de esperar a su polling de cada 15 min (el nodo webhook solo
+        // relanza la misma query que usa el trigger programado).
+        if (status === 'received') {
+            fetch('https://n8n.inmobigo.mx/webhook/paquete-recibido', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ package_alert_id: id }),
+            }).catch((err) => console.error('Error al notificar n8n (paquete-recibido):', err))
+        }
+
         revalidatePath('/dashboard/avisos')
         revalidatePath('/dashboard/servicios')
 

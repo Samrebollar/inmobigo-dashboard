@@ -221,6 +221,15 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
                                     checked_in_at: new Date().toISOString()
                                 })
                                 .eq('id', visita.id)
+
+                            // Dispara de inmediato el workflow (el nodo webhook solo relanza
+                            // la misma query que usa el trigger programado cada 15 min).
+                            fetch('https://n8n.inmobigo.mx/webhook/acceso-checkin', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ visitor_pass_id: visita.id }),
+                            }).catch((err) => console.error('Error al notificar n8n (acceso-checkin):', err))
+
                             redirect(`/${qr_token}`)
                         }}>
                             <button type="submit" className={`w-full h-16 ${themeColor} hover:opacity-90 active:scale-[0.98] text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all`}>

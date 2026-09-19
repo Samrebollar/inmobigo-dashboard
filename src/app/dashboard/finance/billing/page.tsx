@@ -39,19 +39,21 @@ const formatCurrency = (amount: number) => {
     }).format(amount)
 }
 
+// Normaliza el método de pago real registrado en resident_invoice_payments
+// (ya no se adivina a partir del texto del concepto).
+const formatPaymentMethod = (method?: string | null) => {
+    if (!method) return null
+    const m = method.toLowerCase()
+    if (m.includes('efectivo')) return 'Efectivo'
+    if (m.includes('transferencia')) return 'Transferencia Bancaria'
+    if (m.includes('línea') || m.includes('linea') || m.includes('mercado')) return 'Pago en Línea'
+    return method
+}
+
 const getPaymentMethod = (inv: any) => {
-    if (inv.payment_method) return inv.payment_method
-    
-    const desc = (inv.description || '').toLowerCase()
-    const resident = (inv.resident_name || '').toLowerCase()
-    
-    if (desc.includes('manual') || inv.payment_provider === 'Manual') return 'Manual'
-    if (desc.includes('efectivo') || resident.includes('panchito')) return 'Efectivo'
-    if (desc.includes('transferencia')) return 'Transferencia bancaria'
-    if (desc.includes('tarjeta')) return 'Tarjeta'
-    if (desc.includes('pago en linea') || desc.includes('en línea')) return 'Pago en línea'
-    
-    return 'Pendiente'
+    const hasPayment = Number(inv.paid_amount || 0) > 0
+    if (!hasPayment) return 'Pendiente'
+    return formatPaymentMethod(inv.payment_method) || 'No especificado'
 }
 
 
@@ -67,6 +69,7 @@ export default function BillingPage() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
     const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
     const [editForm, setEditForm] = useState<Partial<Invoice>>({})
+    const [editPaymentMethod, setEditPaymentMethod] = useState('')
     const [saving, setSaving] = useState(false)
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -110,6 +113,23 @@ export default function BillingPage() {
             if (isDemo && data.length === 0) {
                 data = await financeService.getGlobalInvoices('demo-org-id')
             }
+
+            // Adjunta el método y folio del último pago real registrado en
+            // resident_invoice_payments a cada recibo, en vez de dejarlo en null
+            // (que antes se rellenaba adivinando texto en el concepto).
+            const realIds = data.map(inv => inv.id).filter(id => !id.startsWith('demo-'))
+            if (realIds.length > 0) {
+                const payments = await financeService.getPaymentsByInvoiceIds(realIds)
+                const lastPaymentByInvoice = new Map<string, typeof payments[number]>()
+                payments.forEach(p => lastPaymentByInvoice.set(p.invoice_id, p))
+                data = data.map(inv => {
+                    const lastPayment = lastPaymentByInvoice.get(inv.id)
+                    return lastPayment
+                        ? { ...inv, payment_method: lastPayment.payment_method, payment_folio: lastPayment.folio }
+                        : inv
+                })
+            }
+
             setInvoices(data)
         } catch (error) {
             console.error(error)
@@ -131,12 +151,23 @@ export default function BillingPage() {
         setInvoiceToDelete(null)
     }
 
+    const invoiceToDeleteObj = invoices.find(inv => inv.id === invoiceToDelete)
+    // Un recibo que ya tiene pagos registrados nunca se borra: se cancela para
+    // conservar su historial de pagos ante aclaraciones del residente o del
+    // administrador. Solo se permite el borrado real cuando no tiene pagos.
+    const willCancelInsteadOfDelete = Number(invoiceToDeleteObj?.paid_amount || 0) > 0
+
     const executeDelete = async () => {
         if (!invoiceToDelete) return
         setDeleting(true)
         try {
-            await financeService.delete(invoiceToDelete)
-            setInvoices(invoices.filter(inv => inv.id !== invoiceToDelete))
+            if (willCancelInsteadOfDelete) {
+                await financeService.update(invoiceToDelete, { status: 'cancelled' })
+                setInvoices(invoices.map(inv => inv.id === invoiceToDelete ? { ...inv, status: 'cancelled' } : inv))
+            } else {
+                await financeService.delete(invoiceToDelete)
+                setInvoices(invoices.filter(inv => inv.id !== invoiceToDelete))
+            }
             cancelDelete()
         } catch (error: any) {
             alert(error.message || 'Error al eliminar')
@@ -162,7 +193,7 @@ export default function BillingPage() {
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.setAttribute('download', `Facturas_${new Date().toISOString().split('T')[0]}.csv`)
+        link.setAttribute('download', `Recibos_${new Date().toISOString().split('T')[0]}.csv`)
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -171,7 +202,7 @@ export default function BillingPage() {
     const handleExportListPDF = () => {
         const doc = new jsPDF()
         doc.setFontSize(16)
-        doc.text('Historial de Facturación', 14, 20)
+        doc.text('Historial de Recibos', 14, 20)
         
         const tableData = filteredInvoices.map(inv => [
             inv.folio || 'N/A',
@@ -193,7 +224,7 @@ export default function BillingPage() {
             styles: { fontSize: 8 }
         })
 
-        doc.save(`Facturas_${new Date().toISOString().split('T')[0]}.pdf`)
+        doc.save(`Recibos_${new Date().toISOString().split('T')[0]}.pdf`)
     }
 
     const handleDownloadPDF = async (inv: Invoice) => {
@@ -267,19 +298,19 @@ export default function BillingPage() {
         doc.setTextColor(100, 100, 100)
         doc.text(inv.condominium_address || 'Dirección no registrada', 14, 30)
 
-        // Título "FACTURA" alineado a la derecha
+        // Título "RECIBO" alineado a la derecha
         doc.setFontSize(24)
         doc.setTextColor(79, 70, 229) // Indigo
-        doc.text('FACTURA', 196, 22, { align: 'right' })
+        doc.text('RECIBO', 196, 22, { align: 'right' })
 
         doc.setFontSize(12)
         doc.setTextColor(100, 100, 100)
-        doc.text(`#${inv.folio}`, 196, 30, { align: 'right' })
+        doc.text(`#${(inv as any).payment_folio || inv.folio}`, 196, 30, { align: 'right' })
 
         // Cuerpo: Datos del residente
         doc.setFontSize(10)
         doc.setTextColor(100, 100, 100)
-        doc.text('FACTURAR A:', 14, 50)
+        doc.text('A NOMBRE DE:', 14, 50)
         
         doc.setFontSize(12)
         doc.setTextColor(0, 0, 0)
@@ -354,6 +385,7 @@ export default function BillingPage() {
                 description: inv.description,
                 status: inv.status
             })
+            setEditPaymentMethod('')
             setIsEditModalOpen(true)
         })
     }
@@ -362,14 +394,34 @@ export default function BillingPage() {
         setIsEditModalOpen(false)
         setEditingInvoice(null)
         setEditForm({})
+        setEditPaymentMethod('')
     }
 
     const saveEdit = async () => {
         if (!editingInvoice) return
         setSaving(true)
         try {
-            const updated = await financeService.update(editingInvoice.id, editForm)
-            setInvoices(invoices.map(inv => inv.id === updated.id ? { ...inv, ...editForm } : inv))
+            const isMarkingAsPaidNow = editForm.status === 'paid' && editingInvoice.status !== 'paid'
+            // Marcar como "Pagado" nunca edita el estado directamente: siempre pasa
+            // por registerPayment para que genere su propio recibo de pago (folio,
+            // método y fecha) en resident_invoice_payments, igual que "Registrar
+            // Pago" en la página del residente. Así ningún pago se pierde del
+            // historial usado para aclaraciones.
+            if (isMarkingAsPaidNow) {
+                const { status, ...fieldEdits } = editForm
+                const updated = await financeService.update(editingInvoice.id, fieldEdits)
+                const amountToPay = Number(updated.balance_due) > 0 ? Number(updated.balance_due) : Number(updated.amount)
+                if (amountToPay > 0) {
+                    await financeService.registerPayment(editingInvoice.condominium_id, {
+                        invoiceId: editingInvoice.id,
+                        amount: amountToPay,
+                        paymentMethod: editPaymentMethod || undefined,
+                    })
+                }
+            } else {
+                await financeService.update(editingInvoice.id, editForm)
+            }
+            await fetchGlobalInvoices()
             closeEditModal()
         } catch (error: any) {
             alert(error.message || 'Error al guardar')
@@ -398,8 +450,8 @@ export default function BillingPage() {
                     <ArrowLeft size={20} />
                 </Link>
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-white">Historial de Facturación</h1>
-                    <p className="text-zinc-400">Registro global de todas las facturas emitidas.</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-white">Historial de Recibos</h1>
+                    <p className="text-zinc-400">Registro global de todos los recibos emitidos.</p>
                 </div>
             </div>
 
@@ -653,7 +705,7 @@ export default function BillingPage() {
                                 ) : (
                                     <tr>
                                         <td colSpan={11} className="px-6 py-12 text-center text-zinc-500">
-                                            No se encontraron facturas.
+                                            No se encontraron recibos.
                                         </td>
                                     </tr>
                                 )}
@@ -663,38 +715,38 @@ export default function BillingPage() {
                 </div>
             </Card>
 
-            <Modal isOpen={isEditModalOpen} onClose={closeEditModal} title="Editar Factura">
+            <Modal isOpen={isEditModalOpen} onClose={closeEditModal} title="Editar Recibo">
                 <div className="space-y-4">
                     <div>
                         <Label className="text-zinc-400">Concepto</Label>
-                        <Input 
-                            value={editForm.description || ''} 
-                            onChange={e => setEditForm({...editForm, description: e.target.value})} 
-                            className="bg-zinc-900 border-zinc-800 text-white mt-1" 
+                        <Input
+                            value={editForm.description || ''}
+                            onChange={e => setEditForm({...editForm, description: e.target.value})}
+                            className="bg-zinc-900 border-zinc-800 text-white mt-1"
                         />
                     </div>
                     <div>
                         <Label className="text-zinc-400">Monto</Label>
-                        <Input 
-                            type="number" 
-                            value={editForm.amount || 0} 
-                            onChange={e => setEditForm({...editForm, amount: Number(e.target.value)})} 
-                            className="bg-zinc-900 border-zinc-800 text-white mt-1" 
+                        <Input
+                            type="number"
+                            value={editForm.amount || 0}
+                            onChange={e => setEditForm({...editForm, amount: Number(e.target.value)})}
+                            className="bg-zinc-900 border-zinc-800 text-white mt-1"
                         />
                     </div>
                     <div>
                         <Label className="text-zinc-400">Fecha de Vencimiento</Label>
-                        <Input 
-                            type="date" 
-                            value={editForm.due_date ? editForm.due_date.substring(0, 10) : ''} 
-                            onChange={e => setEditForm({...editForm, due_date: e.target.value})} 
-                            className="bg-zinc-900 border-zinc-800 text-white mt-1" 
+                        <Input
+                            type="date"
+                            value={editForm.due_date ? editForm.due_date.substring(0, 10) : ''}
+                            onChange={e => setEditForm({...editForm, due_date: e.target.value})}
+                            className="bg-zinc-900 border-zinc-800 text-white mt-1"
                         />
                     </div>
                     <div>
                         <Label className="text-zinc-400">Estado</Label>
-                        <select 
-                            value={editForm.status || 'pending'} 
+                        <select
+                            value={editForm.status || 'pending'}
                             onChange={e => setEditForm({...editForm, status: e.target.value as any})}
                             className="w-full h-10 mt-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
                         >
@@ -704,6 +756,22 @@ export default function BillingPage() {
                             <option value="cancelled">Cancelado</option>
                         </select>
                     </div>
+                    {editForm.status === 'paid' && editingInvoice?.status !== 'paid' && (
+                        <div>
+                            <Label className="text-zinc-400">Método de Pago</Label>
+                            <select
+                                value={editPaymentMethod}
+                                onChange={e => setEditPaymentMethod(e.target.value)}
+                                className="w-full h-10 mt-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-white focus:border-indigo-500"
+                            >
+                                <option value="">Sin especificar</option>
+                                <option value="Efectivo">Efectivo</option>
+                                <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                                <option value="Pago en Línea">Pago en Línea</option>
+                            </select>
+                            <p className="text-xs text-zinc-500 mt-1">Se generará un recibo de pago con folio propio.</p>
+                        </div>
+                    )}
                     <div className="flex justify-end gap-3 mt-6">
                         <Button variant="ghost" onClick={closeEditModal} className="text-zinc-400 hover:text-white">Cancelar</Button>
                         <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={saveEdit} disabled={saving}>
@@ -713,16 +781,21 @@ export default function BillingPage() {
                 </div>
             </Modal>
 
-            <Modal isOpen={isDeleteModalOpen} onClose={cancelDelete} title="Eliminar Factura">
+            <Modal isOpen={isDeleteModalOpen} onClose={cancelDelete} title={willCancelInsteadOfDelete ? 'Cancelar Recibo' : 'Eliminar Recibo'}>
                 <div className="space-y-4">
                     <div className="flex flex-col items-center text-center space-y-3 py-4">
                         <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-2">
                             <Trash2 className="w-6 h-6 text-red-500" />
                         </div>
-                        <h3 className="text-lg font-medium text-white">¿Eliminar esta factura?</h3>
+                        <h3 className="text-lg font-medium text-white">
+                            {willCancelInsteadOfDelete ? '¿Cancelar este recibo?' : '¿Eliminar este recibo?'}
+                        </h3>
                         <p className="text-sm text-zinc-400 max-w-sm">
-                            Esta acción eliminará permanentemente la factura <span className="text-white font-medium">{invoices.find(i => i.id === invoiceToDelete)?.folio}</span>. 
-                            Los registros financieros y reportes vinculados serán actualizados. <br/><span className="text-red-400">Esta acción no se puede deshacer.</span>
+                            {willCancelInsteadOfDelete ? (
+                                <>Este recibo ya tiene pagos registrados, por lo que no se puede borrar. Se marcará como <span className="text-white font-medium">Cancelado</span> y conservará su historial de pagos para aclaraciones futuras con el residente o el administrador.</>
+                            ) : (
+                                <>Esta acción eliminará permanentemente el recibo <span className="text-white font-medium">{invoiceToDeleteObj?.folio}</span>. Los registros financieros y reportes vinculados serán actualizados. <br/><span className="text-red-400">Esta acción no se puede deshacer.</span></>
+                            )}
                         </p>
                     </div>
                     <div className="flex justify-end gap-3 mt-6 border-t border-zinc-800/50 pt-4">
@@ -730,7 +803,7 @@ export default function BillingPage() {
                             Cancelar
                         </Button>
                         <Button variant="destructive" className="bg-rose-600 hover:bg-rose-700 text-white" onClick={executeDelete} disabled={deleting}>
-                            {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+                            {deleting ? 'Guardando...' : (willCancelInsteadOfDelete ? 'Sí, cancelar recibo' : 'Sí, eliminar')}
                         </Button>
                     </div>
                 </div>

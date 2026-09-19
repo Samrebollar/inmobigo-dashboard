@@ -470,87 +470,132 @@ export function FinanceTab() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-5">
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
-                            <>
-                                <div className="text-2xl font-bold text-white">
-                                    ${metrics.facturado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
-                                <div className="flex items-center gap-1 text-xs text-emerald-500 mt-1">
-                                    <ArrowUpRight className="h-3 w-3" /> Este mes
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Recaudado</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
-                            <>
-                                <div className="text-2xl font-bold text-emerald-400">
-                                    ${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-1">
-                                    Pagada ({metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}%)
-                                </p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Pendiente</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
-                            <>
-                                <div className="text-2xl font-bold text-amber-400">
-                                    ${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-1">En tiempo para pago</p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Morosidad</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
-                            <>
-                                <div className="text-2xl font-bold text-rose-400">
-                                    ${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
-                                <div className="flex items-center gap-1 text-xs text-rose-500 mt-1">
-                                    <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso'}
-                                </div>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Saldo Inicial (Arrastre)</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
-                            <>
-                                <div className="text-2xl font-bold text-violet-400">
-                                    ${metrics.saldoInicialPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
-                                <p className="text-xs text-zinc-500 mt-1">Deuda previa, no es cuota del mes</p>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.02, duration: 0.4, ease: 'easeOut' }}
+                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
+                    className="relative group"
+                >
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
+                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-indigo-900/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
+                                <>
+                                    <div className="text-2xl font-bold text-white">
+                                        ${metrics.facturado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-xs text-emerald-500 mt-1">
+                                        <ArrowUpRight className="h-3 w-3" /> Este mes
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1, duration: 0.4, ease: 'easeOut' }}
+                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
+                    className="relative group"
+                >
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
+                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-emerald-900/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-zinc-400">Recaudado</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
+                                <>
+                                    <div className="text-2xl font-bold text-emerald-400">
+                                        ${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 mt-1">
+                                        Pagada ({metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}%)
+                                    </p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.18, duration: 0.4, ease: 'easeOut' }}
+                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
+                    className="relative group"
+                >
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
+                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-amber-900/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-zinc-400">Pendiente</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
+                                <>
+                                    <div className="text-2xl font-bold text-amber-400">
+                                        ${metrics.porCobrar.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 mt-1">En tiempo para pago</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.26, duration: 0.4, ease: 'easeOut' }}
+                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
+                    className="relative group"
+                >
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-500 to-pink-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
+                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-rose-900/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-zinc-400">Morosidad</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
+                                <>
+                                    <div className="text-2xl font-bold text-rose-400">
+                                        ${metrics.vencido.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-xs text-rose-500 mt-1">
+                                        <ArrowDownRight className="h-3 w-3" /> {metrics.morosos} {metrics.morosos === 1 ? 'residente en atraso' : 'residentes en atraso'}
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.34, duration: 0.4, ease: 'easeOut' }}
+                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
+                    className="relative group"
+                >
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-500 to-purple-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
+                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-violet-900/30">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-zinc-400">Saldo Inicial (Arrastre)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
+                                <>
+                                    <div className="text-2xl font-bold text-violet-400">
+                                        ${metrics.saldoInicialPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 mt-1">Deuda previa, no es cuota del mes</p>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
             </div>
 
             {/* Invoices Table */}

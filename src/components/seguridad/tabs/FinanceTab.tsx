@@ -469,20 +469,19 @@ export function FinanceTab() {
                 </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-5 items-stretch">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.02, duration: 0.4, ease: 'easeOut' }}
-                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                    className="relative group"
+                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                    className="h-full"
                 >
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
-                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-indigo-900/30">
+                    <Card className="h-full flex flex-col bg-zinc-900 border-zinc-800 hover:border-indigo-500/50 transition-colors">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex-1 flex flex-col justify-center">
                             {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
                                 <>
                                     <div className="text-2xl font-bold text-white">
@@ -500,15 +499,14 @@ export function FinanceTab() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1, duration: 0.4, ease: 'easeOut' }}
-                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                    className="relative group"
+                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                    className="h-full"
                 >
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
-                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-emerald-900/30">
+                    <Card className="h-full flex flex-col bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-400">Recaudado</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex-1 flex flex-col justify-center">
                             {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
                                 <>
                                     <div className="text-2xl font-bold text-emerald-400">
@@ -526,15 +524,14 @@ export function FinanceTab() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.18, duration: 0.4, ease: 'easeOut' }}
-                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                    className="relative group"
+                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                    className="h-full"
                 >
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
-                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-amber-900/30">
+                    <Card className="h-full flex flex-col bg-zinc-900 border-zinc-800 hover:border-amber-500/50 transition-colors">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-400">Pendiente</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex-1 flex flex-col justify-center">
                             {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
                                 <>
                                     <div className="text-2xl font-bold text-amber-400">
@@ -550,15 +547,14 @@ export function FinanceTab() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.26, duration: 0.4, ease: 'easeOut' }}
-                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                    className="relative group"
+                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                    className="h-full"
                 >
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-rose-500 to-pink-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
-                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-rose-900/30">
+                    <Card className="h-full flex flex-col bg-zinc-900 border-zinc-800 hover:border-rose-500/50 transition-colors">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-400">Morosidad</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex-1 flex flex-col justify-center">
                             {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
                                 <>
                                     <div className="text-2xl font-bold text-rose-400">
@@ -576,15 +572,14 @@ export function FinanceTab() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.34, duration: 0.4, ease: 'easeOut' }}
-                    whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                    className="relative group"
+                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                    className="h-full"
                 >
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-500 to-purple-500 rounded-2xl opacity-0 group-hover:opacity-60 blur transition-opacity duration-300" />
-                    <Card className="relative bg-zinc-900 border-zinc-800 group-hover:border-transparent transition-colors overflow-hidden shadow-lg group-hover:shadow-violet-900/30">
+                    <Card className="h-full flex flex-col bg-zinc-900 border-zinc-800 hover:border-violet-500/50 transition-colors">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium text-zinc-400">Saldo Inicial (Arrastre)</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex-1 flex flex-col justify-center">
                             {loading ? <Skeleton className="h-8 w-full bg-zinc-800" /> : (
                                 <>
                                     <div className="text-2xl font-bold text-violet-400">

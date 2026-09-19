@@ -239,7 +239,7 @@ export const financeService = {
         const supabase = createClient()
 
         if (!invoice.resident_id) {
-            throw new Error('resident_id es obligatorio para crear una factura')
+            throw new Error('resident_id es obligatorio para crear un recibo')
         }
 
         const { data, error } = await supabase
@@ -262,7 +262,7 @@ export const financeService = {
 
         if (error) {
             console.error('[financeService.create]', error)
-            throw new Error('Error al crear la factura')
+            throw new Error('Error al crear el recibo')
         }
 
         // Sincronizar a la tabla legacy invoices
@@ -283,7 +283,7 @@ export const financeService = {
     // ── UPDATE INVOICE ───────────────────────────────────────────────────────
     async update(id: string, updates: Partial<ResidentInvoice>): Promise<ResidentInvoice> {
         if (id.startsWith('demo-')) {
-            throw new Error('No se pueden editar facturas de demostración.')
+            throw new Error('No se pueden editar recibos de demostración.')
         }
 
         const supabase = createClient()
@@ -299,7 +299,7 @@ export const financeService = {
 
         if (error) {
             console.error('[financeService.update]', error)
-            throw new Error('Error al actualizar la factura')
+            throw new Error('Error al actualizar el recibo')
         }
 
         // Sincronizar a la tabla legacy invoices
@@ -323,7 +323,7 @@ export const financeService = {
     // ── DELETE INVOICE ───────────────────────────────────────────────────────
     async delete(id: string): Promise<void> {
         if (id.startsWith('demo-')) {
-            throw new Error('No se pueden eliminar facturas de demostración.')
+            throw new Error('No se pueden eliminar recibos de demostración.')
         }
 
         const supabase = createClient()
@@ -334,7 +334,7 @@ export const financeService = {
 
         if (error) {
             console.error('[financeService.delete]', error)
-            throw new Error('Error al eliminar la factura')
+            throw new Error('Error al eliminar el recibo')
         }
 
         // Sincronizar a la tabla legacy invoices (eliminar de la tabla legacy)
@@ -351,7 +351,7 @@ export const financeService = {
     // ── MARK AS PAID ─────────────────────────────────────────────────────────
     async markAsPaid(id: string, paidAmount?: number): Promise<ResidentInvoice> {
         if (id.startsWith('demo-')) {
-            throw new Error('No se pueden editar facturas de demostración.')
+            throw new Error('No se pueden editar recibos de demostración.')
         }
         const supabase = createClient()
         const { data, error } = await supabase

@@ -175,11 +175,15 @@ export default function ResidentMovementsPage() {
     }
 
     const formatPaymentMethod = (method?: string | null) => {
-        if (!method) return 'Pago en línea'
+        // Sin dato real de método no se debe inventar (ej. asumir "Pago en línea"):
+        // para aclaraciones con residentes hay que poder distinguir "no se registró"
+        // de "sí se registró y fue en línea".
+        if (!method) return 'No especificado'
         const m = method.toLowerCase()
         if (m.includes('efectivo')) return 'Efectivo'
         if (m.includes('transferencia')) return 'Transferencia Bancaria'
-        return 'Pago en línea'
+        if (m.includes('línea') || m.includes('linea') || m.includes('mercado')) return 'Pago en Línea'
+        return method
     }
 
     const exportToPDF = () => {

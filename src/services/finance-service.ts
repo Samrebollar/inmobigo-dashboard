@@ -944,15 +944,19 @@ export const financeService = {
             selectedYear: prevYear
         })
 
+        // Deuda Total = solo lo pendiente dentro del plazo (días 1-10 desde el corte).
+        // Morosidad = lo que ya pasó el día 10 y se considera en atraso real.
+        // Antes ambas tarjetas sumaban vencido + porCobrar, mostrando el mismo monto
+        // duplicado en las dos tarjetas del dashboard.
         const stats = {
             ingresosTotales: condoFinancials.recaudado,
             ingresosTotalesAnterior: prevCondoFinancials.recaudado,
-            deudaTotal: condoFinancials.vencido + condoFinancials.porCobrar,
-            tasaCobranza: condoFinancials.totalPeriodo > 0 
-                ? (condoFinancials.recaudado / condoFinancials.totalPeriodo) * 100 
+            deudaTotal: condoFinancials.porCobrar,
+            tasaCobranza: condoFinancials.totalPeriodo > 0
+                ? (condoFinancials.recaudado / condoFinancials.totalPeriodo) * 100
                 : 0,
             morosidadCount: condoFinancials.morososCount,
-            morosidadMonto: condoFinancials.vencido + condoFinancials.porCobrar,
+            morosidadMonto: condoFinancials.vencido,
             incomeSummary: [] as any[],
             recentActivity: [] as any[]
         }

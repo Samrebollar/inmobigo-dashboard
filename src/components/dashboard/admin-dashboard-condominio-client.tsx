@@ -228,7 +228,7 @@ export default function AdminDashboardCondominioClient({
                                             {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(totalDeuda || 0)}
                                         </div>
                                         <p className="text-xs text-amber-500 mt-1">
-                                            Saldo pendiente total (V5)
+                                            Pendiente en plazo (días 1-10)
                                         </p>
                                     </>
                                 )}

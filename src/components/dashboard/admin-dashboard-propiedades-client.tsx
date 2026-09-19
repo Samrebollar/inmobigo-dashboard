@@ -220,7 +220,7 @@ export default function AdminDashboardPropiedadesClient({
                                             {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(totalDeuda || 0)}
                                         </div>
                                         <p className="text-xs text-amber-500 mt-1">
-                                            Monto vencido total
+                                            Pendiente en plazo (días 1-10)
                                         </p>
                                     </>
                                 )}

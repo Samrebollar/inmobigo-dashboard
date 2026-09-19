@@ -40,7 +40,7 @@ interface VisitorPass {
     created_at: string
 }
 
-export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, initialPasses?: VisitorPass[] }) {
+export function VisitorPassesAdmin({ admin, initialPasses = [], onDeleted }: { admin: any, initialPasses?: VisitorPass[], onDeleted?: (id: string) => void }) {
     const supabase = createClient()
     const [passes, setPasses] = useState<VisitorPass[]>(initialPasses)
     const [loading, setLoading] = useState(initialPasses.length === 0)
@@ -209,8 +209,12 @@ export function VisitorPassesAdmin({ admin, initialPasses = [] }: { admin: any, 
             if (!result.success) throw new Error(result.error)
             
             toast.success('Pase eliminado definitivamente de la base de datos')
+            setPasses(prev => prev.filter(p => p.id !== passToDelete.id))
+            // Avisa al padre para que también quite el registro de su propio estado:
+            // si no, el siguiente re-render del padre vuelve a mandar la lista vieja
+            // (todavía con este pase) vía initialPasses y lo resucita en pantalla.
+            onDeleted?.(passToDelete.id)
             setPassToDelete(null)
-            fetchPasses(admin.organization_id)
         } catch (error: any) {
             console.error('Delete Error:', error)
             toast.error(`Error al eliminar: ${error.message || 'Sin permiso'}`)

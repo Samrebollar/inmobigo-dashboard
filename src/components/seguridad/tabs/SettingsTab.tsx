@@ -93,7 +93,7 @@ export function SettingsTab() {
             toast.success('Reglamento subido correctamente.')
         } catch (error: any) {
             console.error('Error uploading reglamento:', error)
-            toast.error('No se pudo subir el reglamento. Verifica que el bucket "condominium_documents" exista en Supabase.')
+            toast.error(`No se pudo subir el reglamento: ${error?.message || 'error desconocido'}`)
         } finally {
             setUploadingReglamento(false)
             e.target.value = ''

@@ -212,6 +212,21 @@ export const unitsService = {
             return
         }
         const supabase = createClient()
+
+        // No hay llave foránea entre residents.unit_id y units.id, así que borrar
+        // sin validar dejaría al residente apuntando a una unidad inexistente
+        // (rompe el número de unidad y el historial de facturación). Se bloquea
+        // el borrado si todavía hay algún residente asignado.
+        const { data: assignedResidents } = await supabase
+            .from('residents')
+            .select('first_name, last_name')
+            .eq('unit_id', id)
+
+        if (assignedResidents && assignedResidents.length > 0) {
+            const names = assignedResidents.map(r => `${r.first_name} ${r.last_name}`).join(', ')
+            throw new Error(`No se puede eliminar: esta unidad tiene residente(s) asignado(s) (${names}). Reasigna o elimina primero a ese residente.`)
+        }
+
         const { error } = await supabase
             .from('units')
             .delete()
@@ -227,6 +242,17 @@ export const unitsService = {
             return
         }
         const supabase = createClient()
+
+        const { count } = await supabase
+            .from('residents')
+            .select('id', { count: 'exact', head: true })
+            .eq('condominium_id', condominiumId)
+            .not('unit_id', 'is', null)
+
+        if (count && count > 0) {
+            throw new Error(`No se puede eliminar: hay ${count} residente(s) todavía asignado(s) a unidades de este condominio. Reasigna o elimina primero a esos residentes.`)
+        }
+
         const { error } = await supabase
             .from('units')
             .delete()

@@ -7,7 +7,10 @@ import { createClient } from '@/utils/supabase/server'
  * POST /api/cron/generate-monthly-invoices
  *
  * Genera facturas de cuota de mantenimiento para residentes activos.
- * Se ejecuta el día 1 de cada mes vía Vercel Cron (todos los condominios).
+ * Se ejecuta TODOS LOS DÍAS vía Vercel Cron (todos los condominios), pero cada
+ * unidad solo se factura el día del mes que indica su propio "Día de cobro"
+ * (units.billing_day; por defecto día 1 si no está configurado). Así, dos
+ * unidades del mismo condominio pueden facturarse en días distintos del mes.
  *
  * También puede llamarse manualmente desde la UI del admin — en ese caso
  * SIEMPRE debe traer un condominiumId y quien llama debe ser un admin
@@ -101,11 +104,9 @@ async function handleRequest(request: Request) {
         const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
         const mm = String(month + 1).padStart(2, '0')
 
-        const firstDayStr = `${year}-${mm}-01`          // 01/MM/YYYY — fecha de emisión
+        const firstDayStr = `${year}-${mm}-01`          // 01/MM/YYYY — inicio del período
         const lastDayStr  = `${year}-${mm}-${String(lastDayOfMonth).padStart(2, '0')}`
-        // due_date = 1er día del mes de facturación (identifica el período de cobro)
-        const dueDateStr  = firstDayStr
-
+        const todayDayOfMonth = now.getDate()
 
         const monthNames = [
             'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -127,7 +128,8 @@ async function handleRequest(request: Request) {
                     unit_number,
                     monto_mensual,
                     facturacion_activa,
-                    billing_status
+                    billing_status,
+                    billing_day
                 )
             `)
             .eq('status', 'active')
@@ -225,11 +227,14 @@ async function handleRequest(request: Request) {
             }
 
             // Las políticas de tipo_cobro/generar_cobros_automaticos (Propiedades >
-            // Configuración) solo aplican a la corrida automática de Vercel Cron.
-            // Una corrida manual disparada por un admin para un condominio puntual
-            // es una orden explícita y siempre debe generar la factura, sin importar
-            // la frecuencia configurada — es precisamente el "modo manual" que se
-            // ofrece cuando "Generar cobros automáticos" está apagado.
+            // Configuración) y el "Día de cobro" por unidad solo aplican a la
+            // corrida automática de Vercel Cron. Una corrida manual disparada por
+            // un admin para un condominio puntual es una orden explícita y siempre
+            // debe generar la factura, sin importar la frecuencia/día configurado —
+            // es precisamente el "modo manual" que se ofrece cuando "Generar cobros
+            // automáticos" está apagado, o cuando ya pasó el día de cobro de la unidad.
+            const billingDay = Math.min(Number(unit.billing_day) || 1, lastDayOfMonth)
+
             if (isCronCall) {
                 if (!isAutoGenerationEnabledForCondo(resident.condominium_id)) {
                     results.skipped++
@@ -239,7 +244,13 @@ async function handleRequest(request: Request) {
                     results.skipped++
                     continue
                 }
+                if (todayDayOfMonth !== billingDay) {
+                    results.skipped++
+                    continue
+                }
             }
+
+            const dueDateStr = `${year}-${mm}-${String(billingDay).padStart(2, '0')}`
 
             const fee = Number(unit.monto_mensual || 0)
             if (fee <= 0) {
@@ -295,7 +306,6 @@ async function handleRequest(request: Request) {
         return NextResponse.json({
             message: `Facturas generadas para ${monthLabel}`,
             period: monthLabel,
-            due_date: dueDateStr,
             ...results,
             timestamp: new Date().toISOString(),
         })

@@ -162,8 +162,8 @@ export async function saveAmenityAction(amenityData: any) {
             throw error
         }
 
-        revalidatePath('/dashboard/configuracion')
-        
+        revalidatePath('/dashboard/propiedades', 'layout')
+
         return { success: true, data }
     } catch (error: any) {
         console.error('Error in saveAmenityAction:', error)
@@ -179,19 +179,28 @@ export async function saveAmenityAction(amenityData: any) {
 /**
  * Obtiene todas las amenidades de una organización (Bypass RLS)
  * Si la organización no tiene amenidades, las crea automáticamente (Seed)
+ *
+ * Si se proporciona condominiumId, además de las amenidades globales de la
+ * organización (condominium_id NULL, catálogo histórico) incluye las
+ * amenidades propias de ESE condominio.
  */
-export async function getAmenitiesAction(organizationId: string) {
+export async function getAmenitiesAction(organizationId: string, condominiumId?: string) {
     if (!organizationId) return { success: false, error: 'ID de organización no proporcionado' }
 
     try {
         const adminClient = createAdminClient()
-        
+
         // 1. Intentar obtener las existentes
-        let { data, error } = await adminClient
+        let query = adminClient
             .from('amenities')
             .select('*')
             .eq('organization_id', organizationId)
-            .order('name')
+
+        if (condominiumId) {
+            query = query.or(`condominium_id.is.null,condominium_id.eq.${condominiumId}`)
+        }
+
+        let { data, error } = await query.order('name')
 
         if (error) throw error
 
@@ -223,6 +232,54 @@ export async function getAmenitiesAction(organizationId: string) {
         return { success: false, error: error.message || 'Error al obtener amenidades' }
     }
 }
+
+/**
+ * Obtiene las amenidades propias de UN condominio/propiedad (Bypass RLS)
+ * Usado por Propiedades → Configuración, donde cada propiedad administra
+ * sus propios espacios según su operación. Si el condominio no tiene
+ * amenidades propias, siembra 4 por defecto.
+ */
+export async function getAmenitiesByCondominiumAction(condominiumId: string, organizationId: string) {
+    if (!condominiumId) return { success: false, error: 'ID de condominio no proporcionado' }
+
+    try {
+        const adminClient = createAdminClient()
+
+        let { data, error } = await adminClient
+            .from('amenities')
+            .select('*')
+            .eq('condominium_id', condominiumId)
+            .order('name')
+
+        if (error) throw error
+
+        if (!data || data.length === 0) {
+            const defaultAmenities = [
+                { name: 'Alberca', icon: 'Waves', description: 'Alberca templada con vista al jardín.', capacity: 20, base_price: 0, deposit_amount: 0, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-blue-600 to-sky-500' },
+                { name: 'Área de Asadores', icon: 'Flame', description: 'Espacio parrillero totalmente equipado.', capacity: 12, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-orange-600 to-amber-500' },
+                { name: 'Gimnasio Pro', icon: 'Dumbbell', description: 'Equipamiento de alto rendimiento.', capacity: 15, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-emerald-600 to-teal-500' },
+                { name: 'Salón de Fiestas', icon: 'PartyPopper', description: 'Salón premium para eventos sociales.', capacity: 50, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-indigo-600 to-purple-500' }
+            ]
+
+            const { data: seeded, error: seedError } = await adminClient
+                .from('amenities')
+                .insert(defaultAmenities)
+                .select()
+
+            if (seedError) {
+                console.error('Error seeding condominium amenities:', seedError)
+            } else {
+                data = seeded
+            }
+        }
+
+        return { success: true, data: data || [] }
+    } catch (error: any) {
+        console.error('Error in getAmenitiesByCondominiumAction:', error)
+        return { success: false, error: error.message || 'Error al obtener amenidades del condominio' }
+    }
+}
+
 /**
  * Borra una amenidad (Bypass RLS)
  */
@@ -238,7 +295,7 @@ export async function deleteAmenityAction(id: string) {
 
         if (error) throw error
 
-        revalidatePath('/dashboard/configuracion')
+        revalidatePath('/dashboard/propiedades', 'layout')
         revalidatePath('/dashboard/amenidades')
 
         return { success: true }

@@ -86,171 +86,82 @@ export function AccountingClient({
     const exportMenuRef = useRef<HTMLDivElement>(null)
 
     // IA ANALYSIS LOGIC & FILTERED METRICS
-    const filteredRecordsForMetrics = records.filter((r: any) => 
+    const filteredRecordsForMetrics = records.filter((r: any) =>
         selectedMonth === 'all' || (r.date && r.date.split('-')[1] === selectedMonth)
     )
 
+    // Reconciliación de Total del Periodo / Cobrado / Pendiente / Morosidad:
+    // se calculan SOLO sobre cuotas de mantenimiento (invoice_type
+    // 'maintenance') y usando balance_due para reflejar abonos parciales —
+    // la misma regla que ya usan Gestión de Cobranza y el dashboard de
+    // inicio (calculateCondoMonthlyFinancials). Antes se reconstruía un
+    // "gap" contra una cuota mensual plana proyectada desde las unidades,
+    // sin filtrar por invoice_type ni considerar balance_due, por lo que:
+    //   (a) un abono parcial no se contaba como cobrado en absoluto, y
+    //   (b) cualquier ingreso ajeno a la cuota mensual (saldo inicial,
+    //       ajustes manuales) inflaba "Cobrado" sin inflar igual "Total del
+    //       Periodo", haciendo que Cobrado + Pendiente + Morosidad no
+    //       cuadrara con Total del Periodo.
+    const now = new Date()
+    const today = now.getDate()
+    const currentMonthNum = now.getMonth() + 1
+    const currentYear = now.getFullYear()
+
+    const isMaintenanceInvoice = (r: any) => r.type === 'ingreso' && r.is_invoice && r.invoice_type === 'maintenance'
+
+    const inSelectedPeriod = (r: any) => {
+        const dateStr = r.due_date || r.date
+        if (!dateStr) return false
+        const d = new Date(dateStr)
+        if (isNaN(d.getTime())) return false
+        if (selectedMonth === 'all') {
+            // No proyectar periodos futuros ya generados por adelantado
+            return d.getFullYear() < currentYear || (d.getFullYear() === currentYear && d.getMonth() + 1 <= currentMonthNum)
+        }
+        return String(d.getMonth() + 1).padStart(2, '0') === selectedMonth && d.getFullYear() === currentYear
+    }
+
+    const periodMaintenance = records.filter((r: any) => isMaintenanceInvoice(r) && inSelectedPeriod(r))
+
+    const totalCollected = periodMaintenance.reduce(
+        (sum: number, r: any) => sum + Math.max(0, Number(r.amount) - Number(r.balance_due ?? 0)),
+        0
+    )
+
+    const totalInvoiced = periodMaintenance.reduce((sum: number, r: any) => sum + Number(r.amount), 0)
+
+    let totalReceivable = 0
+    let totalOverdue = 0
+    periodMaintenance.forEach((r: any) => {
+        const bal = Number(r.balance_due ?? 0)
+        if (bal <= 0) return
+        const d = new Date(r.due_date || r.date)
+        const isPastPeriod = d.getFullYear() < currentYear || (d.getFullYear() === currentYear && d.getMonth() + 1 < currentMonthNum)
+        const isCurrentPeriod = d.getFullYear() === currentYear && d.getMonth() + 1 === currentMonthNum
+        const isOverduePeriod = isPastPeriod || (isCurrentPeriod && today > 10)
+        if (isOverduePeriod) totalOverdue += bal
+        else totalReceivable += bal
+    })
+
+    const totalExpenses = filteredRecordsForMetrics
+        .filter((r: any) => r.type === 'egreso')
+        .reduce((sum: number, r: any) => sum + Number(r.amount), 0)
+
+    const utilidad = totalCollected - totalExpenses
+    // Un condominio no lucrativo no causa ISR sobre las cuotas de mantenimiento
+    // que cobra para su propia operación — solo Arrendamiento/Actividad
+    // Empresarial son regímenes lucrativos sujetos a esta estimación.
+    const isBusinessRegime = !!regime && regime !== 'condominio_no_lucrativo'
+    const isrEstimado = isBusinessRegime ? Math.max(0, utilidad * 0.30) : 0
+
     const metrics = {
-        totalCollected: filteredRecordsForMetrics
-            .filter((r: any) => r.type === 'ingreso' && r.status === 'pagado')
-            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
-        totalReceivable: filteredRecordsForMetrics
-            .filter((r: any) => {
-                if (r.type !== 'ingreso' || r.status !== 'pendiente') return false
-                
-                const now = new Date()
-                const today = now.getDate()
-                const currentMonthNum = now.getMonth() + 1
-                const recordMonth = parseInt(r.date.split('-')[1])
-                const recordYear = parseInt(r.date.split('-')[0])
-                
-                // Past month → already expired, NOT pending
-                if (recordYear < now.getFullYear() || (recordYear === now.getFullYear() && recordMonth < currentMonthNum)) {
-                    return false
-                }
-                
-                // Current month → pending only if still within deadline (default day 10)
-                if (recordMonth === currentMonthNum && recordYear === now.getFullYear()) {
-                    const effectiveDeadline = r.payment_deadline ?? 10
-                    return today <= effectiveDeadline
-                }
-                
-                return true // Future months are always pending
-            })
-            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
-        totalOverdue: filteredRecordsForMetrics
-            .filter((r: any) => {
-                if (r.type !== 'ingreso' || r.status !== 'pendiente') return false
-                
-                const now = new Date()
-                const today = now.getDate()
-                const currentMonthNum = now.getMonth() + 1
-                const recordMonth = parseInt(r.date.split('-')[1])
-                const recordYear = parseInt(r.date.split('-')[0])
-                
-                // Past month → always overdue
-                if (recordYear < now.getFullYear() || (recordYear === now.getFullYear() && recordMonth < currentMonthNum)) {
-                    return true
-                }
-                
-                // Current month → overdue if past deadline (default day 10)
-                if (recordMonth === currentMonthNum && recordYear === now.getFullYear()) {
-                    const effectiveDeadline = r.payment_deadline ?? 10
-                    return today > effectiveDeadline
-                }
-                
-                return false // Future months are never overdue
-            })
-            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
-        totalInvoiced: serverMetrics.totalInvoiced || 0, // Ingreso Mensual Esperado from Units
-        totalExpenses: filteredRecordsForMetrics
-            .filter((r: any) => r.type === 'egreso')
-            .reduce((sum: number, r: any) => sum + Number(r.amount), 0),
-        utilidad: 0,
-        isrEstimado: 0
-    }
-    metrics.utilidad = metrics.totalCollected - metrics.totalExpenses
-    metrics.isrEstimado = regime ? Math.max(0, metrics.utilidad * 0.30) : 0
-
-    // Gap-based Pendiente/Morosidad for specific month filters
-    // The difference between expected collection (totalInvoiced) and
-    // what was actually collected is classified by the day-10 business rule.
-    // IMPORTANT: If there are no records for the selected month, it means the
-    // system hadn't started yet — leave everything at 0 (pre-launch period).
-    if (selectedMonth !== 'all' && metrics.totalInvoiced > 0) {
-        if (filteredRecordsForMetrics.length === 0) {
-            // No activity for this month → pre-launch period, everything is 0
-            metrics.totalOverdue = 0
-            metrics.totalReceivable = 0
-            metrics.totalInvoiced = 0
-        } else {
-            const now = new Date()
-            const today = now.getDate()
-            const currentMonthNum = now.getMonth() + 1
-            const selectedMonthNum = parseInt(selectedMonth)
-
-            const gap = Math.max(0, metrics.totalInvoiced - metrics.totalCollected)
-
-            if (selectedMonthNum < currentMonthNum) {
-                // Past month → 100% overdue regardless of day
-                metrics.totalOverdue = gap
-                metrics.totalReceivable = 0
-            } else if (selectedMonthNum === currentMonthNum) {
-                // Current month → apply day-10 rule
-                if (today > 10) {
-                    metrics.totalOverdue = gap
-                    metrics.totalReceivable = 0
-                } else {
-                    metrics.totalReceivable = gap
-                    metrics.totalOverdue = 0
-                }
-            } else {
-                // Future month → 100% pending (not yet due)
-                metrics.totalReceivable = gap
-                metrics.totalOverdue = 0
-            }
-        }
-    }
-
-    // "Todo el año" - Accumulated gap across ALL active months since system start
-    // For each unique month with records, calculate gap = (monthly fee) - (collected that month)
-    // and classify it as Morosidad or Pendiente based on the day-10 rule.
-    if (selectedMonth === 'all' && metrics.totalInvoiced > 0) {
-        const now = new Date()
-        const today = now.getDate()
-        const currentMonthNum = now.getMonth() + 1
-        const currentYear = now.getFullYear()
-
-        const monthlyExpected = metrics.totalInvoiced // single-month fee from units
-
-        // Find all unique year-months that have at least one record
-        const activeYearMonths = [...new Set<string>(
-            records
-                .filter((r: any) => r.date)
-                .map((r: any) => (r.date as string).substring(0, 7)) // 'YYYY-MM'
-        )].sort()
-
-        let annualInvoiced = 0
-        let annualOverdue = 0
-        let annualReceivable = 0
-
-        for (const yearMonth of activeYearMonths) {
-            const [yearStr, monthStr] = yearMonth.split('-')
-            const year = parseInt(yearStr)
-            const month = parseInt(monthStr)
-
-            // Skip months in the future (current year, future month)
-            if (year > currentYear || (year === currentYear && month > currentMonthNum)) continue
-
-            // What was collected for this specific month
-            const monthCollected = records
-                .filter((r: any) =>
-                    r.date &&
-                    (r.date as string).startsWith(yearMonth) &&
-                    r.type === 'ingreso' &&
-                    r.status === 'pagado'
-                )
-                .reduce((sum: number, r: any) => sum + Number(r.amount), 0)
-
-            const monthGap = Math.max(0, monthlyExpected - monthCollected)
-            annualInvoiced += monthlyExpected
-
-            if (year < currentYear || (year === currentYear && month < currentMonthNum)) {
-                // Past month → 100% overdue
-                annualOverdue += monthGap
-            } else {
-                // Current month → apply day-10 rule
-                if (today > 10) {
-                    annualOverdue += monthGap
-                } else {
-                    annualReceivable += monthGap
-                }
-            }
-        }
-
-        metrics.totalInvoiced = annualInvoiced
-        metrics.totalOverdue = annualOverdue
-        metrics.totalReceivable = annualReceivable
+        totalCollected,
+        totalReceivable,
+        totalOverdue,
+        totalInvoiced,
+        totalExpenses,
+        utilidad,
+        isrEstimado
     }
 
     const getIAState = () => {
@@ -679,4 +590,3 @@ export function AccountingClient({
         </div>
     )
 }
-

@@ -5,6 +5,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { FinancialRecord, FiscalRegime } from '@/types/accounting'
 import { revalidatePath } from 'next/cache'
 import { getReserveFundData, recordFundTransaction } from './reserve-fund-actions'
+import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
 
 export async function updateFiscalRegime(regime: FiscalRegime, condominiumId?: string | null) {
     const supabase = await createClient()
@@ -125,19 +126,31 @@ export async function getAccountingData(condominiumId: string = 'all') {
             units (unit_number)
         `)
 
-    // Fetch Expected Income from Units
-    let unitsQuery = supabase.from('units').select('monto_mensual, billing_status')
+    // Fetch full Units (para calculateCondoMonthlyFinancials: monto esperado
+    // por unidad y proyección de meses sin recibos generados)
+    let unitsQuery = supabase.from('units').select('id, condominium_id, monto_mensual, facturacion_activa, payment_deadline')
     if (condominiumId && condominiumId !== 'all') {
         unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
     } else {
         const condoIds = condominiums.map(c => c.id)
         unitsQuery = unitsQuery.in('condominium_id', condoIds)
     }
+    const { data: unitsData } = await unitsQuery
+    const units = unitsData || []
 
-    const { data: unitsForIncome } = await unitsQuery
-    const expected_monthly_income = (unitsForIncome || [])
-        .filter(u => u.billing_status !== 'suspended')
-        .reduce((sum, u) => sum + (Number(u.monto_mensual) || 0), 0)
+    // Fetch Residents (para calculateCondoMonthlyFinancials: conteo de
+    // morosos en la proyección de meses sin recibos generados)
+    let residents: any[] = []
+    if (condominiumId && condominiumId !== 'all') {
+        const { data } = await supabase.from('residents').select('id, status, condominium_id').eq('condominium_id', condominiumId)
+        residents = data || []
+    } else {
+        const condoIds = condominiums.map(c => c.id)
+        if (condoIds.length > 0) {
+            const { data } = await supabase.from('residents').select('id, status, condominium_id').in('condominium_id', condoIds)
+            residents = data || []
+        }
+    }
 
     if (condominiumId && condominiumId !== 'all') {
         billingQuery = billingQuery.eq('condominium_id', condominiumId)
@@ -155,7 +168,7 @@ export async function getAccountingData(condominiumId: string = 'all') {
 
     // 3. DISCOVERY PHASE: Fetch all accessible Manual Expenses from clean table
     let expensesQuery = supabase.from('condo_expenses').select('*, condominiums(name)')
-    
+
     if (condominiumId && condominiumId !== 'all') {
         expensesQuery = expensesQuery.eq('condominium_id', condominiumId)
     } else if (organizationId) {
@@ -171,28 +184,30 @@ export async function getAccountingData(condominiumId: string = 'all') {
 
     const normalizeStatus = (s: string) => s?.toLowerCase() || ''
 
-    // 4. Calculate Metrics
-    // Cobrado / Por cobrar se calculan solo sobre cuotas de mantenimiento
-    // (invoice_type 'maintenance') y usando balance_due, para reflejar abonos
-    // parciales correctamente. Antes se usaba el status y el monto COMPLETO
-    // de la factura: un abono parcial no se contaba como cobrado en absoluto
-    // (la factura sigue en 'pending' hasta liquidarse), y cualquier ingreso
-    // no relacionado con la cuota mensual (saldo inicial, ajustes) inflaba
-    // por igual "Cobrado" y "Total del Periodo", desalineando ambos números.
-    const maintenanceBilling = billing.filter(b => b.invoice_type === 'maintenance')
+    // 4. Calculate Metrics — misma función que ya usan Gestión de Cobranza,
+    // el dashboard de inicio y /api/finance/metrics, en vez de una
+    // implementación propia más (separa cuota mensual de saldo inicial,
+    // usa balance_due para abonos parciales y aplica la regla del día 10
+    // por fecha de vencimiento real de cada recibo).
+    const now = new Date()
+    const currentYear = now.getFullYear()
 
-    const totalCollected = maintenanceBilling
-        .reduce((sum, b) => sum + Math.max(0, Number(b.amount || 0) - Number(b.balance_due || 0)), 0)
+    const condoFinancials = calculateCondoMonthlyFinancials({
+        units,
+        residents,
+        invoices: billing,
+        selectedMonth: -1, // Todo el historial transcurrido — esta pantalla no filtra por mes
+        selectedYear: currentYear
+    })
 
-    const totalReceivable = maintenanceBilling
-        .reduce((sum, b) => sum + Math.max(0, Number(b.balance_due || 0)), 0)
+    const totalCollected = condoFinancials.recaudado
+    const totalReceivable = condoFinancials.porCobrar
+    const totalOverdue = condoFinancials.vencido
+    const totalInvoiced = condoFinancials.totalPeriodo
 
     // Egresos: SUM(expenses.amount)
     const totalExpenses = expenses
         .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
-
-    // Total Facturado (Helper metric)
-    const totalInvoiced = billing.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
 
     // Balance: ingresos - egresos
     const utilidad = totalCollected - totalExpenses
@@ -209,10 +224,19 @@ export async function getAccountingData(condominiumId: string = 'all') {
         condominiums: condominiums || [],
         selectedCondoId: condominiumId,
         regime,
+        // units/residents/invoices se exponen para que el cliente (con su
+        // selector de mes interactivo) pueda llamar a
+        // calculateCondoMonthlyFinancials con el mismo criterio, sin
+        // reimplementar la lógica de reconciliación en el front.
+        units,
+        residents,
+        invoices: billing,
         metrics: {
             totalCollected,
             totalReceivable,
-            totalInvoiced: expected_monthly_income, // Now showing Expected Monthly Income from Units
+            totalOverdue,
+            totalInvoiced,
+            saldoInicialPendiente: condoFinancials.saldoInicialPendiente,
             totalExpenses,
             utilidad,
             isrEstimado
@@ -384,18 +408,20 @@ export async function getTransparencyData(condominiumId: string) {
     const monthName = now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
     // ──────────────────────────────────────────────────────────────────────────
 
-    // 2.a Invoices (Income) — MIGRADO: usa resident_invoices, solo del mes en curso
+    // 2.a Invoices (Income) — todo el historial del condominio; el recorte al
+    // mes en curso lo hace calculateCondoMonthlyFinancials usando due_date
+    // (igual que Gestión de Cobranza y el dashboard de inicio), en vez de
+    // filtrar por created_at aquí y perder cuotas creadas en un mes pero con
+    // vencimiento en otro.
     const { data: billingRaw, error: billingError } = await adminClient
         .from('resident_invoices')
         .select(`
-            id, amount, balance_due, status, created_at, description,
-            condominium_id, invoice_type,
+            id, amount, balance_due, status, due_date, created_at, description,
+            condominium_id, invoice_type, resident_id,
             condominiums (name),
             units (unit_number)
         `)
         .eq('condominium_id', condominiumId)
-        .gte('created_at', monthStart)
-        .lt('created_at', monthEnd)
         .order('created_at', { ascending: false })
     const billing = (billingRaw || []).map((inv: any) => ({
         ...inv,
@@ -416,15 +442,16 @@ export async function getTransparencyData(condominiumId: string) {
 
     if (expError) console.error('[TransparencyAction] Error fetching expenses:', expError)
 
-    // 2.c Expected monthly income from active units (Cobranza esperada del periodo)
+    // 2.c Units y Residentes para calculateCondoMonthlyFinancials
     const { data: unitsData } = await adminClient
         .from('units')
-        .select('monto_mensual, billing_status')
+        .select('id, condominium_id, monto_mensual, facturacion_activa, payment_deadline')
         .eq('condominium_id', condominiumId)
-        .neq('billing_status', 'suspended')
 
-    const expectedMonthlyIncome = (unitsData || [])
-        .reduce((sum: number, u: any) => sum + (Number(u.monto_mensual) || 0), 0)
+    const { data: residentsData } = await adminClient
+        .from('residents')
+        .select('id, status, condominium_id')
+        .eq('condominium_id', condominiumId)
 
     const billingData = billing || []
     const expensesData = (expenses || []).map((e: any) => ({
@@ -436,32 +463,24 @@ export async function getTransparencyData(condominiumId: string) {
 
     // isPaid: acepta 'paid' (inglés, tabla invoices) y 'pagado' (español, tabla condo_expenses)
     const isPaid = (s: string) => normalizeStatus(s) === 'paid' || normalizeStatus(s) === 'pagado'
-    // isPending: acepta 'pending' (inglés) y 'pendiente' (español)
-    const isPending = (s: string) => normalizeStatus(s) === 'pending' || normalizeStatus(s) === 'pendiente'
     // isOverdue: acepta 'overdue' (inglés) y 'vencido'/'moroso' (español)
     const isOverdue = (s: string) => normalizeStatus(s) === 'overdue' || normalizeStatus(s) === 'vencido' || normalizeStatus(s) === 'moroso'
 
-    // 3. Calcular métricas — solo del mes en curso
-    const totalCollected = billingData
-        .filter(b => isPaid(b.status))
-        .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+    // 3. Calcular métricas del mes en curso — misma función que ya usan
+    // Gestión de Cobranza, el dashboard de inicio y Contabilidad Inteligente,
+    // en vez de otra implementación propia con su regla del día 10.
+    const condoFinancials = calculateCondoMonthlyFinancials({
+        units: unitsData || [],
+        residents: residentsData || [],
+        invoices: billingData,
+        selectedMonth: currentMonth,
+        selectedYear: currentYear
+    })
 
-    const totalReceivable = billingData
-        .filter(b => !isPaid(b.status))
-        .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
-
-    // totalInvoiced = cobranza esperada del periodo (suma de monto_mensual de unidades activas)
-    const totalInvoiced = expectedMonthlyIncome
-
-    // Diferencia no cobrada = Total esperado − Lo ya cobrado
-    const uncollected = Math.max(0, totalInvoiced - totalCollected)
-
-    // Regla de negocio: 
-    //   - Días 1–10 del mes → la diferencia es "Pendiente" (dentro de plazo)
-    //   - Día 11 en adelante → la diferencia es "Morosidad" (fuera de plazo)
-    const todayDay = now.getDate()
-    const totalPending = todayDay <= 10 ? uncollected : 0
-    const totalOverdue = todayDay > 10 ? uncollected : 0
+    const totalCollected = condoFinancials.recaudado
+    const porCobrar = condoFinancials.porCobrar
+    const totalOverdue = condoFinancials.vencido
+    const totalInvoiced = condoFinancials.totalPeriodo
 
     const totalExpenses = expensesData
         .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
@@ -476,15 +495,24 @@ export async function getTransparencyData(condominiumId: string) {
         currentMonth: monthName,  // exponer el nombre del mes al cliente
         metrics: {
             totalCollected,
-            totalReceivable,
-            totalPending,
+            // Compat: la vista simple de Transparencia (seguridad) usa
+            // totalReceivable como "Morosidad" (todo lo no cobrado); la
+            // vista completa (dashboard) usa totalPending/totalOverdue por
+            // separado según la regla del día 10.
+            totalReceivable: porCobrar + totalOverdue,
+            totalPending: porCobrar,
             totalOverdue,
             totalInvoiced,
             totalExpenses,
             utilidad
         },
         movements: [
-            ...billingData.map(inv => ({
+            ...billingData
+                .filter(inv => {
+                    const d = new Date(inv.due_date || inv.created_at)
+                    return d.getFullYear() === currentYear && d.getMonth() === currentMonth
+                })
+                .map(inv => ({
                 id: inv.id,
                 type: 'ingreso',
                 amount: inv.amount,

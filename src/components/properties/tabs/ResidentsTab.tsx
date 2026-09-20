@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send, Users } from 'lucide-react'
+import { Plus, Search, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { resendInvitationAction } from '@/app/actions/auth-actions'
@@ -250,9 +250,6 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                     />
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
-                        <Filter className="mr-2 h-4 w-4" /> Filtros
-                    </Button>
                     <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300">
                         <Trash2 className="mr-2 h-4 w-4" /> Borrar Todos
                     </Button>

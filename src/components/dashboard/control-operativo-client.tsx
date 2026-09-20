@@ -29,6 +29,7 @@ import {
     addChecklistItemAction,
 } from '@/app/actions/team-tasks-actions'
 import { addIncidentCommentAction, getIncidentCommentsAction } from '@/app/actions/incident-comments-actions'
+import { updateIncidentStatusAction } from '@/app/actions/security-incident-actions'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,15 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; glow
     medium: { label: 'Media',    color: 'text-amber-400',  glow: 'amber' },
     high:   { label: 'Alta',     color: 'text-orange-400', glow: 'amber' },
     urgent: { label: 'Urgente',  color: 'text-rose-400',   glow: 'rose' },
+}
+
+type IncidentStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+
+const INCIDENT_STATUS_CONFIG: Record<IncidentStatus, { label: string; color: string; bg: string }> = {
+    open:        { label: 'Abierta',     color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/30' },
+    in_progress: { label: 'En atención', color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/30' },
+    resolved:    { label: 'Resuelta',    color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' },
+    closed:      { label: 'Cerrada',     color: 'text-zinc-500',    bg: 'bg-zinc-800/50 border-zinc-700/30' },
 }
 
 const INCIDENT_PRIORITY_CONFIG: Record<string, { label: string; color: string; glow: string }> = {
@@ -488,6 +498,7 @@ function IncidentDetailPanel({
     incident,
     onClose,
     onCreateTask,
+    onStatusChange,
     orgId,
     userId,
     userName,
@@ -495,6 +506,7 @@ function IncidentDetailPanel({
     incident: ParsedIncident
     onClose: () => void
     onCreateTask: (incident: ParsedIncident) => void
+    onStatusChange: (incident: ParsedIncident, status: IncidentStatus) => void
     orgId: string
     userId: string
     userName: string
@@ -503,6 +515,7 @@ function IncidentDetailPanel({
     const [newComment, setNewComment] = useState('')
     const [sendingComment, setSendingComment] = useState(false)
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
+    const [changingStatus, setChangingStatus] = useState(false)
     const cfg = INCIDENT_PRIORITY_CONFIG[incident.priority] || INCIDENT_PRIORITY_CONFIG.low
 
     useEffect(() => {
@@ -555,6 +568,31 @@ function IncidentDetailPanel({
 
             {/* Scrollable Body */}
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Status quick-change */}
+                <div>
+                    <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2">Estado</p>
+                    <div className="flex flex-wrap gap-2">
+                        {(Object.keys(INCIDENT_STATUS_CONFIG) as IncidentStatus[]).map(s => (
+                            <button
+                                key={s}
+                                disabled={changingStatus}
+                                onClick={async () => {
+                                    if (s === incident.status) return
+                                    setChangingStatus(true)
+                                    await onStatusChange(incident, s)
+                                    setChangingStatus(false)
+                                }}
+                                className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all disabled:opacity-40 ${
+                                    incident.status === s
+                                        ? `${INCIDENT_STATUS_CONFIG[s].bg} ${INCIDENT_STATUS_CONFIG[s].color}`
+                                        : 'bg-white/[0.02] border-white/[0.06] text-zinc-600 hover:text-zinc-300 hover:border-white/10'
+                                }`}>
+                                {INCIDENT_STATUS_CONFIG[s].label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
                 {/* Meta */}
                 <div className="grid grid-cols-2 gap-2">
                     {[
@@ -1462,7 +1500,7 @@ export function ControlOperativoClient() {
             .from('tickets')
             .select('*, condominiums(name)')
             .eq('organization_id', ctx.orgId)
-            .in('status', ['open', 'in_progress', 'pending'])
+            .in('status', ['open', 'in_progress'])
             .order('created_at', { ascending: false })
             .limit(50)
         setIncidents((data || []).map(parseIncident))
@@ -1515,6 +1553,25 @@ export function ControlOperativoClient() {
             images: incident.images || [],
         })
         setShowCreateModal(true)
+    }
+
+    const handleIncidentStatusChange = async (incident: ParsedIncident, status: IncidentStatus) => {
+        if (!ctx) return
+        const r = await updateIncidentStatusAction(incident.id, ctx.orgId, status, { id: ctx.userId, name: ctx.userName })
+        if (!r.success) {
+            toast.error(r.error || 'Error al actualizar la incidencia')
+            return
+        }
+        toast.success(`Incidencia marcada como "${INCIDENT_STATUS_CONFIG[status].label}"`)
+        // 'open'/'in_progress' se quedan en la lista de activas; 'resolved'/'closed'
+        // salen de ella — por eso recargamos en vez de solo mutar el estado local.
+        if (status === 'resolved' || status === 'closed') {
+            setSelectedIncident(null)
+        } else {
+            setSelectedIncident(prev => prev && prev.id === incident.id ? { ...prev, status } : prev)
+        }
+        loadIncidents()
+        loadKPIs()
     }
 
     const handleStartTask = async (taskId: string) => {
@@ -1838,6 +1895,7 @@ export function ControlOperativoClient() {
                                             incident={selectedIncident}
                                             onClose={() => setSelectedIncident(null)}
                                             onCreateTask={handleCreateTaskFromIncident}
+                                            onStatusChange={handleIncidentStatusChange}
                                             orgId={ctx.orgId}
                                             userId={ctx.userId}
                                             userName={ctx.userName}

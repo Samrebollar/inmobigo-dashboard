@@ -240,7 +240,7 @@ export async function seedDefaultBenefitsAction(organizationId: string) {
                 thumbnail_url: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80',
                 duration_minutes: 30,
                 difficulty: 'PRINCIPIANTE',
-                content_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+                content_url: '',
                 is_featured: true,
                 is_active: true
             },
@@ -252,7 +252,7 @@ export async function seedDefaultBenefitsAction(organizationId: string) {
                 thumbnail_url: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=800&q=80',
                 duration_minutes: 35,
                 difficulty: 'PRINCIPIANTE',
-                content_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+                content_url: '',
                 is_featured: false,
                 is_active: true
             },
@@ -264,7 +264,7 @@ export async function seedDefaultBenefitsAction(organizationId: string) {
                 thumbnail_url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
                 duration_minutes: 40,
                 difficulty: 'INTERMEDIO',
-                content_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+                content_url: '',
                 is_featured: false,
                 is_active: true
             }

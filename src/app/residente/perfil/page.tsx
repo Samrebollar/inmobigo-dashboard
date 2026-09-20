@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import ResidentProfileClient from '@/components/settings/resident-profile-client'
+import { resolveProfileData } from '@/services/profile-service'
 import { redirect } from 'next/navigation'
 
 export default async function ProfilePage() {
@@ -10,49 +11,20 @@ export default async function ProfilePage() {
         redirect('/login')
     }
 
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle()
-
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-    const { data: orgUser } = await supabase
-        .from('organization_users')
-        .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-    let role = 'viewer'
-    if (orgUser?.role) {
-        role = orgUser.role
-    } else if (profile?.role && profile.role !== 'resident') {
-        role = profile.role
-    } else if (user.user_metadata?.role === 'admin' || user.user_metadata?.role === 'admin_condominio' || user.user_metadata?.role === 'admin_propiedad') {
-        role = user.user_metadata?.role
-    } else if (resident || profile?.role === 'resident' || user.user_metadata?.role === 'resident') {
-        role = 'resident'
-    }
-
-    const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('subscription_status', 'active')
-        .maybeSingle()
+    const data = await resolveProfileData(supabase, user)
 
     return (
-        <ResidentProfileClient 
-            user={user} 
-            initialResident={resident} 
-            profile={profile} 
-            role={role} 
-            subscription={subscription}
+        <ResidentProfileClient
+            user={user}
+            initialResident={data.resident}
+            profile={data.profile}
+            role={data.role}
+            isAdmin={data.isAdmin}
+            subscription={data.subscription}
+            organizationName={data.organizationName}
+            adminContact={data.adminContact}
+            accountStatus={data.accountStatus}
+            financeHref="/residente/payments"
         />
     )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search, Filter, AlertCircle, FileText, Download, ChevronRight, ChevronDown, Table as TableIcon, Loader2, MessageCircle, CheckCircle2 } from 'lucide-react'
 import { format, differenceInDays, parseISO } from 'date-fns'
@@ -53,6 +54,7 @@ export function DelinquencyReportModal({
     availableCondos,
     onStatsUpdate 
 }: DelinquencyReportModalProps) {
+    const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [residents, setResidents] = useState<DelinquentResident[]>([])
     const [searchTerm, setSearchTerm] = useState('')
@@ -559,9 +561,9 @@ export function DelinquencyReportModal({
                                                                         <motion.button
                                                                             whileHover={{ scale: 1.1 }}
                                                                             whileTap={{ scale: 0.95 }}
-                                                                            onClick={() => alert(`Recordatorio enviado exitosamente a ${resident.first_name}.`)}
+                                                                            onClick={() => router.push(`/dashboard/residentes/${resident.id}`)}
                                                                             className="p-2 rounded-full bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors border border-indigo-500/20 shadow-sm"
-                                                                            title="Ver/Enviar Factura"
+                                                                            title="Ver detalle del residente"
                                                                         >
                                                                             <FileText size={16} />
                                                                         </motion.button>

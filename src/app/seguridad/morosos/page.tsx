@@ -214,7 +214,7 @@ export default function MorososPage() {
                 {stats.topRiskCount} {stats.topRiskCount === 1 ? 'inquilino' : 'inquilinos'}
               </div>
               <div className="text-xs font-medium text-zinc-500 mt-2">
-                {stats.topRiskLevel === 'low' ? '+7' : stats.topRiskLevel === 'medium' ? '+15' : `+${stats.maxDaysOverdue}`} días de atraso
+                {stats.maxDaysOverdue > 0 ? `+${stats.maxDaysOverdue} días de atraso` : 'Sin atrasos registrados'}
               </div>
             </div>
             

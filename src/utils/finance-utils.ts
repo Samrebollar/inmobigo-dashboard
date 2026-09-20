@@ -89,7 +89,10 @@ export interface CondoFinancials {
  */
 export function isBillingActiveForPeriod(resident: any, periodDate: Date): boolean {
     if (!resident) return false
-    if (resident.status !== 'active') return false
+    // 'delinquent' (moroso) sigue facturando/generando deuda — solo 'inactive'
+    // (residente dado de baja) debe excluirse. Antes solo 'active' calificaba,
+    // lo cual escondía del todo a los residentes ya marcados como morosos.
+    if (resident.status === 'inactive') return false
     if (resident.facturacion_activa === false) return false
     const fechaIngresoStr = resident.fecha_ingreso || resident.created_at
     if (!fechaIngresoStr) return true
@@ -117,8 +120,11 @@ export function calculateResidentMonthlyFinancials({
     const currentMonthIndex = today.getMonth()
     const currentYear = today.getFullYear()
 
-    // 1. Check if resident is active and billing is active
-    const isBillingActive = resident?.status === 'active' && resident?.facturacion_activa !== false
+    // 1. Check if billing is active. 'delinquent' (moroso) sigue facturando/
+    // generando deuda — solo 'inactive' (dado de baja) queda fuera. Antes esto
+    // exigía 'active' exactamente, así que un residente ya marcado como moroso
+    // desaparecía por completo del reporte de morosidad (devolvía todo en $0).
+    const isBillingActive = resident?.status !== 'inactive' && resident?.facturacion_activa !== false
 
     if (!isBillingActive) {
         return {
@@ -660,9 +666,10 @@ export function calculateCondoMonthlyFinancials({
             if (projectedDebt > 0) {
                 if (isInOverduePeriod) {
                     vencido += projectedDebt
-                    // Count all active residents as debtors for this projected month
+                    // Count all billing-active residents as debtors for this projected
+                    // month — incluye 'delinquent', solo excluye 'inactive'.
                     residents.forEach(r => {
-                        if (r.status === 'active' && r.id) {
+                        if (r.status !== 'inactive' && r.id) {
                             debtorResidents.add(r.id)
                         }
                     })

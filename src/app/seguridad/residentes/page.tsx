@@ -201,7 +201,7 @@ function ResidentsContent() {
                 const monthlyFee = Number(unit?.monto_mensual || 0)
                 let feeBasedDebt = 0
                 let paymentSurplus = 0
-                if (monthlyFee > 0 && resident.status === 'active' && unit?.facturacion_activa !== false) {
+                if (monthlyFee > 0 && resident.status !== 'inactive' && unit?.facturacion_activa !== false) {
                     const startDateStr = resident.fecha_ingreso ?? resident.created_at
                     const startDate = startDateStr ? new Date(startDateStr) : null
                     let firstBillingMonth = 0

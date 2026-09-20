@@ -43,6 +43,8 @@ export interface SettingsCondominio {
     recargo_tipo: 'fijo' | 'porcentaje'
     recargo_valor: number
     recargo_dias_aplicar: number
+    tipo_cobro?: 'mensual' | 'bimestral' | 'anual'
+    generar_cobros_automaticos?: boolean
     created_at?: string
     updated_at?: string
 }

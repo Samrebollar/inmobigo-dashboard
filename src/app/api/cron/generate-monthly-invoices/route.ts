@@ -156,6 +156,33 @@ async function handleRequest(request: Request) {
             })
         }
 
+        // ── Configuración de facturación por propiedad (tipo_cobro, generar_cobros_automaticos) ──
+        // Sin fila en settings_condominio → comportamiento por defecto: mensual, automático activado.
+        const condoIds = Array.from(new Set(residents.map(r => r.condominium_id).filter(Boolean)))
+        const { data: condoSettingsRows } = await supabase
+            .from('settings_condominio')
+            .select('condominio_id, tipo_cobro, generar_cobros_automaticos')
+            .in('condominio_id', condoIds)
+
+        const condoSettingsMap = new Map(
+            (condoSettingsRows || []).map((s: any) => [s.condominio_id, s])
+        )
+
+        // "Mismo monto, solo cambia la frecuencia": bimestral factura en meses pares
+        // (Ene, Mar, May, Jul, Sep, Nov), anual factura únicamente en Enero.
+        const isBillingMonthForCondo = (condominiumId: string): boolean => {
+            const settings = condoSettingsMap.get(condominiumId)
+            const tipoCobro = settings?.tipo_cobro || 'mensual'
+            if (tipoCobro === 'bimestral') return month % 2 === 0
+            if (tipoCobro === 'anual') return month === 0
+            return true
+        }
+
+        const isAutoGenerationEnabledForCondo = (condominiumId: string): boolean => {
+            const settings = condoSettingsMap.get(condominiumId)
+            return settings?.generar_cobros_automaticos ?? true
+        }
+
         // ── 2. Obtener facturas de mantenimiento ya existentes en el periodo ────
         // Para evitar duplicados (idempotencia)
         let existingQuery = supabase
@@ -196,6 +223,24 @@ async function handleRequest(request: Request) {
                 results.skipped++
                 continue
             }
+
+            // Las políticas de tipo_cobro/generar_cobros_automaticos (Propiedades >
+            // Configuración) solo aplican a la corrida automática de Vercel Cron.
+            // Una corrida manual disparada por un admin para un condominio puntual
+            // es una orden explícita y siempre debe generar la factura, sin importar
+            // la frecuencia configurada — es precisamente el "modo manual" que se
+            // ofrece cuando "Generar cobros automáticos" está apagado.
+            if (isCronCall) {
+                if (!isAutoGenerationEnabledForCondo(resident.condominium_id)) {
+                    results.skipped++
+                    continue
+                }
+                if (!isBillingMonthForCondo(resident.condominium_id)) {
+                    results.skipped++
+                    continue
+                }
+            }
+
             const fee = Number(unit.monto_mensual || 0)
             if (fee <= 0) {
                 results.skipped++

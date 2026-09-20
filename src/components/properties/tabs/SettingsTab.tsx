@@ -38,6 +38,11 @@ export function SettingsTab() {
         applyAfterDays: 5
     })
 
+    const [billingSettings, setBillingSettings] = useState({
+        tipoCobro: 'mensual' as 'mensual' | 'bimestral' | 'anual',
+        generarCobrosAutomaticos: true
+    })
+
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
 
     // Amenities State
@@ -136,6 +141,11 @@ export function SettingsTab() {
                 percentageAmount: settings.recargo_tipo === 'porcentaje' ? settings.recargo_valor : prev.percentageAmount,
                 applyAfterDays: settings.recargo_dias_aplicar || prev.applyAfterDays
             }))
+
+            setBillingSettings({
+                tipoCobro: settings.tipo_cobro || 'mensual',
+                generarCobrosAutomaticos: settings.generar_cobros_automaticos ?? true
+            })
         }
     }
 
@@ -184,6 +194,8 @@ export function SettingsTab() {
                 recargo_valor,
                 recargo_dias_aplicar,
                 recargo_activo,
+                tipo_cobro: billingSettings.tipoCobro,
+                generar_cobros_automaticos: billingSettings.generarCobrosAutomaticos,
                 // Opcional: También mandamos los de notificaciones
                 recordatorios_dias_antes: [
                     ...(toggles.reminders5 ? [5] : []),
@@ -254,6 +266,46 @@ export function SettingsTab() {
                                 onChange={handleChange}
                             />
                             <Input label="Moneda" defaultValue={condo.currency} disabled />
+                        </div>
+                    </motion.div>
+                </CardContent>
+            </Card>
+
+            <Card className="bg-zinc-900 border-zinc-800">
+                <CardHeader>
+                    <CardTitle>Políticas de Cobro y Facturación</CardTitle>
+                    <CardDescription>Controla cómo y cuándo se generan los cobros de {isPropiedades ? 'esta propiedad' : 'este condominio'}.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <motion.div
+                        whileHover={{ y: -2, scale: 1.005 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex flex-col p-4 rounded-xl bg-zinc-950/50 border border-zinc-800 hover:border-indigo-500/30 hover:bg-zinc-900/40 hover:shadow-[0_0_15px_rgba(79,70,229,0.1)] transition-colors space-y-4"
+                    >
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label className="text-sm font-medium text-white mb-1.5 block">Tipo de cobro</label>
+                                <select
+                                    value={billingSettings.tipoCobro}
+                                    onChange={e => setBillingSettings(s => ({ ...s, tipoCobro: e.target.value as 'mensual' | 'bimestral' | 'anual' }))}
+                                    className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all hover:bg-zinc-900 h-10"
+                                >
+                                    <option value="mensual">Mensual (todos los meses)</option>
+                                    <option value="bimestral">Bimestral (cada 2 meses: Ene, Mar, May, Jul, Sep, Nov)</option>
+                                    <option value="anual">Anual (solo en Enero)</option>
+                                </select>
+                                <p className="text-xs text-zinc-500 mt-1.5">La cuota mensual configurada por unidad se cobra tal cual, solo cambia qué tan seguido.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between p-3 rounded-lg hover:bg-zinc-800/50 border border-transparent hover:border-zinc-700/50 transition-all">
+                            <div className="space-y-0.5">
+                                <label className="text-sm font-medium text-zinc-300">Generar cobros automáticos</label>
+                                <p className="text-xs text-zinc-500">Crea las facturas de mantenimiento automáticamente según la frecuencia de arriba. Si lo apagas, esta propiedad no se factura sola — deberás generarlas manualmente.</p>
+                            </div>
+                            <Switch
+                                checked={billingSettings.generarCobrosAutomaticos}
+                                onCheckedChange={c => setBillingSettings(s => ({ ...s, generarCobrosAutomaticos: c }))}
+                            />
                         </div>
                     </motion.div>
                 </CardContent>

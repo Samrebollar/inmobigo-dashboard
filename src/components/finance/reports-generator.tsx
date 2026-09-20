@@ -12,10 +12,12 @@ import { formatCurrency } from '@/utils/format'
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { getBitacoraEntriesAction } from '@/app/actions/bitacora-actions'
+import { EVENT_TYPE_CONFIG, STATUS_CONFIG } from '@/types/bitacora'
 
 interface ReportsGeneratorModalProps {
     isOpen: boolean
-    reportType?: 'executive' | 'delinquency' | 'whatsapp'
+    reportType?: 'executive' | 'delinquency' | 'bitacora'
     onClose: () => void
     onSuccess?: (report: any) => void
 }
@@ -316,6 +318,119 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
     }
 
     // ------------------------------------------------------------------------------------------------ //
+    // ------------------------------------- REPORTE DE BITÁCORA -------------------------------------- //
+    // ------------------------------------------------------------------------------------------------ //
+
+    const generateBitacoraPDF = async (entries: any[], summary: any) => {
+        const doc = new jsPDF()
+
+        try {
+            const logo = await loadImage('/logo-inmobigo.png')
+            const targetHeight = 16
+            const targetWidth = targetHeight * (logo.width / logo.height)
+            doc.addImage(logo, 'PNG', 14, 15, targetWidth, targetHeight)
+        } catch (e) {
+            console.warn("Could not load logo", e)
+        }
+
+        doc.setFontSize(24)
+        doc.setTextColor(15, 23, 42) // Slate 900
+        doc.text('Reporte de Bitácora', 14, 45)
+
+        doc.setFontSize(10)
+        doc.setTextColor(100, 113, 129) // Slate 500
+        doc.text(`Periodo: ${summary.periodName}`, 14, 52)
+        doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 57)
+
+        doc.setDrawColor(226, 232, 240) // Slate 200
+        doc.setFillColor(248, 250, 252) // Slate 50
+        doc.roundedRect(14, 65, 182, 28, 4, 4, 'FD')
+
+        doc.setFontSize(9)
+        doc.setTextColor(100, 113, 129)
+        doc.text('TOTAL DE MOVIMIENTOS', 20, 74)
+        doc.text('ACCESOS', 80, 74)
+        doc.text('ENTREGAS', 115, 74)
+        doc.text('AMENIDADES', 150, 74)
+
+        doc.setFontSize(16)
+        doc.setTextColor(79, 70, 229) // Indigo 600
+        doc.text(String(summary.total), 20, 84)
+        doc.setFontSize(13)
+        doc.setTextColor(15, 23, 42)
+        doc.text(String(summary.accesos), 80, 84)
+        doc.text(String(summary.entregas), 115, 84)
+        doc.text(String(summary.amenidades), 150, 84)
+
+        const tableData = entries.map(e => [
+            e.checked_in_at ? format(new Date(e.checked_in_at), 'dd/MM/yyyy HH:mm') : '-',
+            EVENT_TYPE_CONFIG[e.event_type as keyof typeof EVENT_TYPE_CONFIG]?.label || e.event_type,
+            e.person_name || '-',
+            e.condominium_name || '-',
+            e.unit_number || '-',
+            e.guard_name || '-',
+            e.checked_out_at ? format(new Date(e.checked_out_at), 'dd/MM/yyyy HH:mm') : '-',
+            STATUS_CONFIG[e.status as keyof typeof STATUS_CONFIG]?.label || e.status,
+        ])
+
+        autoTable(doc, {
+            startY: 105,
+            head: [['Entrada', 'Tipo', 'Persona', 'Condominio', 'Unidad', 'Guardia', 'Salida', 'Estado']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [79, 70, 229], // Indigo 600
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+            },
+            styles: {
+                fontSize: 7,
+                cellPadding: 3,
+                lineColor: [226, 232, 240], // Slate 200 borders
+                lineWidth: 0.1,
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] }, // Slate 50
+        })
+
+        doc.save(`Reporte_Bitacora_${format(new Date(), 'yyyyMMdd')}.pdf`)
+    }
+
+    const generateBitacoraExcel = async (entries: any[], summary: any) => {
+        const wb = XLSX.utils.book_new()
+        const summaryData = [
+            ["InmobiGo - Plataforma de Administración"],
+            ["REPORTE DE BITÁCORA"],
+            [],
+            ["Fecha de Generación:", format(new Date(), 'dd/MM/yyyy HH:mm')],
+            ["Periodo:", summary.periodName],
+            [],
+            ["MÉTRICA", "VALOR"],
+            ["Total de Movimientos", summary.total],
+            ["Accesos", summary.accesos],
+            ["Entregas", summary.entregas],
+            ["Amenidades", summary.amenidades],
+        ]
+        const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
+        XLSX.utils.book_append_sheet(wb, ws1, "Resumen")
+
+        const detailsData = entries.map(e => ({
+            "Entrada": e.checked_in_at ? format(new Date(e.checked_in_at), 'dd/MM/yyyy HH:mm') : '-',
+            "Tipo": EVENT_TYPE_CONFIG[e.event_type as keyof typeof EVENT_TYPE_CONFIG]?.label || e.event_type,
+            "Persona": e.person_name || '-',
+            "Condominio": e.condominium_name || '-',
+            "Unidad": e.unit_number || '-',
+            "Guardia": e.guard_name || '-',
+            "Checkpoint": e.checkpoint || '-',
+            "Salida": e.checked_out_at ? format(new Date(e.checked_out_at), 'dd/MM/yyyy HH:mm') : '-',
+            "Duración (min)": e.duration_minutes ?? '-',
+            "Estado": STATUS_CONFIG[e.status as keyof typeof STATUS_CONFIG]?.label || e.status,
+        }))
+        const ws2 = XLSX.utils.json_to_sheet(detailsData)
+        XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Bitácora")
+        XLSX.writeFile(wb, `Reporte_Bitacora_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+    }
+
+    // ------------------------------------------------------------------------------------------------ //
 
     const handleGenerate = async () => {
         if (!organizationId) {
@@ -403,11 +518,46 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
                 if (formatOption === 'excel') await generateDelinquencyExcel(processed, fileSummary)
                 else await generateDelinquencyPDF(processed, fileSummary)
-            } else if (reportType === 'whatsapp') {
-                // Mock behavior for whatsapp type explicitly until full hookup
-                setErrorMsg('Funcionalidad de Enviar por WhatsApp en construcción.')
-                setIsGenerating(false)
-                return
+            } else if (reportType === 'bitacora') {
+                const { start, end } = getDates()
+                const result = await getBitacoraEntriesAction(
+                    organizationId,
+                    {
+                        date_from: format(start, 'yyyy-MM-dd'),
+                        date_to: format(end, 'yyyy-MM-dd'),
+                        condominium_id: selectedCondo !== 'all' ? selectedCondo : undefined,
+                    },
+                    0,
+                    10000
+                )
+
+                if (!result.success) {
+                    setErrorMsg(result.error || 'Error al obtener la bitácora')
+                    setIsGenerating(false)
+                    return
+                }
+
+                if (result.entries.length === 0) {
+                    setErrorMsg('No hay movimientos de bitácora registrados en este periodo.')
+                    setIsGenerating(false)
+                    return
+                }
+
+                const entries = result.entries
+                const accesos = entries.filter(e => e.event_type === 'access').length
+                const entregas = entries.filter(e => e.event_type === 'delivery').length
+                const amenidades = entries.filter(e => e.event_type === 'amenity').length
+
+                const periodName = dateRange === 'this-month' ? `Mes Actual (${format(start, 'MMMM yyyy', { locale: es })})`
+                            : dateRange === 'last-month' ? `Mes Anterior (${format(start, 'MMMM yyyy', { locale: es })})`
+                            : dateRange === 'quarter' ? `Trimestre (Q${Math.floor(start.getMonth()/3)+1} ${start.getFullYear()})`
+                            : `Año ${start.getFullYear()}`
+
+                fileSummary = { periodName: periodName.toUpperCase(), total: entries.length, accesos, entregas, amenidades }
+                finalTypeLabel = 'Reporte de Bitácora'
+
+                if (formatOption === 'excel') await generateBitacoraExcel(entries, fileSummary)
+                else await generateBitacoraPDF(entries, fileSummary)
             }
 
             if (onSuccess) {
@@ -435,7 +585,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         }
     }
 
-    const titlePrefix = reportType === 'executive' ? 'Reporte Financiero' : reportType === 'delinquency' ? 'Reporte de Morosidad' : 'Reporte de Whatsapp'
+    const titlePrefix = reportType === 'executive' ? 'Reporte Financiero' : reportType === 'delinquency' ? 'Reporte de Morosidad' : 'Reporte de Bitácora'
 
     return (
         <AnimatePresence>
@@ -502,7 +652,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                                 </div>
                             </div>
 
-                            {reportType === 'executive' && (
+                            {(reportType === 'executive' || reportType === 'bitacora') && (
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                         Periodo

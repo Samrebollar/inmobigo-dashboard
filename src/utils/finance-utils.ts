@@ -120,11 +120,32 @@ export function calculateResidentMonthlyFinancials({
     const currentMonthIndex = today.getMonth()
     const currentYear = today.getFullYear()
 
+    const emptyFinancials: ResidentFinancials = {
+        cuotaMensual: 0,
+        totalPaid: 0,
+        totalPending: 0,
+        overdueCount: 0,
+        overdueAmount: 0,
+        maxDaysOverdue: 0,
+        creditBalance: 0,
+        activeMonthlyFee: 0,
+        filteredInvoices: []
+    }
+
+    // Páginas que aún no terminaron de cargar el residente (ej. useMemo que
+    // corre antes de que resuelva el fetch) llaman esto con resident=null —
+    // sin este guard, `resident?.status !== 'inactive'` da true para null/
+    // undefined y sigue de largo hasta un `resident.fecha_ingreso` sin
+    // optional chaining más abajo, que sí truena.
+    if (!resident) {
+        return emptyFinancials
+    }
+
     // 1. Check if billing is active. 'delinquent' (moroso) sigue facturando/
     // generando deuda — solo 'inactive' (dado de baja) queda fuera. Antes esto
     // exigía 'active' exactamente, así que un residente ya marcado como moroso
     // desaparecía por completo del reporte de morosidad (devolvía todo en $0).
-    const isBillingActive = resident?.status !== 'inactive' && resident?.facturacion_activa !== false
+    const isBillingActive = resident.status !== 'inactive' && resident.facturacion_activa !== false
 
     if (!isBillingActive) {
         return {

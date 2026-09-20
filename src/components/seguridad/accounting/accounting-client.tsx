@@ -468,12 +468,24 @@ export function AccountingClient({
 
                                     <p className={cn(
                                         "text-base md:text-xl font-medium leading-relaxed italic",
-                                        iaState.badge.includes('Saludable') ? "text-zinc-400" : 
+                                        iaState.badge.includes('Saludable') ? "text-zinc-400" :
                                         iaState.badge.includes('Parcial') ? "text-amber-200/80" : "text-rose-200/80"
                                     )}>
                                         "{generateMagicComment()}"
                                     </p>
-                                    
+
+                                    {/* Un condominio operando prácticamente siempre tiene algún gasto
+                                        (seguridad, limpieza, servicios, administración). Gastos en $0
+                                        con cobranza real es más probable que sea captura incompleta que
+                                        una operación sin costos — y si faltan egresos por registrar, el
+                                        Resultado Neto de arriba está sobreestimado. */}
+                                    {metrics.totalCollected > 0 && metrics.totalExpenses === 0 && (
+                                        <p className="flex items-center gap-2 justify-center md:justify-start text-xs md:text-sm font-semibold text-amber-400/90">
+                                            <AlertCircle className="h-4 w-4 shrink-0" />
+                                            Gastos del Periodo en $0.00 — si el condominio tuvo egresos este periodo (seguridad, limpieza, servicios, administración) y no están registrados, el Resultado Neto está sobreestimado.
+                                        </p>
+                                    )}
+
                                     <div className="pt-2 flex items-center justify-center md:justify-start gap-4 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
                                         <div className="flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />

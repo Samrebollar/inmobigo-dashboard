@@ -96,8 +96,10 @@ export function FinancialSummary({
         }
     ]
 
-    // ISR Card for Arrendamiento/Empresa
-    if (regime && metrics.isrEstimado > 0) {
+    // ISR solo aplica a regímenes lucrativos (Arrendamiento/Actividad Empresarial).
+    // Un condominio no lucrativo no debe mostrar una retención estimada sobre
+    // las cuotas de mantenimiento que cobra para su propia operación.
+    if (isBusiness && metrics.isrEstimado > 0) {
         cards.push({
             title: 'ISR Estimado (30%)',
             amount: metrics.isrEstimado,

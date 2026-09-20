@@ -119,8 +119,8 @@ export async function getAccountingData(condominiumId: string = 'all') {
     let billingQuery = supabase
         .from('resident_invoices')
         .select(`
-            id, amount, balance_due, status, created_at, description,
-            condominium_id, invoice_type,
+            id, amount, balance_due, status, due_date, created_at, description,
+            condominium_id, invoice_type, resident_id,
             condominiums (name),
             units (unit_number)
         `)
@@ -171,16 +171,21 @@ export async function getAccountingData(condominiumId: string = 'all') {
 
     const normalizeStatus = (s: string) => s?.toLowerCase() || ''
 
-    // 4. Calculate Metrics (User Formulas)
-    // Ingresos: SUM(billing.amount WHERE status = 'pagado')
-    const totalCollected = billing
-        .filter(b => normalizeStatus(b.status) === 'pagado' || normalizeStatus(b.status) === 'paid')
-        .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+    // 4. Calculate Metrics
+    // Cobrado / Por cobrar se calculan solo sobre cuotas de mantenimiento
+    // (invoice_type 'maintenance') y usando balance_due, para reflejar abonos
+    // parciales correctamente. Antes se usaba el status y el monto COMPLETO
+    // de la factura: un abono parcial no se contaba como cobrado en absoluto
+    // (la factura sigue en 'pending' hasta liquidarse), y cualquier ingreso
+    // no relacionado con la cuota mensual (saldo inicial, ajustes) inflaba
+    // por igual "Cobrado" y "Total del Periodo", desalineando ambos números.
+    const maintenanceBilling = billing.filter(b => b.invoice_type === 'maintenance')
 
-    // Cuentas por cobrar: SUM(billing.amount WHERE status != 'pagado')
-    const totalReceivable = billing
-        .filter(b => normalizeStatus(b.status) !== 'pagado' && normalizeStatus(b.status) !== 'paid')
-        .reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+    const totalCollected = maintenanceBilling
+        .reduce((sum, b) => sum + Math.max(0, Number(b.amount || 0) - Number(b.balance_due || 0)), 0)
+
+    const totalReceivable = maintenanceBilling
+        .reduce((sum, b) => sum + Math.max(0, Number(b.balance_due || 0)), 0)
 
     // Egresos: SUM(expenses.amount)
     const totalExpenses = expenses
@@ -191,7 +196,9 @@ export async function getAccountingData(condominiumId: string = 'all') {
 
     // Balance: ingresos - egresos
     const utilidad = totalCollected - totalExpenses
-    const isrEstimado = regime ? Math.max(0, utilidad * 0.30) : 0
+    // Un condominio no lucrativo no causa ISR sobre sus cuotas de mantenimiento.
+    const isBusinessRegime = !!regime && regime !== 'condominio_no_lucrativo'
+    const isrEstimado = isBusinessRegime ? Math.max(0, utilidad * 0.30) : 0
 
     // 5. Fetch Reserve Fund Data
     const fundData = condominiumId !== 'all' ? await getReserveFundData(condominiumId) : { exists: false, fund: null, transactions: [] }
@@ -216,6 +223,9 @@ export async function getAccountingData(condominiumId: string = 'all') {
                 id: inv.id,
                 type: 'ingreso',
                 amount: inv.amount,
+                balance_due: inv.balance_due,
+                invoice_type: inv.invoice_type,
+                due_date: inv.due_date,
                 category: 'Ingreso (facturación)',
                 description: `${inv.folio || 'INV'} - ${inv.description || 'Consulta de pago'}`,
                 date: inv.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],

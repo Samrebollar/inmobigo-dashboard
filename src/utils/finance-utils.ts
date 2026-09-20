@@ -290,6 +290,14 @@ export function calculateResidentMonthlyFinancials({
             // Find if there is an existing maintenance invoice in the month that we can copy properties from
             const originalMaintenance = dbInvoicesInMonth.find(inv => inv.invoice_type === 'maintenance')
 
+            // Regla del día 10: meses pasados siempre están vencidos; el mes en
+            // curso solo si ya pasó el día 10. Antes esta fila virtual se
+            // marcaba 'overdue' sin importar el mes, lo cual también inflaba
+            // "Morosidad" cuando en realidad era deuda "Pendiente" del mes actual.
+            const isPastMonthForVirtual = selectedYear < currentYear || (selectedYear === currentYear && m < currentMonthIndex)
+            const isCurrentMonthForVirtual = selectedYear === currentYear && m === currentMonthIndex
+            const isVirtualOverdue = isPastMonthForVirtual || (isCurrentMonthForVirtual && today.getDate() > 10)
+
             // Construct virtual overdue row
             const virtualId = `virtual-overdue-${originalMaintenance?.id || `${selectedYear}-${m}`}`
             const virtualFolio = originalMaintenance?.folio 
@@ -313,7 +321,7 @@ export function calculateResidentMonthlyFinancials({
                 subscription_id: null,
                 amount: projectedResidual,
                 currency: 'MXN',
-                status: 'overdue',
+                status: isVirtualOverdue ? 'overdue' : 'pending',
                 due_date: originalMaintenance?.due_date || isoDate.substring(0, 10),
                 paid_at: null,
                 payment_provider: null,
@@ -386,24 +394,24 @@ export function calculateResidentMonthlyFinancials({
         }
 
         const creditBalance = annualFeeTarget > 0 ? Math.max(0, totalPaid - annualFeeTarget) : 0
-        const annualFeeGap = Math.max(0, annualFeeTarget - totalPaid)
-        const isOverduePeriod = today.getDate() > 10
 
-        let pendingGap = 0
-        let overdueGap = 0
+        // La deuda "no cubierta por un recibo real" ya viene resuelta por las
+        // filas virtuales de arriba (que, mes por mes, solo proyectan un
+        // residuo cuando NO existe ya un recibo para ese mes). Antes, aquí se
+        // volvía a calcular un "annualFeeGap" (cuota anual esperada - total
+        // pagado) y se sumaba encima de pendingSum/overdueSum — duplicando la
+        // misma deuda ya representada por los recibos reales cuando estos sí
+        // existen para todos los meses del periodo.
+        const virtualPendingSum = virtualInvoices
+            .filter(inv => inv.status === 'pending')
+            .reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0)
+        const virtualOverdueSum = virtualInvoices
+            .filter(inv => inv.status === 'overdue')
+            .reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0)
 
-        if (isOverduePeriod) {
-            overdueGap = annualFeeGap
-        } else {
-            pendingGap = Math.min(annualFeeGap, monthlyFee)
-            overdueGap = Math.max(0, annualFeeGap - pendingGap)
-        }
-
-        const totalPending = pendingGap + pendingSum
-        const overdueAmount = overdueGap + overdueSum
-        const overdueCount = overdueInvoices.length > 0
-            ? overdueInvoices.length
-            : (overdueAmount > 0 ? Math.ceil(overdueAmount / (monthlyFee || 3000)) : 0)
+        const totalPending = pendingSum + virtualPendingSum
+        const overdueAmount = overdueSum + virtualOverdueSum
+        const overdueCount = overdueInvoices.length + virtualInvoices.filter(inv => inv.status === 'overdue').length
 
         return {
             cuotaMensual: annualFeeTarget,

@@ -11,6 +11,7 @@ interface AmenityModalProps {
     isOpen: boolean
     onClose: () => void
     orgId: string
+    condominiumId?: string
     amenityToEdit?: any
     onSave: (amenity: any) => Promise<void>
 }
@@ -33,7 +34,7 @@ const COLOR_OPTIONS = [
     { value: 'from-blue-600 to-sky-500', label: 'Azul Océano' }
 ]
 
-export function AmenityModal({ isOpen, onClose, orgId, amenityToEdit, onSave }: AmenityModalProps) {
+export function AmenityModal({ isOpen, onClose, orgId, condominiumId, amenityToEdit, onSave }: AmenityModalProps) {
     const [loading, setLoading] = useState(false)
     const [uploadingPdf, setUploadingPdf] = useState(false)
     const [formData, setFormData] = useState({
@@ -137,7 +138,10 @@ export function AmenityModal({ isOpen, onClose, orgId, amenityToEdit, onSave }: 
         e.preventDefault()
         setLoading(true)
         try {
-            const payload = { ...formData, organization_id: orgId }
+            const payload: any = { ...formData, organization_id: orgId }
+            if (condominiumId) {
+                payload.condominium_id = condominiumId
+            }
             if (amenityToEdit?.id) {
                 // @ts-ignore
                 payload.id = amenityToEdit.id

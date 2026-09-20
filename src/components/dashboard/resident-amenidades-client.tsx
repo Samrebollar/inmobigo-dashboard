@@ -129,7 +129,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
     useEffect(() => {
         fetchAmenities()
-    }, [resident?.organization_id])
+    }, [resident?.organization_id, resident?.condominium_id])
 
     const fetchAmenities = async () => {
         let orgId = resident?.organization_id
@@ -157,8 +157,8 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
         setFetching(true)
         try {
-            const result = await getAmenitiesAction(orgId)
-            
+            const result = await getAmenitiesAction(orgId, resident?.condominium_id)
+
             if (result.success && result.data && result.data.length > 0) {
                 setAmenities(result.data)
             } else if (result.success) {

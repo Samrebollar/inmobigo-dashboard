@@ -169,6 +169,8 @@ export function DelinquencyReportModal({
 
                 if (totalDebt <= 0 && unpaid.length === 0) return
 
+                const paymentDeadline = Number((resident as any).units?.payment_deadline) || 10
+
                 let maxDays = fin.maxDaysOverdue
                 if (maxDays === 0 && unpaid.length > 0) {
                     const oldestDueDate = unpaid.reduce((oldest: string, inv: any) => {
@@ -178,8 +180,8 @@ export function DelinquencyReportModal({
                     maxDays = Math.max(0, differenceInDays(new Date(), parseISO(oldestDueDate)))
                 } else if (maxDays === 0 && totalDebt > 0) {
                     const today = new Date()
-                    if (today.getDate() > 10) {
-                        maxDays = today.getDate() - 10
+                    if (today.getDate() > paymentDeadline) {
+                        maxDays = today.getDate() - paymentDeadline
                     } else {
                         maxDays = 1
                     }
@@ -190,7 +192,6 @@ export function DelinquencyReportModal({
                 // pasa una vez ese plazo es riesgo medio, dos veces es crítico. Antes
                 // usaba 7/15 días fijos para todas las propiedades, sin importar que
                 // cada condominio puede tener un plazo de pago distinto.
-                const paymentDeadline = Number((resident as any).units?.payment_deadline) || 10
                 let risk: 'low' | 'medium' | 'critical' = 'low'
                 if (maxDays > paymentDeadline * 2) risk = 'critical'
                 else if (maxDays > paymentDeadline) risk = 'medium'

@@ -127,10 +127,12 @@ export default function PremiumServicesClient({ userName }: { userName: string }
                     animate={{ 
                         boxShadow: ["0px 0px 0px rgba(79, 70, 229, 0)", "0px 0px 20px rgba(79, 70, 229, 0.4)", "0px 0px 0px rgba(79, 70, 229, 0)"] 
                     }}
-                    transition={{ 
-                        boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" } 
+                    transition={{
+                        boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" }
                     }}
-                    className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-8 py-3.5 rounded-2xl font-black shadow-xl hover:from-indigo-500 hover:to-violet-500 transition-all border border-indigo-400/20 group"
+                    onClick={() => setSelectedService(filteredServices[0] || null)}
+                    disabled={filteredServices.length === 0}
+                    className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-8 py-3.5 rounded-2xl font-black shadow-xl hover:from-indigo-500 hover:to-violet-500 transition-all border border-indigo-400/20 group disabled:opacity-50"
                 >
                     <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />
                     <span>Cotizar Ahora</span>

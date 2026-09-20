@@ -26,7 +26,7 @@ export default async function BeneficiosPage() {
   
   const { data: orgUser } = await adminSupabase
     .from('organization_users')
-    .select('organization_id, role')
+    .select('organization_id, role_new')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -38,7 +38,7 @@ export default async function BeneficiosPage() {
 
   // Fallback: If not in organization_users, check if they are the OWNER of any organization
   let finalOrganizationId = orgUser?.organization_id || resident?.condominiums?.organization_id
-  let userRole = orgUser?.role || 'admin_propiedad'
+  let userRole = orgUser?.role_new || 'admin_propiedad'
 
   if (!finalOrganizationId) {
     const { data: ownedOrg } = await adminSupabase

@@ -19,7 +19,7 @@ export default async function ControlLecturaPage() {
   // Determine user role and context
   const { data: orgUser } = await supabase
     .from('organization_users')
-    .select('organization_id, role')
+    .select('organization_id, role_new')
     .eq('user_id', user.id)
     .maybeSingle()
 

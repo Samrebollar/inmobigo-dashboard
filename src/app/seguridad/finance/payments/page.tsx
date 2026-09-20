@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
 import { AdminPaymentsClient } from '@/components/finance/admin-payments-client'
 
 export const dynamic = 'force-dynamic'
@@ -6,10 +7,37 @@ export const dynamic = 'force-dynamic'
 export default async function PaymentsPage() {
     const supabase = await createClient()
 
-    // 1. Leer pagos de la tabla payments
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+        redirect('/login')
+    }
+
+    const { data: orgUser } = await supabase
+        .from('organization_users')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+    let organizationId = orgUser?.organization_id
+
+    if (!organizationId) {
+        const { data: ownedOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('owner_id', user.id)
+            .maybeSingle()
+        organizationId = ownedOrg?.id
+    }
+
+    if (!organizationId) {
+        redirect('/seguridad')
+    }
+
+    // 1. Leer pagos de la tabla payments, acotados a la organización del usuario
     const { data: paymentsRaw } = await supabase
         .from('payments')
         .select('*')
+        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
 
     const payments = paymentsRaw || []

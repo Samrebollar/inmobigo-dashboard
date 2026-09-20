@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -33,8 +34,11 @@ interface CashRegister {
     }
 }
 
+const STAFF_ROLES = ['owner', 'admin', 'super_admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security']
+
 export default function ArqueosHistoryPage() {
     const supabase = createClient()
+    const router = useRouter()
     const [arqueos, setArqueos] = useState<CashRegister[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
@@ -63,11 +67,16 @@ export default function ArqueosHistoryPage() {
 
             const { data: orgUser } = await supabase
                 .from('organization_users')
-                .select('organization_id')
+                .select('organization_id, role_new')
                 .eq('user_id', user.id)
                 .maybeSingle()
 
             if (!orgUser) return
+
+            if (!STAFF_ROLES.includes(orgUser.role_new || '')) {
+                router.replace('/dashboard')
+                return
+            }
 
             const { data, error } = await supabase
                 .from('cash_registers')

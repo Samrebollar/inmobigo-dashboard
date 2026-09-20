@@ -25,7 +25,7 @@ export const maintenanceService = {
             ...t,
             condominium_name: t.condominiums?.name || 'N/A',
             unit_number: t.units?.unit_number || 'N/A',
-            resident_name: t.residents ? `${t.residents.first_name} ${t.residents.last_name || ''}`.trim() : 'Clara Licona'
+            resident_name: t.residents ? `${t.residents.first_name} ${t.residents.last_name || ''}`.trim() : 'N/A'
         })) || []
     },
 

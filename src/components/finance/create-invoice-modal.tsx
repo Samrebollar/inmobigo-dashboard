@@ -7,7 +7,6 @@ import { financeService } from '@/services/finance-service'
 import { propertiesService } from '@/services/properties-service'
 import { Resident } from '@/types/residents'
 import { Condominium } from '@/types/properties'
-import { Switch } from '@/components/ui/switch'
 import { format } from 'date-fns'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { demoDb } from '@/utils/demo-db'
@@ -43,14 +42,6 @@ export function CreateInvoiceModal({
 
     // Form
     const [selectedCondoId, setSelectedCondoId] = useState(defaultCondominiumId)
-    // Extra toggles state (Visual/Logic only for now)
-    const [autoLateFee, setAutoLateFee] = useState(true)
-    const [sendEmail, setSendEmail] = useState(true)
-
-    const [isRecurring, setIsRecurring] = useState(false)
-    const [recurringFreq, setRecurringFreq] = useState('Mensual')
-    const [lateFeePercent, setLateFeePercent] = useState('5% mensual')
-    const [lateFeeGrace, setLateFeeGrace] = useState('5 días')
     const [paymentMethod, setPaymentMethod] = useState('Efectivo')
     const [activeDebt, setActiveDebt] = useState<number>(0)
 
@@ -536,10 +527,6 @@ export function CreateInvoiceModal({
                                     value={formData.dueDate}
                                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                                 />
-                                {/* Visual badge for "10 días después" calculation if possible, hardcoded mock for now as requested */}
-                                <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block">
-                                    <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">10 días después</span>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -555,82 +542,6 @@ export function CreateInvoiceModal({
                         />
                     </div>
 
-                    {/* Toggles Container */}
-                    <div className="space-y-3 pt-1">
-
-                        {/* Recurring Toggle Row */}
-                        <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800/30 transition-colors">
-                            <div className="flex items-center gap-3">
-                                <Switch
-                                    checked={isRecurring}
-                                    onCheckedChange={setIsRecurring}
-                                    className="data-[state=checked]:bg-emerald-500"
-                                />
-                                <span className="text-sm text-slate-200 font-medium select-none">Factura recurrente</span>
-                            </div>
-                            {isRecurring && (
-                                <div className="flex bg-slate-800 rounded-md p-0.5 border border-slate-700">
-                                    {['Mensual', 'Trimestral', 'Anual'].map((freq) => (
-                                        <button
-                                            key={freq}
-                                            type="button"
-                                            onClick={() => setRecurringFreq(freq)}
-                                            className={`px-3 py-1 text-xs rounded-sm transition-colors ${recurringFreq === freq ? 'bg-slate-600 text-white font-medium shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                                        >
-                                            {freq}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Auto Late Fee Row */}
-                        <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800/30 transition-colors">
-                            <div className="flex items-center gap-3">
-                                <Switch
-                                    checked={autoLateFee}
-                                    onCheckedChange={setAutoLateFee}
-                                    className="data-[state=checked]:bg-emerald-500"
-                                />
-                                <span className="text-sm text-slate-200 font-medium select-none">Cargo por mora automático</span>
-                            </div>
-                            {autoLateFee && (
-                                <div className="flex gap-2">
-                                    <select
-                                        value={lateFeePercent}
-                                        onChange={(e) => setLateFeePercent(e.target.value)}
-                                        className="bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-300 focus:ring-0 cursor-pointer hover:bg-slate-700 py-1 pl-2 pr-6"
-                                    >
-                                        <option>2% diario</option>
-                                        <option>5% mensual</option>
-                                        <option>10% mensual</option>
-                                    </select>
-                                    <select
-                                        value={lateFeeGrace}
-                                        onChange={(e) => setLateFeeGrace(e.target.value)}
-                                        className="bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-300 focus:ring-0 cursor-pointer hover:bg-slate-700 py-1 pl-2 pr-6"
-                                    >
-                                        <option>3 días</option>
-                                        <option>5 días</option>
-                                        <option>10 días</option>
-                                    </select>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Email Notification Row */}
-                        <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800/30 transition-colors">
-                            <div className="flex items-center gap-3">
-                                <Switch
-                                    checked={sendEmail}
-                                    onCheckedChange={setSendEmail}
-                                    className="data-[state=checked]:bg-blue-600"
-                                />
-                                <span className="text-sm text-slate-200 font-medium select-none">Enviar correo de notificación al {isPropiedades ? 'inquilino' : 'residente'}</span>
-                            </div>
-                        </div>
-                    </div>
-                    
                 </div>
 
                 {/* Summary Footer */}

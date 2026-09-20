@@ -200,8 +200,7 @@ export async function updateSession(request: NextRequest) {
 
             // RESTRICTED ROUTES FOR VIEWERS
             if (!isStaff && role === 'viewer') {
-                if (path.startsWith('/dashboard/condominios') ||
-                    path.startsWith('/dashboard/residentes') ||
+                if (path.startsWith('/dashboard/residentes') ||
                     path.startsWith('/dashboard/configuracion') ||
                     path.startsWith('/dashboard/reportes')) {
                     return NextResponse.redirect(new URL('/dashboard', request.url))

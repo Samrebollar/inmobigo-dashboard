@@ -80,7 +80,11 @@ export interface TeamTask {
     attachments?: string[]
     images?: string[]
 
-    recurrence_rule?: RecurrenceRule | null
+    // Se guarda en la BD como texto JSON (columna `text`, no `jsonb`) —
+    // se parsea con JSON.parse al leerlo (ver recurrenceLabel en
+    // control-operativo-client.tsx). Los DTOs de creación/actualización
+    // sí reciben el objeto RecurrenceRule antes de serializarlo.
+    recurrence_rule?: string | null
 
     // Link back to originating incident
     source_incident_id?: string

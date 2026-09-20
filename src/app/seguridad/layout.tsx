@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Settings, Wrench, LogOut, User, CreditCard, Zap, Bell } from 'lucide-react'
+import { LayoutDashboard, Settings, Wrench, LogOut, User, CreditCard, Zap, Bell, HelpCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/seguridad/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -215,6 +215,13 @@ export default async function DashboardLayout({
                             <span>Planes</span>
                         </Link>
                         <Link
+                            href="/seguridad/integrations"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
+                        >
+                            <Zap size={18} />
+                            <span>Integraciones</span>
+                        </Link>
+                        <Link
                             href="/seguridad/configuracion"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
                         >
@@ -225,6 +232,13 @@ export default async function DashboardLayout({
                 )}
             </nav>
             <div className="p-4 border-t border-zinc-900 bg-black space-y-1">
+                <Link
+                    href="/seguridad/help"
+                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
+                >
+                    <HelpCircle size={18} />
+                    <span>Ayuda</span>
+                </Link>
                 <Link
                     href="/seguridad/perfil"
                     className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"

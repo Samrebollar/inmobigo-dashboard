@@ -99,25 +99,31 @@ export default function AdminMaintenanceClient() {
                     <h1 className="text-2xl font-bold tracking-tight text-white">Gestión de Mantenimiento</h1>
                     <p className="text-zinc-400">Administra los reportes y solicitudes de los residentes.</p>
                 </div>
-                
-                {condos.length > 0 && (
-                    <div className="flex items-center gap-3 bg-zinc-900/40 px-4 py-2 rounded-2xl border border-zinc-800/50 shadow-sm">
-                        <Filter className="h-4 w-4 text-indigo-400" />
-                        <span className="text-xs font-black text-zinc-500 uppercase tracking-widest">Propiedad:</span>
-                        <select
-                            value={selectedCondoId}
-                            onChange={(e) => setSelectedCondoId(e.target.value)}
-                            className="bg-zinc-950/50 border border-zinc-800 text-zinc-200 rounded-xl px-4 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all cursor-pointer font-black uppercase tracking-wider"
-                        >
-                            <option value="all">TODAS LAS PROPIEDADES</option>
-                            {condos.map((condo) => (
-                                <option key={condo.id} value={condo.id}>
-                                    {condo.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+
+                <div className="flex items-center gap-3">
+                    {condos.length > 0 && (
+                        <div className="flex items-center gap-3 bg-zinc-900/40 px-4 py-2 rounded-2xl border border-zinc-800/50 shadow-sm">
+                            <Filter className="h-4 w-4 text-indigo-400" />
+                            <span className="text-xs font-black text-zinc-500 uppercase tracking-widest">Propiedad:</span>
+                            <select
+                                value={selectedCondoId}
+                                onChange={(e) => setSelectedCondoId(e.target.value)}
+                                className="bg-zinc-950/50 border border-zinc-800 text-zinc-200 rounded-xl px-4 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all cursor-pointer font-black uppercase tracking-wider"
+                            >
+                                <option value="all">TODAS LAS PROPIEDADES</option>
+                                {condos.map((condo) => (
+                                    <option key={condo.id} value={condo.id}>
+                                        {condo.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+                        <Plus className="h-4 w-4" />
+                        Nuevo Ticket
+                    </Button>
+                </div>
             </div>
 
             <div className="w-full">

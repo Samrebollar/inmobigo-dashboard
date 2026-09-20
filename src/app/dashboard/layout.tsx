@@ -122,7 +122,7 @@ export default async function DashboardLayout({
         activeSub = fallbackSub
     }
 
-    const isDemoMode = !activeSub && role !== 'resident'
+    const isDemoMode = !activeSub && role !== 'resident' && role !== 'tenant'
     
     // Calculate Subscription Info
     let subscriptionInfo = null
@@ -159,11 +159,11 @@ export default async function DashboardLayout({
     }
     // Metadata is IGNORED for authorization to prevent "Self-declared Admins"
 
-    const isResident = role === 'resident'
+    const isResident = role === 'resident' || role === 'tenant'
 
     // RBAC Logic for Sidebar
-    const isStaff = ['owner', 'admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
-    const isAdmin = ['owner', 'admin', 'admin_condominio', 'admin_propiedad'].includes(role)
+    const isStaff = ['owner', 'admin', 'super_admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
+    const isAdmin = ['owner', 'admin', 'super_admin', 'admin_condominio', 'admin_propiedad'].includes(role)
 
     const showProperties = isStaff
     const showResidents = isStaff
@@ -355,6 +355,13 @@ export default async function DashboardLayout({
                             <span>Planes</span>
                         </Link>
                         <Link
+                            href="/dashboard/integrations"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                        >
+                            <Zap size={18} />
+                            <span>Integraciones</span>
+                        </Link>
+                        <Link
                             href="/dashboard/configuracion"
                             className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                         >
@@ -365,6 +372,13 @@ export default async function DashboardLayout({
                 )}
             </nav>
             <div className="p-4 border-t border-zinc-800 bg-zinc-900/30 space-y-1">
+                <Link
+                    href="/dashboard/help"
+                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                >
+                    <HelpCircle size={18} />
+                    <span>Ayuda</span>
+                </Link>
                 <Link
                     href="/dashboard/perfil"
                     className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"

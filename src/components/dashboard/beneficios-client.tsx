@@ -596,7 +596,9 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                                             {referrals.map((ref) => {
                                                                 // Calculate reward column
                                                                 const isEligible = ['active_plan', 'reward_pending', 'reward_paid'].includes(ref.status)
-                                                                const rewardText = isEligible ? '$1,000.00' : '$0.00'
+                                                                const rewardText = isEligible
+                                                                    ? `$${Number(ref.reward_amount || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                                                                    : '$0.00'
                                                                 
                                                                 return (
                                                                     <tr key={ref.id} className="hover:bg-zinc-900/10 transition-colors">
@@ -703,7 +705,7 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                         <div className="p-5 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
                                             <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Ganancias Acum.</p>
                                             <p className="text-2xl font-black text-emerald-450 mt-1">
-                                                ${(activeReferralsCount * 1000).toLocaleString('es-MX')}
+                                                ${detailedStats.totalEarned.toLocaleString('es-MX')}
                                             </p>
                                         </div>
                                     </div>

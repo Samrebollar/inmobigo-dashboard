@@ -207,7 +207,7 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                                          </h4>
                                                          <div className="flex items-center gap-2 bg-zinc-950/40 px-3 py-1.5 rounded-xl border border-zinc-900/50">
                                                              <Building2 className="h-3.5 w-3.5 text-zinc-500" />
-                                                             <span className="text-[10px] font-black text-zinc-400 tracking-wider uppercase">{ticket.condominium_name || 'Zacil'}</span>
+                                                             <span className="text-[10px] font-black text-zinc-400 tracking-wider uppercase">{ticket.condominium_name || 'N/D'}</span>
                                                          </div>
                                                      </div>
                                                      <p className="text-zinc-400 text-sm leading-relaxed pt-2">
@@ -239,7 +239,7 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                                      </div>
                                                      <div className="flex flex-col">
                                                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Residente</span>
-                                                         <span className="text-xs font-bold text-white line-clamp-1">{ticket.resident_name || 'Clara Licona'}</span>
+                                                         <span className="text-xs font-bold text-white line-clamp-1">{ticket.resident_name || 'N/D'}</span>
                                                      </div>
                                                  </div>
                                                  <div className="flex items-center gap-3">
@@ -248,7 +248,7 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                                      </div>
                                                      <div className="flex flex-col">
                                                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Unidad</span>
-                                                         <span className="text-xs font-bold text-white line-clamp-1">{ticket.unit_number || '1'}</span>
+                                                         <span className="text-xs font-bold text-white line-clamp-1">{ticket.unit_number || 'N/D'}</span>
                                                      </div>
                                                  </div>
                                              </div>

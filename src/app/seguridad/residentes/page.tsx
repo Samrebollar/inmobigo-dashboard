@@ -190,11 +190,17 @@ function ResidentsContent() {
                 const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
                 const overdueInvoices = unitInvoices.filter(i => i.status === 'overdue')
 
-                // Invoices-based debt (facturas reales en BD)
-                const invoiceDebt = pendingInvoices.reduce((sum, inv) => {
-                    const bd = (inv as any).balance_due
-                    return sum + (bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0)
-                }, 0)
+                // Invoices-based debt (facturas reales en BD) — solo cuota de
+                // mantenimiento. El saldo inicial ('initial_balance') se reporta
+                // aparte más abajo (remainingDebtAmount ya lo absorbe cuando
+                // existe una factura real), igual que en el resto de la app
+                // (Gestión de Cobranza separa "Morosidad" de "Saldo Inicial").
+                const invoiceDebt = pendingInvoices
+                    .filter(inv => (inv as any).invoice_type === 'maintenance')
+                    .reduce((sum, inv) => {
+                        const bd = (inv as any).balance_due
+                        return sum + (bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0)
+                    }, 0)
 
                 // Fee-based debt: (meses activos × cuota mensual) − total pagado
                 const unit = unitMap.get(resident.unit_id || '')
@@ -232,7 +238,14 @@ function ResidentsContent() {
                 // excedente absorbe primero el saldo inicial pendiente, para no contarlo dos
                 // veces (una vez como feeBasedDebt/invoiceDebt y otra vez sumando debt_amount
                 // completo aunque ya se haya cubierto con pagos reales).
-                const remainingDebtAmount = Math.max(0, Number(resident.debt_amount || 0) - paymentSurplus)
+                // Si además ya existe una factura real 'initial_balance' para ese mismo saldo
+                // (no todo residente con debt_amount tiene una — a veces es puramente heredado),
+                // esa factura ya es la fuente de verdad y debt_amount quedó obsoleto: se resta
+                // aquí también para no contar el mismo saldo inicial dos veces.
+                const initialBalanceInvoiceDebt = unitInvoices
+                    .filter(inv => (inv as any).invoice_type === 'initial_balance' && (inv.status === 'overdue' || inv.status === 'pending'))
+                    .reduce((sum, inv) => sum + Number((inv as any).balance_due ?? inv.amount ?? 0), 0)
+                const remainingDebtAmount = Math.max(0, Number(resident.debt_amount || 0) - paymentSurplus - initialBalanceInvoiceDebt)
                 const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount
 
                 // Last payment date: fecha real del pago más reciente registrado en
@@ -511,9 +524,11 @@ function ResidentsContent() {
                                                 px-2 py-0.5 md:px-3 md:py-1 text-[10px] md:text-sm font-medium flex-shrink-0
                                                 ${resident.status === 'active'
                                                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
-                                                    : 'bg-red-500/10 text-red-400 border-red-500/20'}
+                                                    : resident.status === 'delinquent'
+                                                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                                        : 'bg-red-500/10 text-red-400 border-red-500/20'}
                                             `}>
-                                                {resident.status === 'active' ? 'Activo' : 'Inactivo'}
+                                                {resident.status === 'active' ? 'Activo' : resident.status === 'delinquent' ? 'Moroso' : 'Inactivo'}
                                             </Badge>
                                         </div>
 

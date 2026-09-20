@@ -35,6 +35,7 @@ export function DelinquencyCenter({
                         .from('condominiums')
                         .select('id, name')
                         .eq('organization_id', orgLookup.organization_id)
+                        .eq('status', 'active')
                         .order('name')
 
                     if (orgCondos) {

@@ -56,6 +56,10 @@ const INCIDENT_STATUS_CONFIG: Record<IncidentStatus, { label: string; color: str
     closed:      { label: 'Cerrada',     color: 'text-zinc-500',    bg: 'bg-zinc-800/50 border-zinc-700/30' },
 }
 
+// El formulario de reporte del guardia (seguridad/incidencias) solo genera
+// 'low'|'medium'|'high'|'urgent' — 'critical' no es alcanzable desde ahí hoy,
+// pero se deja mapeado igual que 'urgent' por si algún día llega un ticket
+// con ese valor (dato legado, otra integración): así no se ve como "Baja".
 const INCIDENT_PRIORITY_CONFIG: Record<string, { label: string; color: string; glow: string }> = {
     urgent:   { label: '🚨 Urgente', color: 'text-rose-400',   glow: 'rose' },
     critical: { label: '🚨 Crítica', color: 'text-rose-400',   glow: 'rose' },
@@ -1426,6 +1430,7 @@ export function ControlOperativoClient() {
     // Filters
     const [taskFilters, setTaskFilters] = useState({ status: '', area: '', property_id: '', search: '' })
     const [incidentSearch, setIncidentSearch] = useState('')
+    const [incidentPropertyFilter, setIncidentPropertyFilter] = useState('')
 
     // New incident toast
     const [newIncidentToast, setNewIncidentToast] = useState<ParsedIncident | null>(null)
@@ -1616,6 +1621,7 @@ export function ControlOperativoClient() {
     }
 
     const filteredIncidents = incidents.filter(i => {
+        if (incidentPropertyFilter && i.condominium_id !== incidentPropertyFilter) return false
         if (!incidentSearch) return true
         const q = incidentSearch.toLowerCase()
         return i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.location.toLowerCase().includes(q)
@@ -1700,7 +1706,22 @@ export function ControlOperativoClient() {
                                                 placeholder="Buscar incidencia..."
                                                 className="w-full pl-9 pr-4 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/40 transition-colors" />
                                         </div>
-                                        <span className="text-[9px] text-zinc-600 font-bold uppercase">{filteredIncidents.length} activas</span>
+                                        {ctx && ctx.properties.length > 1 && (
+                                            <CustomDropdown
+                                                options={[
+                                                    { value: '', label: 'Todas las propiedades' },
+                                                    ...ctx.properties.map(p => ({
+                                                        value: p.id,
+                                                        label: p.name,
+                                                        icon: <Building2 size={12} className="text-zinc-500" />,
+                                                    }))
+                                                ]}
+                                                value={incidentPropertyFilter}
+                                                onChange={val => setIncidentPropertyFilter(val)}
+                                                className="w-48"
+                                            />
+                                        )}
+                                        <span className="text-[9px] text-zinc-600 font-bold uppercase ml-auto">{filteredIncidents.length} activas</span>
                                     </div>
 
                                     {/* Incident List */}

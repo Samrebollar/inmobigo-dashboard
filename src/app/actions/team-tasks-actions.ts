@@ -356,7 +356,9 @@ export async function duplicateTaskAction(
 
         if (fetchErr || !original) return { success: false, error: fetchErr?.message || 'Tarea no encontrada' }
 
-        const { id, created_at, updated_at, started_at, completed_at, ...rest } = original
+        // images/attachments son evidencia de ESA instancia (ej. foto de la fuga ya
+        // reparada) — no aplican a la tarea nueva, que todavía no se ha hecho.
+        const { id, created_at, updated_at, started_at, completed_at, images, attachments, ...rest } = original
 
         const { data: newTask, error } = await supabase
             .from('team_tasks')

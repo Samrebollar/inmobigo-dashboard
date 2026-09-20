@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { Save, Zap, Plus, Trash2 } from 'lucide-react'
+import { Save, Zap, Plus, Trash2, FileText, Upload, ExternalLink } from 'lucide-react'
 import { propertiesService } from '@/services/properties-service'
 import { Condominium, UpdateCondominiumDTO } from '@/types/properties'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -14,6 +14,7 @@ import { useUserRole } from '@/hooks/use-user-role'
 import { AmenityModal } from '@/components/settings/AmenityModal'
 import { getAmenitiesByCondominiumAction, saveAmenityAction, deleteAmenityAction } from '@/app/actions/service-actions'
 import { toast } from 'sonner'
+import { createClient } from '@/utils/supabase/client'
 
 export function SettingsTab() {
     const { isPropiedades } = useUserRole()
@@ -50,9 +51,69 @@ export function SettingsTab() {
     const [showAmenityModal, setShowAmenityModal] = useState(false)
     const [editingAmenity, setEditingAmenity] = useState<any>(null)
 
+    // Reglamento State
+    const [uploadingReglamento, setUploadingReglamento] = useState(false)
+    const reglamentoInputRef = useRef<HTMLInputElement>(null)
+
     useEffect(() => {
         fetchCondo()
     }, [condominiumId])
+
+    const handleReglamentoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (file.type !== 'application/pdf') {
+            toast.error('Solo se permiten archivos en formato PDF.')
+            e.target.value = ''
+            return
+        }
+
+        const supabase = createClient()
+        const filePath = `${condominiumId}/reglamento-${Date.now()}.pdf`
+
+        try {
+            setUploadingReglamento(true)
+            const { error: uploadError } = await supabase.storage
+                .from('condominium_documents')
+                .upload(filePath, file, { upsert: true })
+
+            if (uploadError) throw uploadError
+
+            const { data } = supabase.storage
+                .from('condominium_documents')
+                .getPublicUrl(filePath)
+
+            const uploadedAt = new Date().toISOString()
+            const updated = await propertiesService.update(condominiumId, {
+                reglamento_url: data.publicUrl,
+                reglamento_uploaded_at: uploadedAt
+            })
+            setCondo(updated)
+            toast.success('Reglamento subido correctamente.')
+        } catch (error: any) {
+            console.error('Error uploading reglamento:', error)
+            toast.error('No se pudo subir el reglamento. Verifica que el bucket "condominium_documents" exista en Supabase.')
+        } finally {
+            setUploadingReglamento(false)
+            e.target.value = ''
+        }
+    }
+
+    const handleRemoveReglamento = async () => {
+        if (!confirm('¿Seguro que deseas eliminar el reglamento subido? Los residentes ya no podrán consultarlo.')) return
+        try {
+            const updated = await propertiesService.update(condominiumId, {
+                reglamento_url: null,
+                reglamento_uploaded_at: null
+            })
+            setCondo(updated)
+            toast.success('Reglamento eliminado.')
+        } catch (error: any) {
+            console.error('Error removing reglamento:', error)
+            toast.error('No se pudo eliminar el reglamento.')
+        }
+    }
 
     const fetchAmenities = async (organizationId: string) => {
         if (!condominiumId) return
@@ -267,6 +328,70 @@ export function SettingsTab() {
                             <Input label="Moneda" defaultValue={condo.currency} disabled />
                         </div>
                     </motion.div>
+                </CardContent>
+            </Card>
+
+            <Card className="bg-zinc-900 border-zinc-800">
+                <CardHeader>
+                    <CardTitle>Reglamento del Condominio</CardTitle>
+                    <CardDescription>Sube el reglamento oficial en PDF para que quede disponible en la plataforma.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {condo.reglamento_url ? (
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-800">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
+                                    <FileText className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="font-medium text-white truncate">Reglamento_{isPropiedades ? 'Propiedad' : 'Condominio'}.pdf</p>
+                                    {condo.reglamento_uploaded_at && (
+                                        <p className="text-xs text-zinc-500">
+                                            Subido el {new Date(condo.reglamento_uploaded_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <a href={condo.reglamento_url} target="_blank" rel="noopener noreferrer">
+                                    <Button type="button" variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
+                                        <ExternalLink className="mr-2 h-4 w-4" /> Ver PDF
+                                    </Button>
+                                </a>
+                                <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    className="hidden"
+                                    ref={reglamentoInputRef}
+                                    onChange={handleReglamentoUpload}
+                                    disabled={uploadingReglamento}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300"
+                                    disabled={uploadingReglamento}
+                                    onClick={() => reglamentoInputRef.current?.click()}
+                                >
+                                    {uploadingReglamento ? 'Subiendo...' : 'Reemplazar'}
+                                </Button>
+                                <Button type="button" variant="outline" onClick={handleRemoveReglamento} className="border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300">
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <label className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/30 hover:border-indigo-500/40 hover:bg-zinc-900/40 transition-colors cursor-pointer">
+                            <input type="file" accept="application/pdf" className="hidden" onChange={handleReglamentoUpload} disabled={uploadingReglamento} />
+                            <span className="p-3 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                <Upload className="h-6 w-6" />
+                            </span>
+                            <span className="text-sm font-medium text-zinc-300">
+                                {uploadingReglamento ? 'Subiendo reglamento...' : 'Haz clic para subir el reglamento en PDF'}
+                            </span>
+                            <span className="text-xs text-zinc-500">Solo archivos .pdf</span>
+                        </label>
+                    )}
                 </CardContent>
             </Card>
 

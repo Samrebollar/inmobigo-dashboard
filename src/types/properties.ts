@@ -12,6 +12,8 @@ export interface Condominium {
     billing_day: number
     currency: 'MXN' | 'USD'
     status: 'active' | 'paused'
+    reglamento_url?: string | null
+    reglamento_uploaded_at?: string | null
     created_at?: string
 }
 
@@ -32,6 +34,8 @@ export interface CreateCondominiumDTO {
 
 export interface UpdateCondominiumDTO extends Partial<CreateCondominiumDTO> {
     id: string
+    reglamento_url?: string | null
+    reglamento_uploaded_at?: string | null
 }
 
 export interface SettingsCondominio {

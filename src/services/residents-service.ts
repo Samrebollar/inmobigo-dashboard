@@ -2,6 +2,26 @@ import { createClient } from '@/utils/supabase/client'
 import { Resident, CreateResidentDTO, UpdateResidentDTO } from '@/types/residents'
 import { demoDb } from '@/utils/demo-db'
 
+/**
+ * Recalcula el "Estado de Ocupación" de una unidad (Ocupada/Vacía) según si
+ * todavía tiene algún residente asignado (activo o moroso — solo 'inactive'
+ * no cuenta). Antes este campo era 100% manual y podía quedar desactualizado
+ * indefinidamente cuando se asignaba/quitaba un residente de una unidad.
+ */
+async function syncUnitOccupancy(supabase: any, unitId?: string | null): Promise<void> {
+    if (!unitId) return
+    const { count } = await supabase
+        .from('residents')
+        .select('id', { count: 'exact', head: true })
+        .eq('unit_id', unitId)
+        .neq('status', 'inactive')
+
+    await supabase
+        .from('units')
+        .update({ status: (count && count > 0) ? 'occupied' : 'vacant' })
+        .eq('id', unitId)
+}
+
 export const residentsService = {
     async getByCondominium(condominiumId: string): Promise<Resident[]> {
         if (condominiumId.startsWith('demo-')) {
@@ -30,10 +50,11 @@ export const residentsService = {
 
         if (error) throw error
 
-        // Transform to flatten unit_number if needed
+        // Transform to flatten unit_number / payment_deadline if needed
         return data?.map(r => ({
             ...r,
-            unit_number: r.units?.unit_number
+            unit_number: r.units?.unit_number,
+            payment_deadline: r.units?.payment_deadline
         })) || []
     },
 
@@ -59,7 +80,8 @@ export const residentsService = {
 
         return data?.map(r => ({
             ...r,
-            unit_number: r.units?.unit_number
+            unit_number: r.units?.unit_number,
+            payment_deadline: r.units?.payment_deadline
         })) || []
     },
 
@@ -80,7 +102,8 @@ export const residentsService = {
             .select(`
         *,
         units (
-          unit_number
+          unit_number,
+          payment_deadline
         ),
         vehicles (*)
       `)
@@ -94,7 +117,8 @@ export const residentsService = {
 
         return {
             ...data,
-            unit_number: data.units?.unit_number
+            unit_number: data.units?.unit_number,
+            payment_deadline: data.units?.payment_deadline
         }
     },
 
@@ -218,6 +242,8 @@ export const residentsService = {
             }
         }
 
+        await syncUnitOccupancy(supabase, newResident.unit_id)
+
         return newResident
     },
 
@@ -230,6 +256,15 @@ export const residentsService = {
             return updated
         }
         const supabase = createClient()
+
+        // Unidad previa, por si esta actualización reasigna al residente a otra
+        // unidad (o lo da de baja) — hay que revalidar la ocupación de ambas.
+        const { data: before } = await supabase
+            .from('residents')
+            .select('unit_id')
+            .eq('id', id)
+            .maybeSingle()
+
         const { data, error } = await supabase
             .from('residents')
             .update(updates)
@@ -238,6 +273,12 @@ export const residentsService = {
             .single()
 
         if (error) throw error
+
+        const affectedUnitIds = new Set([before?.unit_id, data.unit_id].filter(Boolean))
+        for (const unitId of affectedUnitIds) {
+            await syncUnitOccupancy(supabase, unitId)
+        }
+
         return data
     },
 
@@ -247,12 +288,21 @@ export const residentsService = {
             return
         }
         const supabase = createClient()
+
+        const { data: before } = await supabase
+            .from('residents')
+            .select('unit_id')
+            .eq('id', id)
+            .maybeSingle()
+
         const { error } = await supabase
             .from('residents')
             .delete()
             .eq('id', id)
 
         if (error) throw error
+
+        await syncUnitOccupancy(supabase, before?.unit_id)
     },
 
     async deleteAll(condominiumId: string): Promise<void> {
@@ -268,6 +318,13 @@ export const residentsService = {
             .eq('condominium_id', condominiumId)
 
         if (error) throw error
+
+        // Ya no queda ningún residente en este condominio — todas sus unidades
+        // vuelven a Vacía.
+        await supabase
+            .from('units')
+            .update({ status: 'vacant' })
+            .eq('condominium_id', condominiumId)
     },
 
     async checkPreApproval(email: string): Promise<{ exists: boolean, registered: boolean }> {

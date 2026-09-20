@@ -141,6 +141,12 @@ export function calculateResidentMonthlyFinancials({
         return emptyFinancials
     }
 
+    // Día límite de pago real de la unidad del residente (Propiedades > Unidades >
+    // "Fecha límite de cobro"). Antes este cálculo tenía el día 10 fijo en el código
+    // para toda la plataforma, ignorando lo que cada unidad configuraba. Se mantiene
+    // 10 como default para unidades que nunca configuraron el campo.
+    const paymentDeadlineDay = Number(resident.payment_deadline) || 10
+
     // 1. Check if billing is active. 'delinquent' (moroso) sigue facturando/
     // generando deuda — solo 'inactive' (dado de baja) queda fuera. Antes esto
     // exigía 'active' exactamente, así que un residente ya marcado como moroso
@@ -311,13 +317,13 @@ export function calculateResidentMonthlyFinancials({
             // Find if there is an existing maintenance invoice in the month that we can copy properties from
             const originalMaintenance = dbInvoicesInMonth.find(inv => inv.invoice_type === 'maintenance')
 
-            // Regla del día 10: meses pasados siempre están vencidos; el mes en
-            // curso solo si ya pasó el día 10. Antes esta fila virtual se
-            // marcaba 'overdue' sin importar el mes, lo cual también inflaba
-            // "Morosidad" cuando en realidad era deuda "Pendiente" del mes actual.
+            // Regla de la fecha límite real de la unidad: meses pasados siempre están
+            // vencidos; el mes en curso solo si ya pasó ese día. Antes esta fila
+            // virtual se marcaba 'overdue' sin importar el mes, lo cual también
+            // inflaba "Morosidad" cuando en realidad era deuda "Pendiente" del mes actual.
             const isPastMonthForVirtual = selectedYear < currentYear || (selectedYear === currentYear && m < currentMonthIndex)
             const isCurrentMonthForVirtual = selectedYear === currentYear && m === currentMonthIndex
-            const isVirtualOverdue = isPastMonthForVirtual || (isCurrentMonthForVirtual && today.getDate() > 10)
+            const isVirtualOverdue = isPastMonthForVirtual || (isCurrentMonthForVirtual && today.getDate() > paymentDeadlineDay)
 
             // Construct virtual overdue row
             const virtualId = `virtual-overdue-${originalMaintenance?.id || `${selectedYear}-${m}`}`
@@ -328,12 +334,15 @@ export function calculateResidentMonthlyFinancials({
                 ? `${originalMaintenance.description} (Saldo Restante Vencido)`
                 : `Cuota de Mantenimiento Vencida`
 
-            // Create a default date for the 10th of that month (or today if it's the current month and today is before the 10th)
+            // Create a default date for the unit's payment deadline day of that month
+            // (or today if it's the current month and today is before the deadline)
             const yearStr = String(selectedYear)
             const monthStr = String(m + 1).padStart(2, '0')
-            const dateDay = (m === currentMonthIndex && selectedYear === currentYear) 
-                ? Math.min(10, today.getDate()) 
-                : 10
+            const lastDayOfM = new Date(selectedYear, m + 1, 0).getDate()
+            const clampedDeadlineDay = Math.min(paymentDeadlineDay, lastDayOfM)
+            const dateDay = (m === currentMonthIndex && selectedYear === currentYear)
+                ? Math.min(clampedDeadlineDay, today.getDate())
+                : clampedDeadlineDay
             const isoDate = `${yearStr}-${monthStr}-${String(dateDay).padStart(2, '0')}T12:00:00.000Z`
 
             const virtualRow = {
@@ -452,7 +461,7 @@ export function calculateResidentMonthlyFinancials({
     const isCurrentMonth = selectedYear === currentYear && monthNum === currentMonthIndex
     const isFutureMonth = selectedYear > currentYear || (selectedYear === currentYear && monthNum > currentMonthIndex)
 
-    const isOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > 10)
+    const isOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > paymentDeadlineDay)
 
     // totalPaid = suma de amount - balance_due de todas las facturas del mes, sin
     // filtrar por status (ver comentario equivalente en la rama 'all' de arriba):
@@ -566,6 +575,16 @@ export function calculateCondoMonthlyFinancials({
         expectedMonthlyIncome += Number(u.monto_mensual || 0)
     })
 
+    // Día límite de pago real por unidad (Propiedades > Unidades > "Fecha límite de
+    // cobro"). Antes el cálculo de morosidad de todo el condominio tenía el día 10
+    // fijo en el código, ignorando lo que cada unidad configuraba. Se mantiene 10
+    // como default para unidades que nunca configuraron el campo.
+    const unitDeadlineById = new Map<string, number>(
+        units.map(u => [u.id, Number(u.payment_deadline) || 10])
+    )
+    const getDeadlineDayForUnit = (unitId: string | null | undefined): number =>
+        (unitId && unitDeadlineById.get(unitId)) || 10
+
     let porCobrar = 0
     let vencido = 0
     let saldoInicialPendiente = 0
@@ -614,17 +633,19 @@ export function calculateCondoMonthlyFinancials({
         const bal = Number(inv.balance_due || 0)
         if (bal <= 0) return
 
-        // Determine if this billing period is past the payment deadline (day 10).
-        // Past months are always overdue. For the current month, check if today > day 10.
+        // Determine if this billing period is past the payment deadline of the
+        // invoice's own unit. Past months are always overdue. For the current
+        // month, check if today > the unit's deadline day.
         const invDateStr = inv.due_date || inv.created_at
         const parts = getLocalDateParts(invDateStr)
         const invMonth = parts ? parts.month : selectedMonth
         const invYear  = parts ? parts.year : selectedYear
+        const deadlineDay = getDeadlineDayForUnit(inv.unit_id)
 
         const isPastPeriod = invYear < today.getFullYear() ||
             (invYear === today.getFullYear() && invMonth < today.getMonth())
         const isCurrentPeriod = invYear === today.getFullYear() && invMonth === today.getMonth()
-        const isInOverduePeriod = isPastPeriod || (isCurrentPeriod && today.getDate() > 10)
+        const isInOverduePeriod = isPastPeriod || (isCurrentPeriod && today.getDate() > deadlineDay)
 
         // Treat pending as overdue when the payment deadline has passed
         const effectiveStatus = (inv.status === 'pending' && isInOverduePeriod) ? 'overdue' : inv.status
@@ -655,20 +676,30 @@ export function calculateCondoMonthlyFinancials({
 
     // ── PROJECT DEBT FOR MONTHS WITH NO INVOICES GENERATED ──────────────────────
     // When invoices haven't been generated (e.g., the cron didn't run this month),
-    // we still show the correct Pendiente / Morosidad amount based on the day-10 rule.
+    // we still show the correct Pendiente / Morosidad amount. This aggregates
+    // ALL units in one lump sum for the month, so there's no single unit to read
+    // a deadline from — we use the earliest (most conservative) deadline among
+    // billing-active units as the cutoff, falling back to día 10 if none is set.
     // We calculate it per month in the period and add projected amounts on top of
     // what the existing invoices already account for.
+    const earliestActiveDeadlineDay = units
+        .filter(u => u.facturacion_activa !== false)
+        .reduce((min: number | null, u) => {
+            const d = Number(u.payment_deadline) || 10
+            return min === null ? d : Math.min(min, d)
+        }, null) ?? 10
+
     if (numMonths > 0 && expectedMonthlyIncome > 0) {
         for (let m = firstMonth; m <= lastMonth; m++) {
             // Skip future months
             if (selectedYear > today.getFullYear()) continue
             if (selectedYear === today.getFullYear() && m > today.getMonth()) continue
 
-            // Determine if this month has passed the day-10 deadline
+            // Determine if this month has passed the deadline
             const isPastMonth = selectedYear < today.getFullYear() ||
                 (selectedYear === today.getFullYear() && m < today.getMonth())
             const isCurrentMonth = selectedYear === today.getFullYear() && m === today.getMonth()
-            const isInOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > 10)
+            const isInOverduePeriod = isPastMonth || (isCurrentMonth && today.getDate() > earliestActiveDeadlineDay)
 
             // Check if any maintenance invoices already exist for this month
             const invoicesForThisMonth = maintenanceInvoices.filter(inv => {

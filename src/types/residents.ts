@@ -17,6 +17,7 @@ export interface Resident {
     facturacion_activa?: boolean
     // Linked data (optional for joins)
     unit_number?: string
+    payment_deadline?: number
     vehicles?: Vehicle[]
 }
 

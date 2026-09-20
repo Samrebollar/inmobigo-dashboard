@@ -85,9 +85,9 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                 await fetchUnits()
             }
             onUnitsUpdated?.()
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error deleting unit:", error)
-            alert("Error al eliminar unidad.")
+            alert(error?.message || "Error al eliminar unidad.")
         } finally {
             setIsDeleting(false)
             setDeleteModalOpen(false)
@@ -111,9 +111,9 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
             await unitsService.deleteAll(condominiumId)
             await fetchUnits()
             onUnitsUpdated?.()
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error deleting all units:", error)
-            alert("Error al eliminar las unidades.")
+            alert(error?.message || "Error al eliminar las unidades.")
         } finally {
             setIsDeletingAll(false)
             setDeleteAllModalOpen(false)

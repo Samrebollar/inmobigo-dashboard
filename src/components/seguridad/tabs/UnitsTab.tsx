@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
+import { Plus, Search, MoreHorizontal, Edit, Trash2, DollarSign } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,11 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
     const [deleteAllStep, setDeleteAllStep] = useState(1)
     const [isDeletingAll, setIsDeletingAll] = useState(false)
 
+    // Update All Fees State
+    const [updateFeeModalOpen, setUpdateFeeModalOpen] = useState(false)
+    const [newFeeValue, setNewFeeValue] = useState('')
+    const [isUpdatingFees, setIsUpdatingFees] = useState(false)
+
     useEffect(() => {
         fetchUnits()
     }, [condominiumId])
@@ -80,9 +85,9 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                 await fetchUnits()
             }
             onUnitsUpdated?.()
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error deleting unit:", error)
-            alert("Error al eliminar unidad.")
+            alert(error?.message || "Error al eliminar unidad.")
         } finally {
             setIsDeleting(false)
             setDeleteModalOpen(false)
@@ -106,12 +111,33 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
             await unitsService.deleteAll(condominiumId)
             await fetchUnits()
             onUnitsUpdated?.()
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error deleting all units:", error)
-            alert("Error al eliminar las unidades.")
+            alert(error?.message || "Error al eliminar las unidades.")
         } finally {
             setIsDeletingAll(false)
             setDeleteAllModalOpen(false)
+        }
+    }
+
+    const handleUpdateAllFees = async () => {
+        const fee = parseFloat(newFeeValue)
+        if (isNaN(fee) || fee < 0) {
+            alert('Por favor introduce un monto de cuota válido.')
+            return
+        }
+        setIsUpdatingFees(true)
+        try {
+            await unitsService.updateAllFees(condominiumId, fee)
+            await fetchUnits()
+            onUnitsUpdated?.()
+            setUpdateFeeModalOpen(false)
+            setNewFeeValue('')
+        } catch (error) {
+            console.error('Error updating all fees:', error)
+            alert('Error al actualizar las cuotas.')
+        } finally {
+            setIsUpdatingFees(false)
         }
     }
 
@@ -145,8 +171,8 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                     />
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800">
-                        <Filter className="mr-2 h-4 w-4" /> Filtros
+                    <Button onClick={() => setUpdateFeeModalOpen(true)} variant="outline" className="border-indigo-500/20 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300">
+                        <DollarSign className="mr-2 h-4 w-4" /> Actualizar Cuota
                     </Button>
                     <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300">
                         <Trash2 className="mr-2 h-4 w-4" /> Borrar Todo
@@ -168,7 +194,9 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                 <th className="px-6 py-4 font-medium">Tipo</th>
                                 <th className="px-6 py-4 font-medium">Monto / Cuota</th>
                                 <th className="px-6 py-4 font-medium">Día Cobro</th>
+                                <th className="px-6 py-4 font-medium">Fecha límite</th>
                                 <th className="px-6 py-4 font-medium">Estado</th>
+                                <th className="px-6 py-4 font-medium">Estado cobranza</th>
                                 <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -202,9 +230,17 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                         <td className="px-6 py-4 text-zinc-300">
                                             {unit.billing_day ? `Día ${unit.billing_day}` : '-'}
                                         </td>
+                                        <td className="px-6 py-4 text-zinc-300">
+                                            {unit.payment_deadline ? `Día ${unit.payment_deadline}` : '-'}
+                                        </td>
                                         <td className="px-6 py-4">
                                             <Badge variant={unit.status === 'occupied' ? 'default' : 'warning'}>
                                                 {unit.status === 'occupied' ? 'Habitada' : 'Vacía'}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <Badge variant={unit.billing_status === 'suspended' ? 'destructive' : 'success'}>
+                                                {unit.billing_status === 'suspended' ? 'Suspendida' : 'Activa'}
                                             </Badge>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -229,7 +265,7 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron unidades.
                                     </td>
                                 </tr>
@@ -358,6 +394,53 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                             </div>
                         </>
                     )}
+                </div>
+            </Modal>
+
+            {/* Update All Fees Modal */}
+            <Modal isOpen={updateFeeModalOpen} onClose={() => !isUpdatingFees && setUpdateFeeModalOpen(false)}>
+                <div className="p-6 space-y-6">
+                    <div className="mx-auto w-16 h-16 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.15)] animate-pulse">
+                        <DollarSign className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-2 text-center">
+                        <h3 className="text-xl font-black text-white tracking-tight">
+                            Actualizar Cuota de Mantenimiento
+                        </h3>
+                        <p className="text-zinc-400 text-sm max-w-sm mx-auto leading-relaxed">
+                            Establece una nueva cuota mensual para <span className="text-indigo-400 font-bold">todas las unidades</span> de este condominio. Esto modificará los montos de mantenimiento actuales de forma global.
+                        </p>
+                    </div>
+                    <div className="space-y-4 max-w-xs mx-auto">
+                        <div className="relative group">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400 font-bold text-lg group-focus-within:text-indigo-300 transition-colors">$</span>
+                            <Input
+                                type="number"
+                                step="any"
+                                placeholder="0.00"
+                                value={newFeeValue}
+                                onChange={(e) => setNewFeeValue(e.target.value)}
+                                className="pl-8 bg-zinc-950/60 border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl py-7 text-xl font-black text-white text-center transition-all shadow-inner placeholder:text-zinc-700"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-3 justify-center pt-4">
+                        <Button
+                            variant="outline"
+                            onClick={() => setUpdateFeeModalOpen(false)}
+                            disabled={isUpdatingFees}
+                            className="bg-transparent border-zinc-700 hover:bg-zinc-800 text-zinc-300 min-w-[120px] rounded-xl py-5"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleUpdateAllFees}
+                            isLoading={isUpdatingFees}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white min-w-[160px] shadow-lg shadow-indigo-600/25 rounded-xl py-5 font-bold transition-all duration-300 hover:shadow-indigo-600/40"
+                        >
+                            {isUpdatingFees ? 'Actualizando...' : 'Confirmar y Aplicar'}
+                        </Button>
+                    </div>
                 </div>
             </Modal>
         </div>

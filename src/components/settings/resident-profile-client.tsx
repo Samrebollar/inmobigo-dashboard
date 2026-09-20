@@ -28,28 +28,35 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
+import { contactInmobiGoAction } from '@/app/actions/contact-actions'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { Send } from 'lucide-react'
 
-export default function ResidentProfileClient({ 
-    user, 
-    initialResident, 
+export default function ResidentProfileClient({
+    user,
+    initialResident,
     profile,
     role = 'resident',
-    subscription
-}: { 
-    user: any, 
-    initialResident: any, 
+    subscription,
+    organizationName
+}: {
+    user: any,
+    initialResident: any,
     profile: any,
     role?: string,
-    subscription?: any
+    subscription?: any,
+    organizationName?: string | null
 }) {
     const router = useRouter()
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const isAdmin = role === 'admin'
+    const canContactInmobiGo = role !== 'resident'
+    const [inmobiGoMessage, setInmobiGoMessage] = useState('')
+    const [sendingInmobiGoMessage, setSendingInmobiGoMessage] = useState(false)
 
     const [resident, setResident] = useState(() => {
         const res = initialResident || {}
@@ -178,6 +185,34 @@ export default function ResidentProfileClient({
             toast.error(`Ocurrió un error al guardar los cambios: ${error.message}`)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleSendInmobiGoMessage = async () => {
+        if (!inmobiGoMessage.trim()) {
+            toast.error('Escribe un mensaje antes de enviarlo.')
+            return
+        }
+
+        setSendingInmobiGoMessage(true)
+        try {
+            const adminName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim() || profile?.full_name || user.email
+            const result = await contactInmobiGoAction({
+                organizationName,
+                adminName,
+                adminPhone: resident.phone || null,
+                mensaje: inmobiGoMessage.trim(),
+            })
+
+            if (!result.success) throw new Error(result.error)
+
+            setInmobiGoMessage('')
+            toast.success('Mensaje enviado a InmobiGo por WhatsApp. Te responderán lo antes posible.')
+        } catch (error: any) {
+            console.error('Error contactando a InmobiGo:', error)
+            toast.error(`No se pudo enviar el mensaje: ${error.message || 'Error de red'}`)
+        } finally {
+            setSendingInmobiGoMessage(false)
         }
     }
 
@@ -331,6 +366,49 @@ export default function ResidentProfileClient({
                             </div>
                         </div>
                     </motion.div>
+
+                    {canContactInmobiGo && (
+                        <motion.div
+                            variants={itemVariants}
+                            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                            className="rounded-3xl border border-zinc-800 bg-zinc-900/50 p-6 hover:bg-zinc-900/80 hover:border-emerald-500/30 transition-all shadow-lg hover:shadow-emerald-500/5 relative overflow-hidden"
+                        >
+                            <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+                            <div className="flex items-center justify-between mb-2 relative z-10">
+                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                    <MessageSquare className="h-5 w-5 text-emerald-400" /> Contactar a InmobiGo
+                                </h2>
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    WhatsApp
+                                </div>
+                            </div>
+                            <p className="text-sm text-zinc-500 mb-4 relative z-10">
+                                Escribe tu duda o solicitud y la recibirá directamente nuestro equipo de soporte por WhatsApp.
+                            </p>
+                            <div className="space-y-3 relative z-10">
+                                <textarea
+                                    value={inmobiGoMessage}
+                                    onChange={(e) => setInmobiGoMessage(e.target.value)}
+                                    placeholder="Ej. Necesito ayuda para configurar la facturación de mi condominio..."
+                                    rows={4}
+                                    maxLength={1000}
+                                    className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4 text-sm text-white placeholder-zinc-600 focus:border-emerald-500/50 focus:ring-emerald-500/20 focus:outline-none transition-all resize-none"
+                                />
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[11px] text-zinc-600">{inmobiGoMessage.length}/1000</span>
+                                    <Button
+                                        onClick={handleSendInmobiGoMessage}
+                                        disabled={sendingInmobiGoMessage || !inmobiGoMessage.trim()}
+                                        className="bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20 gap-2"
+                                    >
+                                        {sendingInmobiGoMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                        Enviar mensaje
+                                    </Button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
 
                     {!isAdmin && (
                         <motion.div

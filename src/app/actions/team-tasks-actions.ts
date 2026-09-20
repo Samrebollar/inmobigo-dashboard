@@ -8,6 +8,7 @@ import type {
     TaskChecklistItem,
     TaskComment,
     TaskHistoryAction,
+    RecurrenceRule,
 } from '@/types/team-tasks'
 
 function getAdminClient() {
@@ -289,10 +290,105 @@ export async function updateTaskAction(
             })
         }
 
+        // Si la tarea es recurrente y se acaba de completar, se genera sola la
+        // siguiente ocurrencia — antes "Recurrencia" en el formulario no hacía
+        // nada: la tarea completada simplemente desaparecía del tablero y
+        // alguien tenía que acordarse de volver a crearla a mano.
+        if (action === 'complete' && task.recurrence_rule) {
+            try {
+                const rule: RecurrenceRule = JSON.parse(task.recurrence_rule)
+                await generateNextRecurrence(supabase, task, rule, updatedBy)
+            } catch (err) {
+                console.error('Error generando la siguiente ocurrencia recurrente:', err)
+            }
+        }
+
         return { success: true, task }
     } catch (err: any) {
         return { success: false, error: err.message }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECURRENCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+function advanceDate(base: Date, rule: RecurrenceRule): Date {
+    const d = new Date(base)
+    const interval = Math.max(1, Number(rule.interval) || 1)
+    switch (rule.type) {
+        case 'daily': d.setDate(d.getDate() + interval); break
+        case 'weekly': d.setDate(d.getDate() + interval * 7); break
+        case 'monthly': d.setMonth(d.getMonth() + interval); break
+        case 'yearly': d.setFullYear(d.getFullYear() + interval); break
+        case 'custom': d.setDate(d.getDate() + interval); break
+        default: d.setDate(d.getDate() + 1)
+    }
+    return d
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function generateNextRecurrence(supabase: any, completedTask: any, rule: RecurrenceRule, createdBy: { id: string; name: string }) {
+    // Se avanza desde la fecha límite ORIGINAL (no desde hoy), para que una tarea
+    // que se completa tarde no corra todo el calendario de la recurrencia — "limpieza
+    // de alberca todos los lunes" debe seguir cayendo en lunes aunque esta semana se
+    // haya completado el martes.
+    const baseDateStr = completedTask.due_date || new Date().toISOString().split('T')[0]
+    const baseDate = new Date(`${baseDateStr}T12:00:00`)
+    const nextDueDate = advanceDate(baseDate, rule).toISOString().split('T')[0]
+
+    if (rule.end_date && nextDueDate > rule.end_date) return
+
+    let nextScheduledAt: string | null = null
+    if (completedTask.scheduled_at) {
+        nextScheduledAt = advanceDate(new Date(completedTask.scheduled_at), rule).toISOString()
+    }
+
+    const {
+        id, created_at, updated_at, started_at, completed_at,
+        images, attachments, due_date, scheduled_at, status,
+        ...rest
+    } = completedTask
+
+    const { data: newTask, error } = await supabase
+        .from('team_tasks')
+        .insert({
+            ...rest,
+            due_date: nextDueDate,
+            scheduled_at: nextScheduledAt,
+            status: 'pending',
+            created_by: createdBy.id,
+        })
+        .select()
+        .single()
+
+    if (error || !newTask) return
+
+    // El checklist se copia como plantilla (sin marcar) — la ocurrencia nueva
+    // arranca desde cero, no con las casillas ya completadas de la anterior.
+    const { data: checklistItems } = await supabase
+        .from('task_checklist_items')
+        .select('label')
+        .eq('task_id', completedTask.id)
+
+    if (checklistItems && checklistItems.length > 0) {
+        await supabase.from('task_checklist_items').insert(
+            checklistItems.map((item: any) => ({
+                task_id: newTask.id,
+                organization_id: completedTask.organization_id,
+                label: item.label,
+            }))
+        )
+    }
+
+    await recordTaskHistory(supabase, {
+        task_id: newTask.id,
+        organization_id: completedTask.organization_id,
+        user_id: createdBy.id,
+        user_name: createdBy.name,
+        action: 'create',
+        details: `Generada automáticamente por recurrencia de "${completedTask.title}"`,
+    })
 }
 
 export async function startTaskAction(

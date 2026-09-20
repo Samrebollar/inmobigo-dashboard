@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { activatePlanReferralAction } from '@/app/actions/benefit-actions'
 
 const PLAN_LIMITS: Record<string, number> = {
     CORE: 20,
@@ -132,6 +133,15 @@ async function handleWebhook(req: Request) {
                 next_billing_date: nextPayment.toISOString(),
             })
             .eq('id', subscription.organization_id)
+
+        // 3️⃣ Liberar recompensa de referido si esta organización fue referida y
+        // apenas activa su primer plan de pago. No debe tumbar la respuesta del
+        // webhook si falla — la suscripción ya quedó activada arriba.
+        try {
+            await activatePlanReferralAction(subscription.organization_id)
+        } catch (referralError) {
+            console.error('Error activando recompensa de referido:', referralError)
+        }
 
         console.log(`Suscripción ${subscription.id} para la organización ${subscription.organization_id} activada exitosamente.`)
         return NextResponse.json({ message: 'Suscripción activada exitosamente' })

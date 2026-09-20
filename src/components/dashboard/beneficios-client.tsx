@@ -461,13 +461,17 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                                             <span className="text-indigo-400/90 font-black tracking-wider truncate max-w-[160px] text-right">{categoryName}</span>
                                                         </div>
 
-                                                        {/* Próximamente button (disabled) */}
+                                                        {/* Ver curso */}
                                                         <button
-                                                            disabled
-                                                            onClick={e => e.stopPropagation()}
-                                                            className="w-full h-11 bg-zinc-900/60 border border-zinc-800 text-zinc-500 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed opacity-55"
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedTraining(tr) }}
+                                                            className={`w-full h-11 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                                                                isDone
+                                                                    ? 'bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/25'
+                                                                    : 'bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 text-white'
+                                                            }`}
                                                         >
-                                                            ⏳ Próximamente
+                                                            {isDone ? <CheckCircle size={14} /> : <Play size={14} />}
+                                                            {isDone ? 'Completado ✓' : 'Ver Curso'}
                                                         </button>
                                                     </div>
                                                 </CardContent>
@@ -812,15 +816,25 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                 </button>
 
                                 {/* Video Iframe / Content */}
-                                <div className="relative aspect-video w-full bg-black">
-                                    <iframe
-                                        src={selectedTraining.content_url}
-                                        title={selectedTraining.title}
-                                        className="absolute inset-0 w-full h-full border-0"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                        allowFullScreen
-                                    />
-                                </div>
+                                {selectedTraining.content_url ? (
+                                    <div className="relative aspect-video w-full bg-black">
+                                        <iframe
+                                            src={selectedTraining.content_url}
+                                            title={selectedTraining.title}
+                                            className="absolute inset-0 w-full h-full border-0"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                            allowFullScreen
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="relative aspect-video w-full bg-zinc-950 flex flex-col items-center justify-center gap-3 border-b border-zinc-800">
+                                        <PlayCircle size={40} className="text-zinc-700" />
+                                        <p className="text-sm font-bold text-zinc-500">Video en preparación</p>
+                                        <p className="text-xs text-zinc-600 max-w-sm text-center px-6">
+                                            Por ahora puedes revisar la descripción y los objetivos de este curso más abajo.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="p-8 space-y-6">
                                     <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-5">
@@ -849,6 +863,24 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                         <h4 className="text-sm font-bold text-white uppercase tracking-widest">Sobre este curso</h4>
                                         <p className="text-zinc-400 text-sm font-medium">{selectedTraining.description}</p>
                                     </div>
+
+                                    {(learningObjectivesMap[selectedTraining.title] || []).length > 0 && (
+                                        <div className="space-y-3">
+                                            <h4 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                                <BookOpen size={14} className="text-indigo-400" /> ¿Qué aprenderás?
+                                            </h4>
+                                            <ul className="space-y-2">
+                                                {learningObjectivesMap[selectedTraining.title].map((obj, i) => (
+                                                    <li key={i} className="flex items-start gap-3 text-sm text-zinc-300 leading-snug">
+                                                        <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
+                                                            <Check size={11} className="text-indigo-400" strokeWidth={3} />
+                                                        </span>
+                                                        {obj}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
 
                                     {/* Video Completion Tip */}
                                     <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex gap-3 text-xs text-indigo-300">
@@ -1039,10 +1071,13 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                     {/* Footer CTA */}
                                     <div className="pt-1">
                                         <button
-                                            disabled
-                                            className="w-full h-12 rounded-2xl bg-zinc-800/60 border border-zinc-700/50 text-zinc-500 text-xs font-bold uppercase tracking-widest cursor-not-allowed flex items-center justify-center gap-2 opacity-60"
+                                            onClick={() => {
+                                                setSelectedTraining(selectedLearnCard)
+                                                setSelectedLearnCard(null)
+                                            }}
+                                            className="w-full h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 text-white text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                                         >
-                                            ⏳ Contenido disponible próximamente
+                                            <Play size={14} /> Comenzar Curso
                                         </button>
                                     </div>
                                 </div>

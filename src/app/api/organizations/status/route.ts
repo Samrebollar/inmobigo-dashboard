@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { NextResponse } from 'next/server'
+import { activatePlanReferralAction } from '@/app/actions/benefit-actions'
 
 export async function GET() {
     try {
@@ -100,6 +101,16 @@ export async function GET() {
                                 units_limit: PLAN_LIMITS[pendingSub.plan_name] || 0,
                                 next_billing_date: nextPayment.toISOString(),
                             }).eq('id', orgId)
+
+                            // Libera la recompensa de referido si esta organización fue
+                            // referida — este auto-sync es un fallback (el webhook de
+                            // MercadoPago puede tardar/fallar), así que también es una
+                            // vía real de primera activación, no solo el webhook.
+                            try {
+                                await activatePlanReferralAction(orgId)
+                            } catch (referralError) {
+                                console.error('Error activando recompensa de referido:', referralError)
+                            }
 
                             sub = {
                                 ...pendingSub,

@@ -30,10 +30,9 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { 
-    updateTrainingProgressAction, 
-    createReferralAction, 
-    simulateReferralStatusAction 
+import {
+    updateTrainingProgressAction,
+    createReferralAction
 } from '@/app/actions/benefit-actions'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -283,26 +282,6 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
         }
     }
 
-    // Simulate referral conversion for demo/testing
-    const handleSimulateStatus = async (referralId: string, status: 'trial' | 'active_plan' | 'reward_paid') => {
-        try {
-            const result = await simulateReferralStatusAction(referralId, status)
-            if (!result.success) throw new Error(result.error)
-            
-            toast.success(`Simulación exitosa: Referido actualizado a "${status}"`)
-            
-            // Reload referrals locally
-            setReferrals(prev => prev.map(r => r.id === referralId ? { 
-                ...r, 
-                status, 
-                reward_paid: status === 'reward_paid',
-                reward_paid_at: status === 'reward_paid' ? new Date().toISOString() : null
-            } : r))
-        } catch (error: any) {
-            console.error(error)
-            toast.error('Simulación fallida: ' + error.message)
-        }
-    }
 
     // Gamified progress Calculations
     const activeReferralsCount = referrals.filter(r => ['active_plan', 'reward_pending', 'reward_paid'].includes(r.status)).length
@@ -607,7 +586,6 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                                                 <th className="p-4">Estado</th>
                                                                 <th className="p-4">Fecha</th>
                                                                 <th className="p-4">Recompensa</th>
-                                                                <th className="p-4 text-center">Acciones Demo</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-zinc-800/60 text-xs">
@@ -630,41 +608,6 @@ export function BeneficiosClient({ admin, initialData, detailedStats }: Benefici
                                                                         </td>
                                                                         <td className={`p-4 font-bold ${isEligible ? 'text-emerald-450' : 'text-zinc-500'}`}>
                                                                             {rewardText}
-                                                                        </td>
-                                                                        <td className="p-4 text-center">
-                                                                            {/* Demo actions to update state and test */}
-                                                                            <div className="flex items-center justify-center gap-1.5">
-                                                                                {ref.status === 'registered' && (
-                                                                                    <button 
-                                                                                        onClick={() => handleSimulateStatus(ref.id, 'trial')}
-                                                                                        className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-md text-[9px] font-black uppercase tracking-wider transition-all"
-                                                                                        title="Simular conversión a periodo de prueba"
-                                                                                    >
-                                                                                        Activar Prueba
-                                                                                    </button>
-                                                                                )}
-                                                                                {ref.status === 'trial' && (
-                                                                                    <button 
-                                                                                        onClick={() => handleSimulateStatus(ref.id, 'active_plan')}
-                                                                                        className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-450 border border-emerald-500/20 rounded-md text-[9px] font-black uppercase tracking-wider transition-all"
-                                                                                        title="Simular adquisición de plan de pago"
-                                                                                    >
-                                                                                        Contratar Plan
-                                                                                    </button>
-                                                                                )}
-                                                                                {ref.status === 'active_plan' && (
-                                                                                    <button 
-                                                                                        onClick={() => handleSimulateStatus(ref.id, 'reward_paid')}
-                                                                                        className="px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-md text-[9px] font-black uppercase tracking-wider transition-all"
-                                                                                        title="Simular pago del bono"
-                                                                                    >
-                                                                                        Marcar Pagado
-                                                                                    </button>
-                                                                                )}
-                                                                                {ref.status === 'reward_paid' && (
-                                                                                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1"><CheckCircle size={10} className="text-purple-400" /> Pagado</span>
-                                                                                )}
-                                                                            </div>
                                                                         </td>
                                                                     </tr>
                                                                 )

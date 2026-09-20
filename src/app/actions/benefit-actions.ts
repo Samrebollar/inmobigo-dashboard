@@ -360,59 +360,15 @@ export async function createReferralAction(payload: ReferralPayload) {
     }
 }
 
-// 6. Action to simulate plan activation for testing referralls
-export async function simulateReferralStatusAction(referralId: string, newStatus: string) {
-    const admin = createAdminClient()
-
-    try {
-        console.log(`🔧 [simulateReferralStatusAction] Simulando cambio de estado para referido ${referralId} a: ${newStatus}`)
-        
-        const updates: any = { status: newStatus }
-        
-        if (newStatus === 'reward_paid') {
-            updates.reward_paid = true
-            updates.reward_paid_at = new Date().toISOString()
-        } else if (newStatus === 'active_plan' || newStatus === 'reward_pending') {
-            updates.reward_paid = false
-            updates.reward_paid_at = null
-        }
-
-        const { data, error } = await admin
-            .from('benefit_referrals')
-            .update(updates)
-            .eq('id', referralId)
-            .select()
-            .single()
-
-        if (error) throw error
-
-        // If status changed to active_plan/reward_paid, we could update totals in referral_codes
-        if (referralId) {
-            // Recalcular totales del código de referido
-            const { data: ref } = await admin.from('benefit_referrals').select('referral_code_id, organization_id').eq('id', referralId).single()
-            if (ref) {
-                const { data: allRefs } = await admin.from('benefit_referrals').select('status, reward_amount').eq('referral_code_id', ref.referral_code_id)
-                if (allRefs) {
-                    const totalReferrals = allRefs.filter(r => ['active_plan', 'reward_pending', 'reward_paid'].includes(r.status)).length
-                    const totalRewards = allRefs
-                        .filter(r => ['active_plan', 'reward_pending', 'reward_paid'].includes(r.status))
-                        .reduce((sum, r) => sum + Number(r.reward_amount || 0), 0)
-
-                    await admin
-                        .from('benefit_referral_codes')
-                        .update({ total_referrals: totalReferrals, total_rewards: totalRewards })
-                        .eq('id', ref.referral_code_id)
-                }
-            }
-        }
-
-        return { success: true, data }
-
-    } catch (err: any) {
-        console.error('❌ [simulateReferralStatusAction] Error:', err)
-        return { success: false, error: err.message }
-    }
-}
+// NOTA: aquí existía simulateReferralStatusAction, que dejaba que CUALQUIER
+// administrador cambiara el status de su propio referido (incluyendo
+// reward_paid, que libera $1,000 MXN) con un clic, sin ninguna verificación
+// real de que el referido se registró, hizo prueba o contrató un plan. Se
+// eliminó por ser una vulnerabilidad de autopago — la única vía legítima
+// para avanzar un referido es registerReferredAdminAction (se dispara al
+// registrarse con el código) y activatePlanReferralAction (debe dispararse
+// desde el webhook de activación de plan/pago, no desde el navegador del
+// propio referidor).
 
 // ============================================================================
 // SISTEMA DE RECOMPENSAS — NUEVAS SERVER ACTIONS
@@ -597,9 +553,16 @@ export async function getDetailedReferralStatsAction(organizationId: string) {
             })
 
             topReferrers = Object.entries(counts)
+                // El ranking es global (compite contra todas las organizaciones de
+                // InmobiGo), pero el NOMBRE de otra organización es un dato de
+                // negocio de un tercero — no debe exponerse a un cliente distinto.
+                // El conteo/monto se mantienen visibles (son solo números
+                // anónimos sin el nombre, necesarios para que el ranking tenga
+                // sentido); solo se revela el nombre real de la propia
+                // organización que hace la consulta.
                 .map(([id, info]) => ({
                     organization_id: id,
-                    name: info.name,
+                    name: id === organizationId ? info.name : 'Administrador de InmobiGo',
                     count: info.count,
                     amount: info.count * 1000
                 }))

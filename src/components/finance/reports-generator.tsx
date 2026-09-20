@@ -368,6 +368,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             e.person_name || '-',
             e.condominium_name || '-',
             e.unit_number || '-',
+            e.authorized_by || '-',
             e.guard_name || '-',
             e.checked_out_at ? format(new Date(e.checked_out_at), 'dd/MM/yyyy HH:mm') : '-',
             STATUS_CONFIG[e.status as keyof typeof STATUS_CONFIG]?.label || e.status,
@@ -375,19 +376,21 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
         autoTable(doc, {
             startY: 105,
-            head: [['Entrada', 'Tipo', 'Persona', 'Condominio', 'Unidad', 'Guardia', 'Salida', 'Estado']],
+            head: [['Entrada', 'Tipo', 'Persona/Visitante', 'Condominio', 'Unidad', 'Autorizó', 'Guardia', 'Salida', 'Estado']],
             body: tableData,
             theme: 'grid',
             headStyles: {
                 fillColor: [79, 70, 229], // Indigo 600
                 textColor: [255, 255, 255],
                 fontStyle: 'bold',
+                fontSize: 6.5,
             },
             styles: {
-                fontSize: 7,
-                cellPadding: 3,
+                fontSize: 6.5,
+                cellPadding: 2,
                 lineColor: [226, 232, 240], // Slate 200 borders
                 lineWidth: 0.1,
+                overflow: 'linebreak',
             },
             alternateRowStyles: { fillColor: [248, 250, 252] }, // Slate 50
         })
@@ -416,9 +419,10 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         const detailsData = entries.map(e => ({
             "Entrada": e.checked_in_at ? format(new Date(e.checked_in_at), 'dd/MM/yyyy HH:mm') : '-',
             "Tipo": EVENT_TYPE_CONFIG[e.event_type as keyof typeof EVENT_TYPE_CONFIG]?.label || e.event_type,
-            "Persona": e.person_name || '-',
+            "Persona/Visitante": e.person_name || '-',
             "Condominio": e.condominium_name || '-',
             "Unidad": e.unit_number || '-',
+            "Autorizó": e.authorized_by || '-',
             "Guardia": e.guard_name || '-',
             "Checkpoint": e.checkpoint || '-',
             "Salida": e.checked_out_at ? format(new Date(e.checked_out_at), 'dd/MM/yyyy HH:mm') : '-',

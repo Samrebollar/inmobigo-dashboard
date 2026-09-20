@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Search, Filter, AlertCircle, FileText, Download, ChevronRight, ChevronDown, Table as TableIcon, Loader2, MessageCircle, CheckCircle2 } from 'lucide-react'
+import { X, Search, Filter, AlertCircle, FileText, Download, ChevronRight, ChevronDown, Table as TableIcon, Loader2, MessageCircle, CheckCircle2, HandCoins } from 'lucide-react'
 import { format, differenceInDays, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import jsPDF from 'jspdf'
@@ -22,8 +22,9 @@ import { Badge } from '@/components/ui/badge'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { Resident } from '@/types/residents'
-import { Invoice } from '@/types/finance'
+import { Invoice, ResidentInvoice, ResidentInvoicePayment } from '@/types/finance'
 import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
+import { RegisterPaymentModal } from '@/components/finance/register-payment-modal'
 interface DelinquencyReportModalProps {
     isOpen: boolean
     onClose: () => void
@@ -43,6 +44,7 @@ interface DelinquentResident extends Resident {
     daysOverdue: number
     calculatedDebt: number
     riskLevel: 'low' | 'medium' | 'critical'
+    paymentDeadline: number
     unpaidInvoices: Invoice[]
     paymentHistory: Invoice[] // Paid invoices
 }
@@ -62,6 +64,7 @@ export function DelinquencyReportModal({
     const [expandedRow, setExpandedRow] = useState<string | null>(null)
     const [sendingReminderIds, setSendingReminderIds] = useState<Set<string>>(new Set())
     const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
+    const [paymentModalTarget, setPaymentModalTarget] = useState<{ invoice: ResidentInvoice, condominiumId: string } | null>(null)
 
     // Helper for Toast
     const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -182,9 +185,15 @@ export function DelinquencyReportModal({
                     }
                 }
 
+                // Umbral de riesgo relativo a la fecha límite de pago configurada para
+                // la unidad (payment_deadline, día 10 por defecto): un residente que se
+                // pasa una vez ese plazo es riesgo medio, dos veces es crítico. Antes
+                // usaba 7/15 días fijos para todas las propiedades, sin importar que
+                // cada condominio puede tener un plazo de pago distinto.
+                const paymentDeadline = Number((resident as any).units?.payment_deadline) || 10
                 let risk: 'low' | 'medium' | 'critical' = 'low'
-                if (maxDays > 15) risk = 'critical'
-                else if (maxDays > 7) risk = 'medium'
+                if (maxDays > paymentDeadline * 2) risk = 'critical'
+                else if (maxDays > paymentDeadline) risk = 'medium'
 
                 if (totalDebt > 0) {
                     delinquencyReport.push({
@@ -192,6 +201,7 @@ export function DelinquencyReportModal({
                         daysOverdue: maxDays,
                         calculatedDebt: totalDebt,
                         riskLevel: risk,
+                        paymentDeadline,
                         unpaidInvoices: unpaid,
                         paymentHistory: paid
                     })
@@ -259,11 +269,41 @@ export function DelinquencyReportModal({
         setExpandedRow(expandedRow === id ? null : id)
     }
 
-    const getRiskBadge = (level: string) => {
+    // Solo se puede registrar un pago contra un recibo que ya existe en la BD —
+    // las filas "virtuales" (id que empieza con "virtual-") son deuda proyectada
+    // cuando todavía no se generó el recibo del periodo, así que no tienen un
+    // invoice_id real contra el cual aplicar el pago.
+    const handleOpenRegisterPayment = (resident: DelinquentResident) => {
+        const realUnpaidInvoices = resident.unpaidInvoices
+            .filter((inv: any) => !String(inv.id).startsWith('virtual-'))
+            .sort((a: any, b: any) => new Date(a.due_date || a.created_at).getTime() - new Date(b.due_date || b.created_at).getTime())
+
+        const oldestInvoice = realUnpaidInvoices[0]
+
+        if (!oldestInvoice) {
+            showNotification('Este residente aún no tiene un recibo generado en el sistema. Genera el recibo del periodo antes de registrar el pago.', 'error')
+            return
+        }
+
+        setPaymentModalTarget({ invoice: oldestInvoice as any as ResidentInvoice, condominiumId: resident.condominium_id })
+    }
+
+    const handlePaymentRegistered = (result: { payment: ResidentInvoicePayment, invoice: ResidentInvoice }) => {
+        setPaymentModalTarget(null)
+        showNotification(
+            result.invoice.status === 'paid'
+                ? 'Pago registrado. El recibo quedó liquidado.'
+                : `Abono registrado. Saldo restante: $${Number(result.invoice.balance_due).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+            'success'
+        )
+        fetchReportData()
+    }
+
+    const getRiskBadge = (level: string, paymentDeadline: number) => {
         switch (level) {
-            case 'critical': return <Badge className="bg-red-500/20 text-red-400 hover:bg-red-500/30 border-red-500/50 text-[10px] py-0 px-2">Crítico (+15 días)</Badge>
-            case 'medium': return <Badge className="bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border-yellow-500/50 text-[10px] py-0 px-2">Medio (8-15 días)</Badge>
-            default: return <Badge className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border-emerald-500/50 text-[10px] py-0 px-2">Bajo (0-7 días)</Badge>
+            case 'critical': return <Badge className="bg-red-500/20 text-red-400 hover:bg-red-500/30 border-red-500/50 text-[10px] py-0 px-2">{`Crítico (+${paymentDeadline * 2} días)`}</Badge>
+            case 'medium': return <Badge className="bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border-yellow-500/50 text-[10px] py-0 px-2">{`Medio (${paymentDeadline + 1}-${paymentDeadline * 2} días)`}</Badge>
+            default: return <Badge className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border-emerald-500/50 text-[10px] py-0 px-2">{`Bajo (0-${paymentDeadline} días)`}</Badge>
         }
     }
 
@@ -300,7 +340,7 @@ export function DelinquencyReportModal({
             doc.setFont('helvetica', 'normal')
             doc.text(`Total de residentes con deuda: ${residents.length}`, 15, 65)
             doc.text(`Monto total adeudado: $${totalDebt.toLocaleString()}`, 15, 72)
-            doc.text(`Casos de riesgo crítico (+60 días): ${criticalCount}`, 15, 79)
+            doc.text(`Casos de riesgo crítico: ${criticalCount}`, 15, 79)
 
             // Table
             const riskTranslations: Record<string, string> = {
@@ -554,7 +594,7 @@ export function DelinquencyReportModal({
                                                                     {resident.daysOverdue} días
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    {getRiskBadge(resident.riskLevel)}
+                                                                    {getRiskBadge(resident.riskLevel, resident.paymentDeadline)}
                                                                 </td>
                                                                 <td className="px-6 py-4 text-center">
                                                                     <div className="flex items-center justify-center gap-3" onClick={(e) => e.stopPropagation()}>
@@ -566,6 +606,15 @@ export function DelinquencyReportModal({
                                                                             title="Ver detalle del residente"
                                                                         >
                                                                             <FileText size={16} />
+                                                                        </motion.button>
+                                                                        <motion.button
+                                                                            whileHover={{ scale: 1.1 }}
+                                                                            whileTap={{ scale: 0.95 }}
+                                                                            onClick={() => handleOpenRegisterPayment(resident)}
+                                                                            className="p-2 rounded-full bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-colors border border-amber-500/20 shadow-sm"
+                                                                            title="Registrar Pago"
+                                                                        >
+                                                                            <HandCoins size={16} />
                                                                         </motion.button>
                                                                         <motion.button
                                                                             whileHover={{ scale: 1.1, rotate: [0, -10, 10, 0] }}
@@ -684,6 +733,14 @@ export function DelinquencyReportModal({
                                     </motion.div>
                                 )}
                             </AnimatePresence>
+
+                            <RegisterPaymentModal
+                                isOpen={!!paymentModalTarget}
+                                onClose={() => setPaymentModalTarget(null)}
+                                condominiumId={paymentModalTarget?.condominiumId || ''}
+                                invoice={paymentModalTarget?.invoice || null}
+                                onSuccess={handlePaymentRegistered}
+                            />
                         </div>
         </motion.div>
     )

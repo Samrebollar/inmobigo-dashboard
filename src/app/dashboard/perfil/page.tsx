@@ -27,9 +27,21 @@ export default async function ProfilePage() {
     // 3. Determine Role (Same logic as layout.tsx)
     const { data: orgUser } = await supabase
         .from('organization_users')
-        .select('role')
+        .select('role, organization_id')
         .eq('user_id', user.id)
         .maybeSingle()
+
+    // 3b. Fetch Organization Name (for "Contactar a InmobiGo")
+    let organizationName: string | null = null
+    const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
+    if (organizationId) {
+        const { data: org } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', organizationId)
+            .maybeSingle()
+        organizationName = org?.name || null
+    }
 
     let role = 'viewer'
     if (orgUser?.role) {
@@ -56,8 +68,9 @@ export default async function ProfilePage() {
             user={user} 
             initialResident={resident} 
             profile={profile} 
-            role={role} 
+            role={role}
             subscription={subscription}
+            organizationName={organizationName}
         />
     )
 }

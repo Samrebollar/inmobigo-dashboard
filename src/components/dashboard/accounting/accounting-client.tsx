@@ -21,6 +21,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { FinancialRecord, FiscalRegime, REGIME_LABELS } from '@/types/accounting'
+import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
 import { FinancialSummary } from './financial-summary'
 import { MovementManager } from './movement-manager'
 import { ReserveFundModule } from './reserve-fund-module'
@@ -53,14 +54,17 @@ export function AccountingClient({
 }) {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const { 
-        movements: records, 
+    const {
+        movements: records,
         metrics: serverMetrics,
-        condominiums, 
-        regime, 
+        condominiums,
+        regime,
         selectedCondoId,
         unitsInRange,
-        fundData
+        fundData,
+        units,
+        residents,
+        invoices
     } = data
 
     const [selectedMonth, setSelectedMonth] = useState('all')
@@ -90,58 +94,29 @@ export function AccountingClient({
         selectedMonth === 'all' || (r.date && r.date.split('-')[1] === selectedMonth)
     )
 
-    // Reconciliación de Total del Periodo / Cobrado / Pendiente / Morosidad:
-    // se calculan SOLO sobre cuotas de mantenimiento (invoice_type
-    // 'maintenance') y usando balance_due para reflejar abonos parciales —
-    // la misma regla que ya usan Gestión de Cobranza y el dashboard de
-    // inicio (calculateCondoMonthlyFinancials). Antes se reconstruía un
-    // "gap" contra una cuota mensual plana proyectada desde las unidades,
-    // sin filtrar por invoice_type ni considerar balance_due, por lo que:
-    //   (a) un abono parcial no se contaba como cobrado en absoluto, y
-    //   (b) cualquier ingreso ajeno a la cuota mensual (saldo inicial,
-    //       ajustes manuales) inflaba "Cobrado" sin inflar igual "Total del
-    //       Periodo", haciendo que Cobrado + Pendiente + Morosidad no
-    //       cuadrara con Total del Periodo.
-    const now = new Date()
-    const today = now.getDate()
-    const currentMonthNum = now.getMonth() + 1
-    const currentYear = now.getFullYear()
+    // Total del Periodo / Cobrado / Pendiente / Morosidad se calculan con la
+    // misma función que ya usan Gestión de Cobranza, el dashboard de inicio
+    // y /api/finance/metrics — calculateCondoMonthlyFinancials — en vez de
+    // una quinta implementación propia de la misma regla de negocio (separa
+    // cuota mensual de saldo inicial, usa balance_due para abonos parciales
+    // y aplica la regla del día 10 por fecha de vencimiento real).
+    const currentYear = new Date().getFullYear()
+    // El selector de mes de esta pantalla usa 'all' | '01'..'12';
+    // calculateCondoMonthlyFinancials espera -1 (todos) | 0-11.
+    const selectedMonthIndex = selectedMonth === 'all' ? -1 : parseInt(selectedMonth, 10) - 1
 
-    const isMaintenanceInvoice = (r: any) => r.type === 'ingreso' && r.is_invoice && r.invoice_type === 'maintenance'
-
-    const inSelectedPeriod = (r: any) => {
-        const dateStr = r.due_date || r.date
-        if (!dateStr) return false
-        const d = new Date(dateStr)
-        if (isNaN(d.getTime())) return false
-        if (selectedMonth === 'all') {
-            // No proyectar periodos futuros ya generados por adelantado
-            return d.getFullYear() < currentYear || (d.getFullYear() === currentYear && d.getMonth() + 1 <= currentMonthNum)
-        }
-        return String(d.getMonth() + 1).padStart(2, '0') === selectedMonth && d.getFullYear() === currentYear
-    }
-
-    const periodMaintenance = records.filter((r: any) => isMaintenanceInvoice(r) && inSelectedPeriod(r))
-
-    const totalCollected = periodMaintenance.reduce(
-        (sum: number, r: any) => sum + Math.max(0, Number(r.amount) - Number(r.balance_due ?? 0)),
-        0
-    )
-
-    const totalInvoiced = periodMaintenance.reduce((sum: number, r: any) => sum + Number(r.amount), 0)
-
-    let totalReceivable = 0
-    let totalOverdue = 0
-    periodMaintenance.forEach((r: any) => {
-        const bal = Number(r.balance_due ?? 0)
-        if (bal <= 0) return
-        const d = new Date(r.due_date || r.date)
-        const isPastPeriod = d.getFullYear() < currentYear || (d.getFullYear() === currentYear && d.getMonth() + 1 < currentMonthNum)
-        const isCurrentPeriod = d.getFullYear() === currentYear && d.getMonth() + 1 === currentMonthNum
-        const isOverduePeriod = isPastPeriod || (isCurrentPeriod && today > 10)
-        if (isOverduePeriod) totalOverdue += bal
-        else totalReceivable += bal
+    const condoFinancials = calculateCondoMonthlyFinancials({
+        units: units || [],
+        residents: residents || [],
+        invoices: invoices || [],
+        selectedMonth: selectedMonthIndex,
+        selectedYear: currentYear
     })
+
+    const totalCollected = condoFinancials.recaudado
+    const totalReceivable = condoFinancials.porCobrar
+    const totalOverdue = condoFinancials.vencido
+    const totalInvoiced = condoFinancials.totalPeriodo
 
     const totalExpenses = filteredRecordsForMetrics
         .filter((r: any) => r.type === 'egreso')

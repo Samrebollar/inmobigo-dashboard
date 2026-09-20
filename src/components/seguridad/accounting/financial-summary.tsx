@@ -3,10 +3,11 @@ import { Wallet, TrendingUp, TrendingDown, Scale, Percent, Clock, FileText, Acti
 import { FiscalRegime } from '@/types/accounting'
 import { cn } from '@/lib/utils'
 
-export function FinancialSummary({ 
-    metrics, 
-    regime 
-}: { 
+export function FinancialSummary({
+    metrics,
+    regime,
+    iaBadge
+}: {
     metrics: {
         totalCollected: number,
         totalReceivable: number,
@@ -15,11 +16,51 @@ export function FinancialSummary({
         totalExpenses: number,
         utilidad: number,
         isrEstimado: number
-    }, 
-    regime: FiscalRegime 
+    },
+    regime: FiscalRegime,
+    // Estado del mismo diagnóstico de IA que se muestra en el banner de
+    // arriba (getIAState). El color/subtexto de "Resultado Neto" se deriva
+    // de este único estado, en vez de un simple utilidad >= 0: así la
+    // tarjeta nunca puede decir "Operación saludable" mientras el banner de
+    // arriba dice "Morosidad Elevada" o "Atención Requerida" para el mismo
+    // periodo — antes eran dos chequeos independientes que podían
+    // contradecirse.
+    iaBadge?: string
 }) {
     const isBusiness = regime !== 'condominio_no_lucrativo'
     const isProfit = metrics.utilidad >= 0
+
+    const resultStyleByBadge: Record<string, { color: string, iconBg: string, bg: string, border: string, glow: string, subtext: string, subtextColor: string }> = {
+        'Déficit Operativo': {
+            color: 'text-rose-500', iconBg: 'bg-rose-500/15', bg: 'bg-rose-500/10', border: 'border-rose-500/20',
+            glow: 'hover:border-rose-500/40 hover:shadow-rose-500/10',
+            subtext: 'Déficit operativo', subtextColor: 'text-rose-400/80'
+        },
+        'Atención Requerida': {
+            color: 'text-rose-500', iconBg: 'bg-rose-500/15', bg: 'bg-rose-500/10', border: 'border-rose-500/20',
+            glow: 'hover:border-rose-500/40 hover:shadow-rose-500/10',
+            subtext: 'Atención requerida', subtextColor: 'text-rose-400/80'
+        },
+        'Morosidad Elevada': {
+            color: 'text-amber-500', iconBg: 'bg-amber-500/15', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
+            glow: 'hover:border-amber-500/40 hover:shadow-amber-500/10',
+            subtext: 'Positivo, con morosidad elevada', subtextColor: 'text-amber-400/80'
+        },
+        'Cobranza Parcial': {
+            color: 'text-amber-500', iconBg: 'bg-amber-500/15', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
+            glow: 'hover:border-amber-500/40 hover:shadow-amber-500/10',
+            subtext: 'Positivo, cobranza parcial', subtextColor: 'text-amber-400/80'
+        },
+    }
+    const resultStyle = (iaBadge && resultStyleByBadge[iaBadge]) || {
+        color: isProfit ? 'text-emerald-500' : 'text-rose-500',
+        iconBg: isProfit ? 'bg-emerald-500/15' : 'bg-rose-500/15',
+        bg: isProfit ? 'bg-emerald-500/10' : 'bg-rose-500/10',
+        border: isProfit ? 'border-emerald-500/20' : 'border-rose-500/20',
+        glow: isProfit ? 'hover:border-emerald-500/40 hover:shadow-emerald-500/10' : 'hover:border-rose-500/40 hover:shadow-rose-500/10',
+        subtext: isProfit ? 'Operación saludable' : 'Déficit operativo',
+        subtextColor: isProfit ? 'text-emerald-400/80' : 'text-rose-400/80'
+    }
 
     const cards = [
         {
@@ -84,15 +125,15 @@ export function FinancialSummary({
         },
         {
             title: 'Resultado Neto',
-            amount: metrics.utilidad, 
+            amount: metrics.utilidad,
             icon: Scale,
-            color: isProfit ? 'text-emerald-500' : 'text-rose-500',
-            iconBg: isProfit ? 'bg-emerald-500/15' : 'bg-rose-500/15',
-            bg: isProfit ? 'bg-emerald-500/10' : 'bg-rose-500/10',
-            border: isProfit ? 'border-emerald-500/20' : 'border-rose-500/20',
-            glow: isProfit ? 'hover:border-emerald-500/40 hover:shadow-emerald-500/10' : 'hover:border-rose-500/40 hover:shadow-rose-500/10',
-            subtext: isProfit ? 'Operación saludable' : 'Déficit operativo',
-            subtextColor: isProfit ? 'text-emerald-400/80' : 'text-rose-400/80'
+            color: resultStyle.color,
+            iconBg: resultStyle.iconBg,
+            bg: resultStyle.bg,
+            border: resultStyle.border,
+            glow: resultStyle.glow,
+            subtext: resultStyle.subtext,
+            subtextColor: resultStyle.subtextColor
         }
     ]
 

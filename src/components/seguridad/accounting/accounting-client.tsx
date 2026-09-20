@@ -487,7 +487,7 @@ export function AccountingClient({
                         </m.div>
 
                         {/* Summary Grid with New Metrics */}
-                        <FinancialSummary metrics={metrics} regime={regime} />
+                        <FinancialSummary metrics={metrics} regime={regime} iaBadge={iaState.badge} />
 
                         {/* Movement Manager - Updated for Hybrid Data */}
                         <MovementManager 

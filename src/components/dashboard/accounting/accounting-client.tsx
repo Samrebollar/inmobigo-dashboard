@@ -178,18 +178,40 @@ export function AccountingClient({
             };
         }
         
-        // 2. ATENCIÓN REQUERIDA (Red)
-        if (totalExpenses > totalCollected || totalOverdue > totalInvoiced * 0.15 || utilidad < 0) {
+        // 2. ATENCIÓN REQUERIDA (Red) — la operación del periodo, en sí misma,
+        // está en números rojos: se gastó más de lo que se cobró, o el
+        // resultado neto es negativo. Ya no se dispara solo por morosidad
+        // alta con utilidad positiva — eso es un riesgo de cobranza a
+        // futuro, no una pérdida operativa actual (ver estado 3), y antes
+        // contradecía la tarjeta de "Resultado Neto: Operación saludable"
+        // mostrada en la misma pantalla.
+        if (totalExpenses > totalCollected || utilidad < 0) {
             return {
                 badge: 'Atención Requerida',
                 color: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
-                message: 'Atención requerida. El periodo presenta presión financiera debido a baja recuperación de cuotas o incremento operativo en gastos. Se recomienda reforzar cobranza y revisar egresos registrados.',
+                message: totalExpenses > totalCollected
+                    ? 'Atención requerida. Los gastos registrados del periodo superan lo cobrado, generando un resultado neto negativo. Se recomienda revisar los egresos registrados.'
+                    : 'Atención requerida. El resultado neto del periodo es negativo. Se recomienda revisar los ingresos y egresos registrados.',
                 iconBg: 'bg-rose-600 shadow-rose-600/30',
                 containerBg: 'bg-rose-500/5 border-rose-500/20'
             };
         }
-        
-        // 3. COBRANZA PARCIAL (Orange)
+
+        // 3. MOROSIDAD ELEVADA (Orange) — la operación del periodo es
+        // saludable (utilidad positiva), pero más del 15% de lo facturado
+        // sigue en mora. Es un riesgo de cobranza a futuro, no una crisis
+        // financiera actual.
+        if (totalInvoiced > 0 && totalOverdue > totalInvoiced * 0.15) {
+            return {
+                badge: 'Morosidad Elevada',
+                color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+                message: 'Morosidad elevada. Más del 15% de lo facturado este periodo sigue sin cobrarse. El resultado neto actual es positivo, pero se recomienda reforzar la cobranza para evitar presión financiera en periodos futuros.',
+                iconBg: 'bg-amber-600 shadow-amber-600/20',
+                containerBg: 'bg-amber-500/5 border-amber-500/10'
+            };
+        }
+
+        // 4. COBRANZA PARCIAL (Orange)
         if (totalCollected < totalInvoiced && utilidad >= 0) {
             return {
                 badge: 'Cobranza Parcial',
@@ -200,7 +222,7 @@ export function AccountingClient({
             };
         }
         
-        // 4. OPERACIÓN SALUDABLE (Green)
+        // 5. OPERACIÓN SALUDABLE (Green)
         return {
             badge: 'Operación Saludable',
             color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
@@ -238,7 +260,7 @@ export function AccountingClient({
 
     const generateMagicComment = () => {
         if (metrics.totalCollected === 0 && metrics.totalExpenses === 0) {
-            return "Sin movimientos registrados este mes. El análisis se activará al procesar la primera factura o gasto."
+            return "Sin movimientos registrados este mes. El análisis se activará al procesar el primer recibo o gasto."
         }
         return iaState.message
     }
@@ -584,7 +606,7 @@ export function AccountingClient({
                     <span className="text-xs font-bold uppercase tracking-widest italic tracking-tighter">Cumplimiento Fiscal Informativo</span>
                 </div>
                 <p className="text-zinc-600 text-[13px] max-w-3xl leading-relaxed font-semibold">
-                    "Toda la información de ingresos proviene automáticamente del módulo de Facturación. Los cálculos de utilidad e ISR son proyecciones informativas sujetas a validación por un contador certificado."
+                    "Toda la información de ingresos proviene automáticamente del módulo de Finanzas. Los cálculos de utilidad e ISR son proyecciones informativas sujetas a validación por un contador certificado."
                 </p>
             </div>
         </div>

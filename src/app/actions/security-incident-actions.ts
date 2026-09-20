@@ -126,6 +126,54 @@ export async function getSecurityIncidentsAction(organizationId: string, condomi
     }
 }
 
+const INCIDENT_STATUS_LABELS: Record<string, string> = {
+    open: 'Abierta',
+    in_progress: 'En atención',
+    resolved: 'Resuelta',
+    closed: 'Cerrada',
+}
+
+export async function updateIncidentStatusAction(
+    ticketId: string,
+    organizationId: string,
+    status: 'open' | 'in_progress' | 'resolved' | 'closed',
+    actor: { id: string; name: string }
+) {
+    if (!ticketId || !organizationId) return { success: false, error: 'Datos incompletos' }
+
+    const supabase = createAdminClient()
+
+    try {
+        const { data, error } = await supabase
+            .from('tickets')
+            .update({ status })
+            .eq('id', ticketId)
+            .eq('organization_id', organizationId)
+            .select()
+            .single()
+
+        if (error) return { success: false, error: error.message }
+
+        // Deja un comentario interno como registro de quién y cuándo cambió el estado —
+        // sin esto no queda ningún rastro de que alguien atendió la incidencia.
+        await supabase.from('incident_comments').insert({
+            ticket_id: ticketId,
+            organization_id: organizationId,
+            author_id: actor.id,
+            author_name: actor.name,
+            body: `Estado cambiado a "${INCIDENT_STATUS_LABELS[status] || status}"`,
+            is_internal: true,
+        })
+
+        revalidatePath('/dashboard/control-operativo')
+        revalidatePath('/seguridad/incidencias')
+
+        return { success: true, data }
+    } catch (err: any) {
+        return { success: false, error: err.message || 'Error al actualizar la incidencia.' }
+    }
+}
+
 export async function deleteSecurityIncidentAction(id: string) {
     if (!id) return { success: false, error: 'ID de incidencia no proporcionado' }
 

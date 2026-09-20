@@ -128,7 +128,7 @@ export async function getOperationsKPIsAction(organizationId: string, propertyId
 
         let tasksQuery = supabase
             .from('team_tasks')
-            .select('id, status, due_date, assigned_to, started_at', { count: 'exact', head: false })
+            .select('id, status, due_date, assigned_to, started_at, completed_at', { count: 'exact', head: false })
             .eq('organization_id', organizationId)
 
         if (propertyId) {
@@ -149,10 +149,9 @@ export async function getOperationsKPIsAction(organizationId: string, propertyId
         const overdue_tasks = tasks.filter((t: any) =>
             t.status !== 'completed' && t.status !== 'cancelled' && t.due_date && t.due_date < today
         ).length
-        const completed_today = tasks.filter((t: any) => {
-            if (t.status !== 'completed') return false
-            return true // Ideally filter by completed_at >= today — simplified here
-        }).length
+        const completed_today = tasks.filter((t: any) =>
+            t.status === 'completed' && t.completed_at && t.completed_at.split('T')[0] === today
+        ).length
         const staff_working = new Set(
             tasks.filter((t: any) => t.status === 'in_progress' && t.assigned_to).map((t: any) => t.assigned_to)
         ).size
@@ -268,6 +267,27 @@ export async function updateTaskAction(
             action,
             details: changeDetails || `Tarea actualizada`,
         })
+
+        // Si esta tarea vino de una incidencia (source_incident_id) y se acaba de
+        // completar, la incidencia se resuelve sola — antes había que crear la tarea
+        // Y ADEMÁS acordarse de ir a Incidencias a cerrarla a mano (cosa que ni
+        // siquiera era posible: no existía ninguna acción para cambiar su estado).
+        if (action === 'complete' && task.source_incident_id) {
+            await supabase
+                .from('tickets')
+                .update({ status: 'resolved' })
+                .eq('id', task.source_incident_id)
+                .eq('organization_id', organizationId)
+
+            await supabase.from('incident_comments').insert({
+                ticket_id: task.source_incident_id,
+                organization_id: organizationId,
+                author_id: updatedBy.id,
+                author_name: updatedBy.name,
+                body: `Resuelta automáticamente al completarse la tarea "${task.title}"`,
+                is_internal: true,
+            })
+        }
 
         return { success: true, task }
     } catch (err: any) {

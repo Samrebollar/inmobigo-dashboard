@@ -215,7 +215,7 @@ export function MovementManager({
     const handleDeleteClick = (id: string, isInvoice: boolean) => {
         if (isInvoice) {
             toast.info('Acceso Restringido', {
-                description: 'Las facturas procesadas son de solo lectura. Para gestionarlas, dirígete al módulo de Facturación centralizada.',
+                description: 'Los recibos procesados son de solo lectura. Para gestionarlos, dirígete al módulo de Finanzas.',
                 icon: <Shield size={16} className="text-blue-500" />
             })
             return
@@ -283,7 +283,7 @@ export function MovementManager({
                                         : "text-zinc-500 hover:text-zinc-300"
                                 )}
                             >
-                                {type === 'all' ? 'Ver Todo' : type === 'ingreso' ? 'Facturación (Pagada)' : 'Gastos'}
+                                {type === 'all' ? 'Ver Todo' : type === 'ingreso' ? 'Cobranza (Pagada)' : 'Gastos'}
                             </button>
                         ))}
                     </div>
@@ -385,7 +385,7 @@ export function MovementManager({
                                                         {record.is_invoice ? <Sparkles size={14} /> : <Wrench size={14} />}
                                                     </div>
                                                     <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                                                        {record.is_invoice ? 'Facturación' : 'Manual'}
+                                                        {record.is_invoice ? 'Cobranza' : 'Manual'}
                                                     </div>
                                                 </div>
                                             </td>

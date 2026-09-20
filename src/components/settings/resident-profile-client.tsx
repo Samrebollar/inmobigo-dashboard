@@ -7,24 +7,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { 
-    Mail, 
-    Phone, 
-    MapPin, 
-    User, 
-    Save, 
-    Loader2, 
-    CheckCircle2, 
-    Zap, 
-    Calendar, 
-    ArrowRight, 
-    Building2, 
-    Maximize2, 
-    Car, 
-    MessageSquare, 
-    Bell,
+import {
+    Mail,
+    Phone,
+    MapPin,
+    User,
+    Save,
+    Loader2,
+    CheckCircle2,
+    AlertTriangle,
+    Zap,
+    Calendar,
+    ArrowRight,
+    Maximize2,
+    Layers,
+    MessageSquare,
     Camera,
-    ShieldCheck
+    ShieldCheck,
+    Send
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
@@ -33,34 +33,54 @@ import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { Send } from 'lucide-react'
+
+interface AdminContact {
+    name: string
+    phone: string | null
+    email: string | null
+    avatarUrl: string | null
+}
+
+interface AccountStatus {
+    isOverdue: boolean
+    totalDebt: number
+    nextDueDate: string | null
+    nextAmount: number | null
+}
 
 export default function ResidentProfileClient({
     user,
     initialResident,
     profile,
     role = 'resident',
+    isAdmin: isAdminProp,
     subscription,
-    organizationName
+    organizationName,
+    adminContact,
+    accountStatus,
+    financeHref = '/dashboard/finance'
 }: {
     user: any,
     initialResident: any,
     profile: any,
     role?: string,
+    isAdmin?: boolean,
     subscription?: any,
-    organizationName?: string | null
+    organizationName?: string | null,
+    adminContact?: AdminContact | null,
+    accountStatus?: AccountStatus | null,
+    financeHref?: string
 }) {
     const router = useRouter()
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
-    const isAdmin = role === 'admin'
-    const canContactInmobiGo = role !== 'resident'
+    const isAdmin = isAdminProp ?? (role !== 'resident' && role !== 'tenant')
     const [inmobiGoMessage, setInmobiGoMessage] = useState('')
     const [sendingInmobiGoMessage, setSendingInmobiGoMessage] = useState(false)
 
     const [resident, setResident] = useState(() => {
         const res = initialResident || {}
-        const phone = res.phone || user.user_metadata?.phone || ''
+        const phone = res.phone || profile?.phone || user.user_metadata?.phone || ''
         const firstName = res.first_name || user.user_metadata?.first_name || ''
         const lastName = res.last_name || user.user_metadata?.last_name || ''
 
@@ -85,24 +105,37 @@ export default function ResidentProfileClient({
     const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const admin = {
-        name: 'Mauricio Gómez',
-        phone: '55 5555 5555',
-        email: 'mauricio@administrador.com',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=256&h=256&auto=format&fit=crop'
-    }
+    const unit = resident?.units
+    const condominium = resident?.condominiums
 
     const unitInfo = {
-        name: resident?.first_name ? `${resident.first_name} ${resident.last_name || ''}` : 'Residente',
-        role: 'Propietario',
-        surface: '85 m²',
-        parking: '2 lugares asignados',
-        unitNumber: resident?.units?.unit_number || 'A-101',
-        condoName: resident?.condominiums?.name || 'Torre Reforma'
+        unitNumber: unit?.unit_number || 'Sin unidad asignada',
+        condoName: condominium?.name || organizationName || 'Sin condominio asignado',
+        sizeM2: unit?.size_m2 ? `${unit.size_m2} m²` : null,
+        floor: unit?.floor || null,
     }
+
+    const hasDebt = !!accountStatus && (accountStatus.isOverdue || accountStatus.totalDebt > 0)
+
+    const daysUntilNextPayment = accountStatus?.nextDueDate
+        ? Math.ceil((new Date(`${accountStatus.nextDueDate}T00:00:00`).getTime() - Date.now()) / 86400000)
+        : null
+
+    const cycleProgressPct = daysUntilNextPayment != null
+        ? Math.min(100, Math.max(0, ((30 - daysUntilNextPayment) / 30) * 100))
+        : 0
 
     const handleAvatarClick = () => {
         fileInputRef.current?.click()
+    }
+
+    const handleContactAdmin = () => {
+        if (!adminContact) return
+        if (adminContact.phone) {
+            window.open(`https://wa.me/${normalizeMexicanPhone(adminContact.phone)}`, '_blank')
+        } else if (adminContact.email) {
+            window.location.href = `mailto:${adminContact.email}`
+        }
     }
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,7 +170,7 @@ export default function ResidentProfileClient({
             })
 
             setAvatarUrl(publicUrl)
-            
+
             setTimeout(() => {
                 router.refresh()
                 toast.success('Fotografía de perfil actualizada con éxito. Los cambios ya son visibles en su cuenta.')
@@ -170,13 +203,14 @@ export default function ResidentProfileClient({
             }
 
             const fullName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
-            if (fullName) {
-                const { error } = await supabase
-                    .from('profiles')
-                    .update({ full_name: fullName })
-                    .eq('id', user.id)
-                if (error) throw error
-            }
+            const profileUpdate: Record<string, any> = { phone: normalizedPhone || null }
+            if (fullName) profileUpdate.full_name = fullName
+
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update(profileUpdate)
+                .eq('id', user.id)
+            if (profileError) throw profileError
 
             router.refresh()
             toast.success('Perfil actualizado con éxito. Sus datos han sido guardados de forma segura.')
@@ -244,7 +278,7 @@ export default function ResidentProfileClient({
                 <div className="absolute top-0 inset-0 bg-grid-white/[0.05] bg-[length:20px_20px]" />
 
                 <div className="absolute top-6 right-8 z-20">
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.5 }}
@@ -367,7 +401,7 @@ export default function ResidentProfileClient({
                         </div>
                     </motion.div>
 
-                    {canContactInmobiGo && (
+                    {isAdmin && (
                         <motion.div
                             variants={itemVariants}
                             whileHover={{ y: -4, transition: { duration: 0.2 } }}
@@ -431,11 +465,22 @@ export default function ResidentProfileClient({
                                 <div className="md:col-span-2 p-4 rounded-2xl bg-zinc-950/50 border border-zinc-800/50 flex items-center justify-between group hover:border-emerald-500/20 transition-colors">
                                     <div>
                                         <p className="text-sm text-zinc-500 mb-1">Estado de Cuenta</p>
-                                        <p className="text-base font-medium text-emerald-400 flex items-center gap-2">
-                                            <CheckCircle2 className="h-4 w-4" /> Al Corriente
-                                        </p>
+                                        {accountStatus ? (
+                                            <p className={`text-base font-medium flex items-center gap-2 ${hasDebt ? 'text-red-400' : 'text-emerald-400'}`}>
+                                                {hasDebt ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                {hasDebt
+                                                    ? `Con adeudo: $${accountStatus.totalDebt.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                                                    : 'Al Corriente'}
+                                            </p>
+                                        ) : (
+                                            <p className="text-base font-medium text-zinc-500">Sin información</p>
+                                        )}
                                     </div>
-                                    <Button variant="ghost" className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-400/10 rounded-xl">Ver Finanzas</Button>
+                                    <Link href={financeHref}>
+                                        <Button variant="ghost" className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-400/10 rounded-xl gap-1">
+                                            Ver Finanzas <ArrowRight className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </Link>
                                 </div>
                             </div>
                         </motion.div>
@@ -447,38 +492,55 @@ export default function ResidentProfileClient({
                     {!isAdmin && (
                         <>
                             {/* Administrator Mini Card */}
-                            <motion.div 
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group/admin"
-                            >
-                                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Administrador</h3>
-                                <div className="flex items-center gap-4 mb-6">
-                                    <div className="relative h-12 w-12 rounded-2xl overflow-hidden ring-2 ring-indigo-500/20">
-                                        <img src={admin.avatar} alt={admin.name} className="h-full w-full object-cover" />
+                            {adminContact && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group/admin"
+                                >
+                                    <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Administrador</h3>
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <div className="relative h-12 w-12 rounded-2xl overflow-hidden ring-2 ring-indigo-500/20 bg-zinc-800 flex items-center justify-center">
+                                            {adminContact.avatarUrl ? (
+                                                <img src={adminContact.avatarUrl} alt={adminContact.name} className="h-full w-full object-cover" />
+                                            ) : (
+                                                <User className="h-6 w-6 text-zinc-500" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-bold text-white tracking-tight">{adminContact.name}</h4>
+                                            <p className="text-[10px] text-zinc-500">Administración del condominio</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-white tracking-tight">{admin.name}</h4>
-                                        <p className="text-[10px] text-zinc-500">Administración Central</p>
+                                    <div className="space-y-2 mb-6">
+                                        {adminContact.phone && (
+                                            <div className="flex items-center gap-3 text-zinc-400 text-xs">
+                                                <Phone className="h-3 w-3 text-indigo-400" />
+                                                <span>{adminContact.phone}</span>
+                                            </div>
+                                        )}
+                                        {adminContact.email && (
+                                            <div className="flex items-center gap-3 text-zinc-400 text-xs">
+                                                <Mail className="h-3 w-3 text-indigo-400" />
+                                                <span className="truncate">{adminContact.email}</span>
+                                            </div>
+                                        )}
+                                        {!adminContact.phone && !adminContact.email && (
+                                            <p className="text-xs text-zinc-600 italic">Sin datos de contacto disponibles</p>
+                                        )}
                                     </div>
-                                </div>
-                                <div className="space-y-2 mb-6">
-                                    <div className="flex items-center gap-3 text-zinc-400 text-xs">
-                                        <Phone className="h-3 w-3 text-indigo-400" />
-                                        <span>{admin.phone}</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-zinc-400 text-xs">
-                                        <Mail className="h-3 w-3 text-indigo-400" />
-                                        <span className="truncate">{admin.email}</span>
-                                    </div>
-                                </div>
-                                <Button className="w-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 h-9 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] gap-2">
-                                    <MessageSquare size={14} /> Contactar
-                                </Button>
-                            </motion.div>
+                                    <Button
+                                        onClick={handleContactAdmin}
+                                        disabled={!adminContact.phone && !adminContact.email}
+                                        className="w-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 h-9 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] gap-2 disabled:opacity-40"
+                                    >
+                                        <MessageSquare size={14} /> Contactar
+                                    </Button>
+                                </motion.div>
+                            )}
 
                             {/* Unit Details Mini Card */}
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: 0.2 }}
@@ -490,14 +552,14 @@ export default function ResidentProfileClient({
                                         <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Superficie</p>
                                         <div className="flex items-center gap-2">
                                             <Maximize2 size={12} className="text-blue-400" />
-                                            <span className="text-xs font-bold text-white">{unitInfo.surface}</span>
+                                            <span className="text-xs font-bold text-white">{unitInfo.sizeM2 || 'No especificado'}</span>
                                         </div>
                                     </div>
                                     <div className="p-3 rounded-2xl bg-zinc-950/50 border border-zinc-800/50">
-                                        <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Parking</p>
+                                        <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Piso</p>
                                         <div className="flex items-center gap-2">
-                                            <Car size={12} className="text-amber-400" />
-                                            <span className="text-xs font-bold text-white">2 Asig.</span>
+                                            <Layers size={12} className="text-amber-400" />
+                                            <span className="text-xs font-bold text-white">{unitInfo.floor || 'No especificado'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -511,31 +573,41 @@ export default function ResidentProfileClient({
                 </div>
             </div>
 
-            {/* Bottom Tracker Section (MIGRATED) */}
-            {!isAdmin && (
-                <motion.div 
+            {/* Bottom Tracker Section */}
+            {!isAdmin && daysUntilNextPayment !== null && (
+                <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/50 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl group border-l-4 border-l-indigo-500"
+                    className={`bg-zinc-900/40 backdrop-blur-md border border-zinc-800/50 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl group border-l-4 ${daysUntilNextPayment < 0 ? 'border-l-red-500' : 'border-l-indigo-500'}`}
                 >
                     <div className="flex-1 w-full space-y-3">
                         <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest">
-                            <span className="text-zinc-400 italic font-medium lowercase tracking-normal">Próximo pago vence en <span className="text-amber-500 font-black tracking-widest uppercase">5 días</span></span>
-                            <span className="text-indigo-400">80% completado</span>
+                            <span className="text-zinc-400 italic font-medium lowercase tracking-normal">
+                                {daysUntilNextPayment >= 0 ? (
+                                    <>Próximo pago vence en <span className="text-amber-500 font-black tracking-widest uppercase">{daysUntilNextPayment} día{daysUntilNextPayment === 1 ? '' : 's'}</span></>
+                                ) : (
+                                    <>Pago vencido hace <span className="text-red-500 font-black tracking-widest uppercase">{Math.abs(daysUntilNextPayment)} día{Math.abs(daysUntilNextPayment) === 1 ? '' : 's'}</span></>
+                                )}
+                            </span>
+                            {accountStatus?.nextAmount != null && (
+                                <span className="text-indigo-400">${accountStatus.nextAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                            )}
                         </div>
                         <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden p-0.5">
-                            <motion.div 
+                            <motion.div
                                 initial={{ width: 0 }}
-                                animate={{ width: '80%' }}
+                                animate={{ width: `${cycleProgressPct}%` }}
                                 transition={{ duration: 1.5, ease: "easeOut", delay: 0.5 }}
-                                className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-indigo-400 rounded-full shadow-[0_0_15px_rgba(79,70,229,0.4)]"
+                                className={`h-full rounded-full ${daysUntilNextPayment < 0 ? 'bg-gradient-to-r from-red-600 via-red-500 to-red-400 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-r from-blue-600 via-indigo-500 to-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.4)]'}`}
                             />
                         </div>
                     </div>
-                    <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/5 text-indigo-300 font-black h-11 rounded-2xl flex items-center gap-2 px-8 hover:bg-indigo-600 hover:text-white transition-all shadow-lg text-[10px] uppercase tracking-widest">
-                        <Bell className="h-4 w-4" /> Configurar recordatorio
-                    </Button>
+                    <Link href={financeHref}>
+                        <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/5 text-indigo-300 font-black h-11 rounded-2xl flex items-center gap-2 px-8 hover:bg-indigo-600 hover:text-white transition-all shadow-lg text-[10px] uppercase tracking-widest">
+                            <Calendar className="h-4 w-4" /> Ver Finanzas
+                        </Button>
+                    </Link>
                 </motion.div>
             )}
 
@@ -581,7 +653,7 @@ export default function ResidentProfileClient({
                         <div className="flex items-center gap-3">
                             <Calendar className="h-5 w-5 text-indigo-400" />
                             <p className="text-lg font-bold text-white">
-                                {subscription?.next_payment_date 
+                                {subscription?.next_payment_date
                                     ? format(parseISO(subscription.next_payment_date), 'd MMMM, yyyy', { locale: es })
                                     : 'No programado'}
                             </p>

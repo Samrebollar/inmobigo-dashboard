@@ -136,6 +136,26 @@ function isOverdue(task: TeamTask) {
     return task.due_date < new Date().toISOString().split('T')[0]
 }
 
+function recurrenceLabel(rule?: string | null): string | null {
+    if (!rule) return null
+    try {
+        const r = JSON.parse(rule)
+        const interval = Number(r.interval) || 1
+        const labels: Record<string, [string, string]> = {
+            daily: ['Diario', 'días'],
+            weekly: ['Semanal', 'semanas'],
+            monthly: ['Mensual', 'meses'],
+            yearly: ['Anual', 'años'],
+            custom: ['', 'días'],
+        }
+        const cfg = labels[r.type]
+        if (!cfg) return null
+        return interval > 1 || r.type === 'custom' ? `Cada ${interval} ${cfg[1]}` : cfg[0]
+    } catch {
+        return null
+    }
+}
+
 // ─── KPI Bar ──────────────────────────────────────────────────────────────────
 
 function KPIBar({ kpis, loading }: { kpis: OperationsKPIs | null; loading: boolean }) {
@@ -762,6 +782,11 @@ function TaskRow({
                     {task.property_name && (
                         <span className="text-[9px] text-zinc-700">· {task.property_name}</span>
                     )}
+                    {task.recurrence_rule && (
+                        <span className="text-[9px] text-indigo-400/80" title="Se regenera automáticamente al completarse">
+                            · 🔁 {recurrenceLabel(task.recurrence_rule)}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -837,7 +862,12 @@ function KanbanCard({ task, onClick }: { task: TeamTask; onClick: () => void }) 
         >
             <div className="flex items-center justify-between mb-2">
                 <span className={`text-[9px] font-black uppercase ${pc.color}`}>{pc.label}</span>
-                <span className="text-sm">{TASK_AREA_ICONS[task.area as TaskArea] || '📌'}</span>
+                <div className="flex items-center gap-1">
+                    {task.recurrence_rule && (
+                        <span className="text-[10px]" title={`Recurrente: ${recurrenceLabel(task.recurrence_rule)}`}>🔁</span>
+                    )}
+                    <span className="text-sm">{TASK_AREA_ICONS[task.area as TaskArea] || '📌'}</span>
+                </div>
             </div>
             <p className={`text-xs font-bold leading-snug mb-2 ${overdue ? 'text-orange-300' : 'text-zinc-200'}`}>{task.title}</p>
             {task.assigned_name && (
@@ -975,6 +1005,7 @@ function TaskDetailPanel({
                         { label: 'Vence', value: task.due_date ? fmtDate(task.due_date) : '—', color: isOverdue(task) ? 'text-orange-400' : 'text-zinc-300' },
                         { label: 'Inicio', value: task.started_at ? fmtDateTime(task.started_at) : '—', color: 'text-zinc-300' },
                         { label: 'Programación', value: task.scheduled_at ? fmtDateTime(task.scheduled_at) : 'Inmediata', color: 'text-zinc-300' },
+                        { label: 'Recurrencia', value: task.recurrence_rule ? `🔁 ${recurrenceLabel(task.recurrence_rule)}` : 'Sin recurrencia', color: task.recurrence_rule ? 'text-indigo-400' : 'text-zinc-300' },
                     ].map(m => (
                         <div key={m.label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
                             <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1">{m.label}</p>

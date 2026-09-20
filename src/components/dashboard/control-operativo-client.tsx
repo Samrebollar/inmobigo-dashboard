@@ -1443,6 +1443,7 @@ export function ControlOperativoClient() {
     const [kpis, setKpis] = useState<OperationsKPIs | null>(null)
     const [incidents, setIncidents] = useState<ParsedIncident[]>([])
     const [tasks, setTasks] = useState<TeamTask[]>([])
+    const [incidentsError, setIncidentsError] = useState<string | null>(null)
 
     // Loading
     const [kpisLoading, setKpisLoading] = useState(true)
@@ -1531,15 +1532,30 @@ export function ControlOperativoClient() {
     const loadIncidents = useCallback(async () => {
         if (!ctx) return
         setIncidentsLoading(true)
+        setIncidentsError(null)
         const supabase = createClient()
-        const { data } = await supabase
+        // Se evita el embed relacional condominiums(name) — bastan los datos que
+        // ya tenemos en ctx.properties (mismo origen), y así una incidencia no
+        // desaparece silenciosamente si el embed choca con RLS de otra tabla.
+        const { data, error } = await supabase
             .from('tickets')
-            .select('*, condominiums(name)')
+            .select('*')
             .eq('organization_id', ctx.orgId)
             .in('status', ['open', 'in_progress'])
             .order('created_at', { ascending: false })
             .limit(50)
-        setIncidents((data || []).map(parseIncident))
+
+        if (error) {
+            console.error('Error cargando incidencias:', error)
+            setIncidentsError(error.message)
+            toast.error(`No se pudieron cargar las incidencias: ${error.message}`)
+            setIncidents([])
+            setIncidentsLoading(false)
+            return
+        }
+
+        const propertyNames = new Map(ctx.properties.map(p => [p.id, p.name]))
+        setIncidents((data || []).map(t => parseIncident({ ...t, condominiums: { name: propertyNames.get(t.condominium_id) } })))
         setIncidentsLoading(false)
     }, [ctx])
 
@@ -1760,6 +1776,16 @@ export function ControlOperativoClient() {
                                         <div className="flex flex-col items-center justify-center py-20 gap-4">
                                             <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
                                             <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Cargando...</p>
+                                        </div>
+                                    ) : incidentsError ? (
+                                        <div className="flex flex-col items-center justify-center py-20 gap-3">
+                                            <AlertTriangle size={32} className="text-rose-500/60" />
+                                            <p className="text-sm font-bold text-rose-400">No se pudieron cargar las incidencias</p>
+                                            <p className="text-xs text-zinc-600 max-w-md text-center">{incidentsError}</p>
+                                            <button onClick={loadIncidents}
+                                                className="mt-2 flex items-center gap-2 px-4 py-2 bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
+                                                <RefreshCw size={12} /> Reintentar
+                                            </button>
                                         </div>
                                     ) : filteredIncidents.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-20 gap-3">

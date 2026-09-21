@@ -749,3 +749,86 @@ export function calculateCondoMonthlyFinancials({
         morososCount: debtorResidents.size
     }
 }
+
+export interface ResidentDebtSummary {
+    debt: number
+    paymentSurplus: number
+    overdueCount: number
+    maxDaysOverdue: number
+}
+
+/**
+ * Cuánto debe realmente un residente hoy — misma fórmula que usan
+ * Propiedades > Residentes y Gestión de Cobranza (dashboard/residentes),
+ * para que el propio residente vea exactamente la misma cifra que su
+ * administrador. Antes cada pantalla (dashboard del residente, Pagos del
+ * residente, Residentes del admin) tenía su propio cálculo independiente
+ * y podían no coincidir entre sí.
+ */
+export function calculateResidentDebtSummary({
+    resident,
+    invoices,
+    unit,
+}: {
+    resident: any
+    invoices: any[]
+    unit: any
+}): ResidentDebtSummary {
+    const today = new Date()
+    const currentMonthIndex = today.getMonth()
+    const paymentDeadlineDay = Number(unit?.payment_deadline) || 10
+
+    const pendingInvoices = invoices.filter(i => i.status === 'pending' || i.status === 'overdue')
+    const overdueInvoices = invoices.filter(i => i.status === 'overdue')
+
+    const invoiceDebt = pendingInvoices
+        .filter(inv => inv.invoice_type === 'maintenance')
+        .reduce((sum, inv) => {
+            const bd = inv.balance_due
+            return sum + (bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0)
+        }, 0)
+
+    const monthlyFee = Number(unit?.monto_mensual || 0)
+    let feeBasedDebt = 0
+    let paymentSurplus = 0
+    if (monthlyFee > 0 && resident.status !== 'inactive' && unit?.facturacion_activa !== false) {
+        const startDateStr = resident.fecha_ingreso ?? resident.created_at
+        const startDate = startDateStr ? new Date(startDateStr) : null
+        let firstBillingMonth = 0
+        if (startDate) {
+            firstBillingMonth = startDate.getMonth()
+            if (startDate.getFullYear() < today.getFullYear()) firstBillingMonth = 0
+        }
+        const lastBilledMonth = today.getDate() > paymentDeadlineDay ? currentMonthIndex : currentMonthIndex - 1
+        const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
+        const annualTarget = monthlyFee * activeMonths
+        const totalPaid = invoices.reduce((sum, inv) => {
+            const paidAmt = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
+            return sum + paidAmt
+        }, 0)
+        feeBasedDebt = Math.max(0, annualTarget - totalPaid)
+        paymentSurplus = Math.max(0, totalPaid - annualTarget)
+    }
+
+    const initialBalanceInvoiceDebt = invoices
+        .filter(inv => inv.invoice_type === 'initial_balance' && (inv.status === 'overdue' || inv.status === 'pending'))
+        .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
+    const remainingDebtAmount = Math.max(0, Number(resident.debt_amount || 0) - paymentSurplus - initialBalanceInvoiceDebt)
+
+    const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount
+
+    let overdueCount = overdueInvoices.length
+    if (overdueCount === 0 && feeBasedDebt > 0 && monthlyFee > 0) {
+        overdueCount = Math.ceil(feeBasedDebt / monthlyFee)
+    }
+
+    let maxDaysOverdue = 0
+    if (overdueInvoices.length > 0) {
+        const oldest = overdueInvoices.reduce((prev, curr) =>
+            new Date(prev.due_date) < new Date(curr.due_date) ? prev : curr
+        )
+        maxDaysOverdue = Math.floor((today.getTime() - new Date(oldest.due_date).getTime()) / (1000 * 60 * 60 * 24))
+    }
+
+    return { debt, paymentSurplus, overdueCount, maxDaysOverdue }
+}

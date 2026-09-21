@@ -26,6 +26,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { calculateResidentDebtSummary } from '@/utils/finance-utils'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -245,28 +246,18 @@ export default function ResidentPaymentsClient({
     const isPendingWithinDeadline = dayOfMonth <= paymentDeadline && resident.debt_amount > 0
     const isUpToDate = resident.debt_amount <= 0
 
-    // Usar facturas reales si existen, sino mock
-    const mockHistory = [
-        { folio: 'FAC-26001', date: '03 Mar 2026', concept: 'Cuota de mantenimiento', amount: 2500, status: 'Pagado', month: 'Marzo', atraso: 0 },
-        { folio: 'FAC-26002', date: '05 Feb 2026', concept: 'Cuota de mantenimiento', amount: 2500, status: 'Pagado', month: 'Febrero', atraso: 2 },
-        { folio: 'FAC-26003', date: '05 Ene 2026', concept: 'Cuota de mantenimiento', amount: 2500, status: 'Pagado', month: 'Enero', atraso: 0 }
-    ]
-
     const initialPaymentHistory = useMemo(() => {
         const source = liveInvoices.length > 0 ? liveInvoices : dbInvoices
-        if (source.length > 0) {
-            return source.map((inv: any) => ({
-                folio: inv.folio || '—',
-                date: formatDate(inv.due_date || inv.created_at),
-                concept: inv.description || 'Cuota de mantenimiento',
-                amount: inv.amount || 0,
-                status: mapStatus(inv.status),
-                month: MESES_ES[new Date(inv.due_date || inv.created_at).getMonth()] || 'Sin fecha',
-                atraso: inv.atraso || 0,
-                rawStatus: inv.status,
-            }))
-        }
-        return mockHistory
+        return source.map((inv: any) => ({
+            folio: inv.folio || '—',
+            date: formatDate(inv.due_date || inv.created_at),
+            concept: inv.description || 'Cuota de mantenimiento',
+            amount: inv.amount || 0,
+            status: mapStatus(inv.status),
+            month: MESES_ES[new Date(inv.due_date || inv.created_at).getMonth()] || 'Sin fecha',
+            atraso: inv.atraso || 0,
+            rawStatus: inv.status,
+        }))
     }, [liveInvoices, dbInvoices])
 
     const [selectedMonth, setSelectedMonth] = useState('Todos')
@@ -348,13 +339,14 @@ export default function ResidentPaymentsClient({
     const cuotasTotalesGeneradas = cuotasPagadas + (montoMorosidad > 0 ? 1 : 0)
     const cumplimientoPorcentaje = Math.round((cuotasPagadas / 12) * 100)
 
-    // ─── ESTADO FINANCIERO DEL HERO (basado en cálculos reales, no en DB) ──────
-    // Monto total que debe el residente en este momento (acumulado de todos los meses)
+    // ─── ESTADO FINANCIERO DEL HERO ─────────────────────────────────────────────
+    // Misma fórmula que usan Propiedades > Residentes y Gestión de Cobranza, para
+    // que el residente vea exactamente la misma deuda que su administrador (antes
+    // este cálculo era independiente — su propio motor de déficit mes a mes — y
+    // podía dar un número distinto al que ve el admin para la misma persona).
     const montoMorosidadTotal = useMemo(() =>
-        Object.values(monthlyPaid).reduce((acc, { year, monthIndex, monthStr }) =>
-            acc + getMonthDeficit(year, monthIndex, monthStr)
-        , 0)
-    , [monthlyPaid, montoCuota, paymentDeadline])
+        calculateResidentDebtSummary({ resident, invoices: rawSource, unit }).debt
+    , [resident, rawSource, unit])
 
     const montoPendienteTotal = useMemo(() => {
         if (dayOfMonth > paymentDeadline) return 0

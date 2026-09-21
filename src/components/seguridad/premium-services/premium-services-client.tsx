@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { preparePremiumLead } from '@/app/actions/premium-actions'
+import { toast } from 'sonner'
 
 interface Service {
     id: string
@@ -67,12 +68,17 @@ export default function PremiumServicesClient({ userName }: { userName: string }
         
         setIsSubmitting(true)
         try {
-            await preparePremiumLead({
+            const result = await preparePremiumLead({
                 serviceName: selectedService.name,
                 category: selectedService.category,
                 userName: userName
             })
-            
+
+            if (!result.success) {
+                toast.error(result.error || 'No se pudo enviar la solicitud.')
+                return
+            }
+
             setIsSuccess(true)
             setTimeout(() => {
                 setIsSuccess(false)
@@ -80,6 +86,7 @@ export default function PremiumServicesClient({ userName }: { userName: string }
             }, 3000)
         } catch (error) {
             console.error('Error preparing lead:', error)
+            toast.error('No se pudo enviar la solicitud.')
         } finally {
             setIsSubmitting(false)
         }
@@ -287,7 +294,7 @@ export default function PremiumServicesClient({ userName }: { userName: string }
                                     <div className="space-y-2">
                                         <h2 className="text-3xl font-black text-white italic uppercase tracking-tight">¡Genial!</h2>
                                         <p className="text-zinc-400 font-medium">
-                                            Payload generado correctamente (Check console). Redirección preparada para n8n en el futuro.
+                                            Tu solicitud fue enviada a InmobiGo por WhatsApp. Nos pondremos en contacto contigo pronto.
                                         </p>
                                     </div>
                                     <div className="pt-4">

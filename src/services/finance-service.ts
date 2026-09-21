@@ -359,6 +359,7 @@ export const financeService = {
             .update({
                 status: 'paid',
                 balance_due: 0,
+                paid_at: new Date().toISOString(),
             })
             .eq('id', id)
             .select()

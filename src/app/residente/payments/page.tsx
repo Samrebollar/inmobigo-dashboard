@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import ResidentPaymentsClient from '@/components/residente/resident-payments-client'
+import { NotLinkedState } from '@/components/residente/NotLinkedState'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -16,23 +17,14 @@ export default async function PaymentsPage() {
         redirect('/login')
     }
 
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .maybeSingle()
-
     const { data: resident } = await supabase
         .from('residents')
         .select('*, condominiums(name), units(id, unit_number, monto_mensual, payment_deadline)')
         .eq('user_id', user.id)
         .maybeSingle()
 
-    const mockResident = resident || {
-        first_name: profile?.full_name?.split(' ')[0] || user.user_metadata?.full_name?.split(' ')[0] || 'Residente',
-        condominiums: { name: 'Condominio Demo' },
-        units: { unit_number: 'A-101', monto_mensual: 2500, payment_deadline: 10 },
-        debt_amount: 0,
+    if (!resident) {
+        return <NotLinkedState email={user.email} />
     }
 
     // Cargar facturas reales del residente desde resident_invoices
@@ -131,8 +123,8 @@ export default async function PaymentsPage() {
     const unit = resident?.units || null
 
     return (
-        <ResidentPaymentsClient 
-            resident={mockResident} 
+        <ResidentPaymentsClient
+            resident={resident}
             invoices={invoices} 
             unit={unit} 
             directPayments={directPayments}

@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import ResidentPaymentsClient from '@/components/residente/resident-payments-client'
 import { NotLinkedState } from '@/components/residente/NotLinkedState'
+import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-service'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -122,12 +123,17 @@ export default async function PaymentsPage() {
 
     const unit = resident?.units || null
 
+    const mpAccount = resident?.condominium_id
+        ? await getCondoMercadoPagoAccount(resident.condominium_id)
+        : { connected: false }
+
     return (
         <ResidentPaymentsClient
             resident={resident}
-            invoices={invoices} 
-            unit={unit} 
+            invoices={invoices}
+            unit={unit}
             directPayments={directPayments}
+            mpConnected={mpAccount.connected}
         />
     )
 }

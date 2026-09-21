@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/utils/supabase/client'
-import { 
-    CreditCard, 
-    Calendar, 
-    Download, 
-    ExternalLink, 
+import { toast } from 'sonner'
+import {
+    CreditCard,
+    Calendar,
     ChevronRight,
     ChevronDown,
     Bell,
@@ -18,15 +18,17 @@ import {
     TrendingUp,
     AlertCircle,
     ArrowUpRight,
-    Wallet,
     History,
     Receipt,
-    ShieldAlert
+    ShieldAlert,
+    Loader2,
+    Lock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { createResidentPaymentCheckout } from '@/app/actions/mercadopago-payment-actions'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -40,9 +42,8 @@ interface ResidentPaymentsClientProps {
         payment_deadline?: number
     } | null
     directPayments?: any[]
+    mpConnected?: boolean
 }
-
-const CUOTA_FIJA = 2500
 
 const MESES_ES: Record<number, string> = {
     0: 'Enero', 1: 'Febrero', 2: 'Marzo', 3: 'Abril',
@@ -132,12 +133,54 @@ async function generateReceiptForResident(payment: any, residentName: string, co
     }
 }
 
-export default function ResidentPaymentsClient({ 
-    resident, 
-    invoices: dbInvoices = [], 
+export default function ResidentPaymentsClient({
+    resident,
+    invoices: dbInvoices = [],
     unit,
-    directPayments = []
+    directPayments = [],
+    mpConnected = false
 }: ResidentPaymentsClientProps) {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const [isCheckingOut, setIsCheckingOut] = useState(false)
+
+    useEffect(() => {
+        const status = searchParams.get('mp_status')
+        if (!status) return
+
+        if (status === 'success') {
+            toast.success('¡Pago recibido! Tu saldo se actualizará en unos momentos.')
+        } else if (status === 'pending') {
+            toast.info('Tu pago está siendo procesado por Mercado Pago.')
+        } else if (status === 'failure') {
+            toast.error('No se pudo completar el pago. Intenta de nuevo.')
+        }
+
+        router.replace('/residente/payments')
+    }, [searchParams, router])
+
+    const handlePayNow = async () => {
+        if (!mpConnected) {
+            router.push('/residente/subir-comprobante')
+            return
+        }
+
+        setIsCheckingOut(true)
+        try {
+            const result = await createResidentPaymentCheckout()
+            if (result.success && result.checkoutUrl) {
+                window.location.href = result.checkoutUrl
+            } else {
+                toast.error(result.message || 'No se pudo iniciar el pago.')
+                setIsCheckingOut(false)
+            }
+        } catch (error) {
+            console.error('[Residente] Error al iniciar checkout:', error)
+            toast.error('No se pudo iniciar el pago.')
+            setIsCheckingOut(false)
+        }
+    }
+
     const today = new Date()
     const dayOfMonth = today.getDate()
 
@@ -447,23 +490,39 @@ export default function ResidentPaymentsClient({
 
                         <div className="flex flex-wrap items-center gap-6 pt-4">
                             {!heroIsUpToDate && (
-                                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                    <Button className={cn(
-                                        "h-16 px-10 rounded-2xl text-lg font-black shadow-2xl transition-all flex items-center gap-4 group/btn",
-                                        heroIsOverdue ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/40"
-                                    )}>
-                                        {heroIsOverdue ? "Regularizar saldo" : "Pagar ahora"}
-                                        <ChevronRight className="h-5 w-5 group-hover/btn:translate-x-1 transition-transform" />
+                                <motion.div whileHover={{ scale: isCheckingOut ? 1 : 1.05 }} whileTap={{ scale: isCheckingOut ? 1 : 0.95 }}>
+                                    <Button
+                                        onClick={handlePayNow}
+                                        disabled={isCheckingOut}
+                                        className={cn(
+                                            "h-16 px-10 rounded-2xl text-lg font-black shadow-2xl transition-all flex items-center gap-4 group/btn disabled:opacity-70",
+                                            heroIsOverdue ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/40"
+                                        )}
+                                    >
+                                        {isCheckingOut ? (
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                        ) : (
+                                            <>
+                                                {heroIsOverdue ? "Regularizar saldo" : "Pagar ahora"}
+                                                <ChevronRight className="h-5 w-5 group-hover/btn:translate-x-1 transition-transform" />
+                                            </>
+                                        )}
                                     </Button>
                                 </motion.div>
                             )}
-                            
-                            <motion.div 
-                                whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
-                                className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/[0.03] border border-white/[0.05] text-zinc-500 text-xs font-bold uppercase tracking-widest transition-colors"
+
+                            <motion.div
+                                whileHover={{ scale: 1.02 }}
+                                className="relative flex items-center gap-4 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] border border-blue-400/20 shadow-[0_8px_24px_-8px_rgba(0,158,247,0.35)] overflow-hidden group/mp"
                             >
-                                <ShieldCheck className="h-4 w-4 text-blue-400" />
-                                Pago seguro con MercadoPago
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover/mp:translate-x-[150%] transition-transform duration-1000 ease-out" />
+                                <div className="h-9 w-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center relative z-10 shrink-0">
+                                    <Lock className="h-4 w-4 text-sky-300" />
+                                </div>
+                                <div className="relative z-10 leading-tight">
+                                    <p className="text-white text-xs font-black uppercase tracking-widest">Pago 100% seguro</p>
+                                    <p className="text-sky-300/80 text-[10px] font-bold uppercase tracking-wider">Procesado por Mercado Pago</p>
+                                </div>
                             </motion.div>
                         </div>
                     </div>
@@ -641,7 +700,7 @@ export default function ResidentPaymentsClient({
                                         </td>
                                         <td className="px-10 py-8">
                                             <div className="flex justify-end">
-                                                {payment.folio && payment.folio !== '—' ? (
+                                                {payment.folio && payment.folio !== '—' && (payment as any).rawStatus === 'paid' ? (
                                                     <motion.button
                                                         title={`Descargar recibo ${payment.folio}`}
                                                         whileHover={{ scale: 1.2, rotate: 12 }}
@@ -657,7 +716,7 @@ export default function ResidentPaymentsClient({
                                                     </motion.button>
                                                 ) : (
                                                     <div
-                                                        title="Recibo pendiente de aprobación"
+                                                        title="Recibo disponible solo cuando el pago esté confirmado"
                                                         className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/30 text-zinc-600 cursor-default"
                                                     >
                                                         <Receipt size={20} />

@@ -128,8 +128,8 @@ export function ResidentConveniosClient({
     // Request form states
     const [reqTotalDebt, setReqTotalDebt] = useState('')
     const [reqInstallments, setReqInstallments] = useState('6')
+    const [reqStartDate, setReqStartDate] = useState('')
     const [reqDetails, setReqDetails] = useState('')
-    const [reqComments, setReqComments] = useState('')
     
     // Payout form states
     const [paymentMethod, setPaymentMethod] = useState('Transferencia')
@@ -233,6 +233,16 @@ export function ResidentConveniosClient({
     const paidCount = installments.filter(inst => inst.status === 'paid').length
     const progressPercentage = installments.length > 0 ? Math.round((paidCount / installments.length) * 100) : 0
 
+    // Preview of the monthly amount the resident would pay, based on the request form's current values
+    const reqMonthlyAmount = (parseFloat(reqTotalDebt) > 0 && parseInt(reqInstallments, 10) > 0)
+        ? parseFloat(reqTotalDebt) / parseInt(reqInstallments, 10)
+        : 0
+
+    const formatStartDate = (dateStr: string) => {
+        if (!dateStr) return ''
+        return new Date(`${dateStr}T00:00:00`).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+    }
+
     // Handle submitting a new payment agreement request
     const handleCreateRequest = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -246,27 +256,32 @@ export function ResidentConveniosClient({
             return
         }
 
+        if (!reqStartDate) {
+            toast.error('Selecciona la fecha en la que iniciarías a pagar el convenio.')
+            return
+        }
+
         setSubmitting(true)
         try {
-            const defaultDetails = `Plan propuesto de ${reqInstallments} cuotas para saldar deuda total de ${formatCurrency(parseFloat(reqTotalDebt))}.`
-            const finalDetails = reqDetails.trim() || defaultDetails
+            const proposalSummary = `Propuesta de convenio: ${reqInstallments} cuotas mensuales de ${formatCurrency(reqMonthlyAmount)} c/u para saldar una deuda total de ${formatCurrency(parseFloat(reqTotalDebt))}, iniciando el ${formatStartDate(reqStartDate)}.`
+            const finalDetails = reqDetails.trim() ? `${proposalSummary}\n\n${reqDetails.trim()}` : proposalSummary
 
             const res = await createResidentAgreementAction({
                 total_debt: parseFloat(reqTotalDebt),
                 agreement_details: finalDetails,
-                comments: reqComments,
+                comments: '',
                 num_installments: parseInt(reqInstallments, 10)
             })
 
             if (res.success && res.data) {
                 toast.success('Solicitud de convenio enviada a la administración exitosamente.')
                 setIsRequestModalOpen(false)
-                
+
                 // Reset form
                 setReqTotalDebt('')
                 setReqInstallments('6')
+                setReqStartDate('')
                 setReqDetails('')
-                setReqComments('')
                 
                 // Update active agreement
                 const newAg = res.data as PaymentAgreement
@@ -1135,24 +1150,33 @@ export function ResidentConveniosClient({
                                     </div>
                                 </div>
 
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Detalles del Plan de Pagos (Opcional)</label>
-                                    <textarea
-                                        value={reqDetails}
-                                        onChange={(e) => setReqDetails(e.target.value)}
-                                        placeholder="Ej: Solicito realizar pagos mensuales de igual cantidad cada día 10 del mes a partir del siguiente periodo..."
-                                        rows={3}
-                                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl p-3 text-xs text-white resize-none outline-none transition-all"
-                                    />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Pago Mensual Estimado</label>
+                                        <div className="w-full bg-zinc-950/60 border border-dashed border-zinc-800 rounded-xl px-3 py-3 text-sm font-black text-emerald-400">
+                                            {reqMonthlyAmount > 0 ? formatCurrency(reqMonthlyAmount) : '$0.00'}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Fecha de Inicio de Pago</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={reqStartDate}
+                                            min={new Date().toISOString().split('T')[0]}
+                                            onChange={(e) => setReqStartDate(e.target.value)}
+                                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 rounded-xl px-3 py-3 text-xs text-white outline-none transition-all [color-scheme:dark]"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Comentarios Adicionales (Opcional)</label>
+                                    <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Detalles de la Propuesta y Comentarios (Opcional)</label>
                                     <textarea
-                                        value={reqComments}
-                                        onChange={(e) => setReqComments(e.target.value)}
-                                        placeholder="Cualquier información adicional para la administración..."
-                                        rows={2}
+                                        value={reqDetails}
+                                        onChange={(e) => setReqDetails(e.target.value)}
+                                        placeholder="Ej: Solicito realizar los pagos cada día 10 del mes. Cualquier información adicional para la administración..."
+                                        rows={3}
                                         className="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl p-3 text-xs text-white resize-none outline-none transition-all"
                                     />
                                 </div>

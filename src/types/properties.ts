@@ -14,6 +14,8 @@ export interface Condominium {
     status: 'active' | 'paused'
     reglamento_url?: string | null
     reglamento_uploaded_at?: string | null
+    convenio_url?: string | null
+    convenio_uploaded_at?: string | null
     created_at?: string
 }
 
@@ -36,6 +38,8 @@ export interface UpdateCondominiumDTO extends Partial<CreateCondominiumDTO> {
     id: string
     reglamento_url?: string | null
     reglamento_uploaded_at?: string | null
+    convenio_url?: string | null
+    convenio_uploaded_at?: string | null
 }
 
 export interface SettingsCondominio {

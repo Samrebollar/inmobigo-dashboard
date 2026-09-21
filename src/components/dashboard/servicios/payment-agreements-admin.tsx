@@ -18,7 +18,9 @@ import {
     AlertCircle,
     Send,
     FileCheck,
-    Hourglass
+    Hourglass,
+    Loader2,
+    Upload
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -140,10 +142,12 @@ export function PaymentAgreementsAdmin({
         }
     }
 
-    const handleSendForSignature = async (id: string) => {
+    // Usado por el modal de detalle, que sube el archivo por su cuenta y
+    // solo necesita disparar el envío con la URL ya lista.
+    const handleSendForSignature = async (id: string, documentUrl: string) => {
         try {
             setActionLoadingId(id)
-            const result = await sendAgreementForSignatureAction({ id })
+            const result = await sendAgreementForSignatureAction({ id, documentUrl })
 
             if (!result.success) {
                 throw new Error(result.error)
@@ -157,6 +161,48 @@ export function PaymentAgreementsAdmin({
         } catch (error: any) {
             console.error('Error sending agreement for signature:', error)
             toast.error(error.message || 'No se pudo enviar el convenio para firma.')
+        } finally {
+            setActionLoadingId(null)
+        }
+    }
+
+    // Usado por la tarjeta compacta: sube el archivo y envía en un solo paso.
+    const handleUploadAndSendForSignature = async (agreement: PaymentAgreement, file: File) => {
+        if (file.type !== 'application/pdf') {
+            toast.error('Solo se permiten archivos en formato PDF.')
+            return
+        }
+
+        try {
+            setActionLoadingId(agreement.id)
+
+            const condominiumId = residentsMap[agreement.resident_id] || 'sin-condominio'
+            const filePath = `${condominiumId}/convenios/${agreement.id}-${Date.now()}.pdf`
+
+            const { error: uploadError } = await supabase.storage
+                .from('condominium_documents')
+                .upload(filePath, file, { upsert: true })
+
+            if (uploadError) throw uploadError
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('condominium_documents')
+                .getPublicUrl(filePath)
+
+            const result = await sendAgreementForSignatureAction({ id: agreement.id, documentUrl: publicUrl })
+
+            if (!result.success) {
+                throw new Error(result.error)
+            }
+
+            toast.success('Convenio subido y enviado al residente para su firma.')
+            setAgreements(prev => prev.map(ag => ag.id === agreement.id ? { ...ag, ...result.data } : ag))
+            if (selectedAgreement && selectedAgreement.id === agreement.id) {
+                setSelectedAgreement(prev => prev ? { ...prev, ...result.data } : null)
+            }
+        } catch (error: any) {
+            console.error('Error uploading/sending agreement for signature:', error)
+            toast.error(error.message || 'No se pudo subir y enviar el convenio.')
         } finally {
             setActionLoadingId(null)
         }
@@ -531,13 +577,28 @@ export function PaymentAgreementsAdmin({
                                         <div className="px-6 pb-6 pt-2 flex gap-3 relative z-10">
                                             {agreement.status === 'pending' && (
                                                 <>
-                                                    <button
+                                                    <input
+                                                        id={`convenio-upload-${agreement.id}`}
+                                                        type="file"
+                                                        accept="application/pdf"
+                                                        className="hidden"
                                                         disabled={actionLoadingId === agreement.id}
-                                                        onClick={() => handleSendForSignature(agreement.id)}
-                                                        className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0]
+                                                            if (file) handleUploadAndSendForSignature(agreement, file)
+                                                            e.target.value = ''
+                                                        }}
+                                                    />
+                                                    <label
+                                                        htmlFor={`convenio-upload-${agreement.id}`}
+                                                        className={`flex-1 h-11 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${actionLoadingId === agreement.id ? 'opacity-50 pointer-events-none' : ''}`}
                                                     >
-                                                        <Send size={14} /> Enviar para Firma
-                                                    </button>
+                                                        {actionLoadingId === agreement.id ? (
+                                                            <Loader2 size={14} className="animate-spin" />
+                                                        ) : (
+                                                            <><Upload size={14} /> Subir y Enviar</>
+                                                        )}
+                                                    </label>
                                                     <button
                                                         disabled={actionLoadingId === agreement.id}
                                                         onClick={() => { setSelectedAgreement(agreement); setIsRejecting(true) }}

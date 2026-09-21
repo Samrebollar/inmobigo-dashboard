@@ -26,7 +26,8 @@ import {
     Plus,
     Loader2,
     Check,
-    Download
+    Download,
+    IdCard
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -60,6 +61,8 @@ interface PaymentAgreement {
     unsigned_document_sent_at?: string | null
     signed_document_url?: string | null
     signed_document_uploaded_at?: string | null
+    ine_front_path?: string | null
+    ine_back_path?: string | null
 }
 
 interface AgreementInstallment {
@@ -105,7 +108,12 @@ export function ResidentConveniosClient({
         initialAgreements.find(ag => ACTIVE_AGREEMENT_STATUSES.includes(ag.status)) || null
     )
     const [uploadingSignedDoc, setUploadingSignedDoc] = useState(false)
+    const [signedDocFile, setSignedDocFile] = useState<File | null>(null)
+    const [ineFrontFile, setIneFrontFile] = useState<File | null>(null)
+    const [ineBackFile, setIneBackFile] = useState<File | null>(null)
     const signedDocInputRef = useRef<HTMLInputElement>(null)
+    const ineFrontInputRef = useRef<HTMLInputElement>(null)
+    const ineBackInputRef = useRef<HTMLInputElement>(null)
     const [installments, setInstallments] = useState<AgreementInstallment[]>(initialInstallments)
     const [historyLogs, setHistoryLogs] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
@@ -275,51 +283,89 @@ export function ResidentConveniosClient({
         }
     }
 
-    // Handle uploading the signed convenio document back to administration
-    const handleSignedDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Handle selecting the signed convenio PDF (staged, not uploaded yet)
+    const handleSignedDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (!file || !activeAgreement) return
-
+        if (!file) return
         if (file.type !== 'application/pdf') {
-            toast.error('Solo se permiten archivos en formato PDF.')
+            toast.error('El convenio firmado debe ser un archivo PDF.')
             e.target.value = ''
+            return
+        }
+        setSignedDocFile(file)
+    }
+
+    // Handle selecting an INE photo (staged, not uploaded yet)
+    const handleIneFileChange = (side: 'front' | 'back') => (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        if (!file.type.startsWith('image/')) {
+            toast.error('La INE debe ser una imagen (foto o escaneo).')
+            e.target.value = ''
+            return
+        }
+        if (side === 'front') setIneFrontFile(file)
+        else setIneBackFile(file)
+    }
+
+    // Handle uploading the signed convenio + INE (frente y reverso) back to administration
+    const handleSubmitSignedAgreement = async () => {
+        if (!activeAgreement) return
+        if (!signedDocFile || !ineFrontFile || !ineBackFile) {
+            toast.error('Debes adjuntar el convenio firmado y ambos lados de tu INE.')
             return
         }
 
         const supabase = createClient()
         const condominiumId = resident?.condominium_id || resident?.condominiums?.id || 'sin-condominio'
-        const filePath = `${condominiumId}/convenios-firmados/${activeAgreement.id}-${Date.now()}.pdf`
+        const residentId = resident?.id || 'sin-residente'
+        const ts = Date.now()
 
         try {
             setUploadingSignedDoc(true)
-            const { error: uploadError } = await supabase.storage
-                .from('condominium_documents')
-                .upload(filePath, file, { upsert: true })
 
-            if (uploadError) throw uploadError
-
-            const { data } = supabase.storage
+            const { error: docUploadError } = await supabase.storage
                 .from('condominium_documents')
-                .getPublicUrl(filePath)
+                .upload(`${condominiumId}/convenios-firmados/${activeAgreement.id}-${ts}.pdf`, signedDocFile, { upsert: true })
+            if (docUploadError) throw docUploadError
+            const { data: docUrlData } = supabase.storage
+                .from('condominium_documents')
+                .getPublicUrl(`${condominiumId}/convenios-firmados/${activeAgreement.id}-${ts}.pdf`)
+
+            const ineFrontPath = `${condominiumId}/${residentId}/ine-frente-${activeAgreement.id}-${ts}.jpg`
+            const { error: ineFrontError } = await supabase.storage
+                .from('resident_ine_documents')
+                .upload(ineFrontPath, ineFrontFile, { upsert: true })
+            if (ineFrontError) throw ineFrontError
+
+            const ineBackPath = `${condominiumId}/${residentId}/ine-reverso-${activeAgreement.id}-${ts}.jpg`
+            const { error: ineBackError } = await supabase.storage
+                .from('resident_ine_documents')
+                .upload(ineBackPath, ineBackFile, { upsert: true })
+            if (ineBackError) throw ineBackError
 
             const result = await uploadSignedAgreementAction({
                 id: activeAgreement.id,
-                signedDocumentUrl: data.publicUrl
+                signedDocumentUrl: docUrlData.publicUrl,
+                ineFrontPath,
+                ineBackPath
             })
 
             if (result.success && result.data) {
-                toast.success('Convenio firmado enviado a la administración para su aprobación final.')
+                toast.success('Convenio y documentos enviados a la administración para su aprobación final.')
                 setActiveAgreement(result.data as PaymentAgreement)
                 setAgreements(prev => prev.map(ag => ag.id === activeAgreement.id ? (result.data as PaymentAgreement) : ag))
+                setSignedDocFile(null)
+                setIneFrontFile(null)
+                setIneBackFile(null)
             } else {
                 toast.error(result.error || 'No se pudo enviar el convenio firmado.')
             }
         } catch (error: any) {
             console.error('Error uploading signed agreement:', error)
-            toast.error(`No se pudo subir el convenio firmado: ${error?.message || 'error desconocido'}`)
+            toast.error(`No se pudo subir tus documentos: ${error?.message || 'error desconocido'}`)
         } finally {
             setUploadingSignedDoc(false)
-            e.target.value = ''
         }
     }
 
@@ -730,37 +776,91 @@ export function ResidentConveniosClient({
                                 </div>
                             </div>
 
-                            <div className="flex flex-col sm:flex-row gap-3">
+                            <div>
                                 {activeAgreement.unsigned_document_url ? (
-                                    <a href={activeAgreement.unsigned_document_url} target="_blank" rel="noopener noreferrer" className="flex-1">
-                                        <button type="button" className="w-full h-12 px-6 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
+                                    <a href={activeAgreement.unsigned_document_url} target="_blank" rel="noopener noreferrer">
+                                        <button type="button" className="w-full sm:w-auto h-12 px-6 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
                                             <Download size={16} /> Descargar Convenio
                                         </button>
                                     </a>
                                 ) : (
-                                    <div className="flex-1 h-12 px-6 rounded-xl border border-dashed border-zinc-800 text-zinc-600 text-xs font-bold uppercase tracking-widest flex items-center justify-center">
+                                    <div className="w-full sm:w-auto h-12 px-6 rounded-xl border border-dashed border-zinc-800 text-zinc-600 text-xs font-bold uppercase tracking-widest flex items-center justify-center">
                                         Documento no disponible
                                     </div>
                                 )}
+                            </div>
 
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <input
                                     type="file"
                                     accept="application/pdf"
                                     className="hidden"
                                     ref={signedDocInputRef}
-                                    onChange={handleSignedDocumentUpload}
+                                    onChange={handleSignedDocFileChange}
                                     disabled={uploadingSignedDoc}
                                 />
                                 <button
                                     type="button"
                                     disabled={uploadingSignedDoc}
                                     onClick={() => signedDocInputRef.current?.click()}
-                                    className="flex-1 h-12 px-6 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                                    className={`h-24 px-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-60 ${signedDocFile ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}
                                 >
-                                    {uploadingSignedDoc ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                    {uploadingSignedDoc ? 'Subiendo...' : 'Subir Convenio Firmado'}
+                                    {signedDocFile ? <Check size={18} /> : <FileText size={18} />}
+                                    <span className="text-[10px] font-bold uppercase tracking-widest leading-tight">
+                                        {signedDocFile ? signedDocFile.name : 'Convenio Firmado (PDF)'}
+                                    </span>
+                                </button>
+
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    ref={ineFrontInputRef}
+                                    onChange={handleIneFileChange('front')}
+                                    disabled={uploadingSignedDoc}
+                                />
+                                <button
+                                    type="button"
+                                    disabled={uploadingSignedDoc}
+                                    onClick={() => ineFrontInputRef.current?.click()}
+                                    className={`h-24 px-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-60 ${ineFrontFile ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}
+                                >
+                                    {ineFrontFile ? <Check size={18} /> : <IdCard size={18} />}
+                                    <span className="text-[10px] font-bold uppercase tracking-widest leading-tight">
+                                        {ineFrontFile ? ineFrontFile.name : 'INE Frente (Foto)'}
+                                    </span>
+                                </button>
+
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    ref={ineBackInputRef}
+                                    onChange={handleIneFileChange('back')}
+                                    disabled={uploadingSignedDoc}
+                                />
+                                <button
+                                    type="button"
+                                    disabled={uploadingSignedDoc}
+                                    onClick={() => ineBackInputRef.current?.click()}
+                                    className={`h-24 px-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-60 ${ineBackFile ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}
+                                >
+                                    {ineBackFile ? <Check size={18} /> : <IdCard size={18} />}
+                                    <span className="text-[10px] font-bold uppercase tracking-widest leading-tight">
+                                        {ineBackFile ? ineBackFile.name : 'INE Reverso (Foto)'}
+                                    </span>
                                 </button>
                             </div>
+
+                            <button
+                                type="button"
+                                disabled={uploadingSignedDoc || !signedDocFile || !ineFrontFile || !ineBackFile}
+                                onClick={handleSubmitSignedAgreement}
+                                className="w-full h-12 px-6 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                {uploadingSignedDoc ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                {uploadingSignedDoc ? 'Enviando...' : 'Enviar Convenio y Documentos'}
+                            </button>
                         </motion.div>
                     )}
 

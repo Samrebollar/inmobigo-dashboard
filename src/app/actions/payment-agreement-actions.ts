@@ -215,14 +215,20 @@ export async function updatePaymentAgreementStatusAction({ id, status, rejection
 }
 
 /**
- * Paso previo obligatorio a la aprobación: la administración envía al
- * residente el archivo de convenio (el mismo subido en Propiedades >
- * Configuración > Archivo de Convenios) para que lo firme.
+ * Paso previo obligatorio a la aprobación: la administración sube el
+ * convenio personalizado de ESTE residente (cada convenio cambia según el
+ * residente — monto, plazos, condiciones) y se lo envía para que lo firme.
+ * `documentUrl` ya debe estar subido a storage por el cliente antes de
+ * llamar esta acción.
  */
-export async function sendAgreementForSignatureAction({ id }: { id: string }) {
+export async function sendAgreementForSignatureAction({ id, documentUrl }: { id: string; documentUrl: string }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, error: 'No autorizado.' }
+
+    if (!documentUrl) {
+        return { success: false, error: 'Debes subir el archivo de convenio de este residente antes de enviarlo.' }
+    }
 
     const { organizationId, isStaff } = await resolveStaffOrganization(supabase, user.id)
     if (!isStaff || !organizationId) {
@@ -246,24 +252,20 @@ export async function sendAgreementForSignatureAction({ id }: { id: string }) {
 
         const { data: resident } = await adminSupabase
             .from('residents')
-            .select('condominium_id, condominiums(organization_id, convenio_url)')
+            .select('condominium_id, condominiums(organization_id)')
             .eq('id', agreement.resident_id)
             .maybeSingle()
 
-        const condo = (resident as any)?.condominiums
-        if (condo?.organization_id !== organizationId) {
+        const condoOrgId = (resident as any)?.condominiums?.organization_id
+        if (condoOrgId !== organizationId) {
             return { success: false, error: 'No tienes permiso para modificar este convenio.' }
-        }
-
-        if (!condo?.convenio_url) {
-            return { success: false, error: 'Tu condominio aún no tiene un archivo de convenio subido. Súbelo en Propiedades > Configuración > Archivo de Convenios.' }
         }
 
         const { data, error } = await adminSupabase
             .from('payment_agreements')
             .update({
                 status: 'awaiting_signature',
-                unsigned_document_url: condo.convenio_url,
+                unsigned_document_url: documentUrl,
                 unsigned_document_sent_at: new Date().toISOString(),
             })
             .eq('id', id)
@@ -275,7 +277,7 @@ export async function sendAgreementForSignatureAction({ id }: { id: string }) {
             return { success: false, error: error.message }
         }
 
-        await fireConvenioWebhook(id, 'awaiting_signature', { document_url: condo.convenio_url })
+        await fireConvenioWebhook(id, 'awaiting_signature', { document_url: documentUrl })
 
         return { success: true, data }
     } catch (err: any) {
@@ -285,13 +287,30 @@ export async function sendAgreementForSignatureAction({ id }: { id: string }) {
 }
 
 /**
- * El residente sube de vuelta el convenio ya firmado. Pasa a revisión final
- * del administrador (que ahora sí puede aprobar o rechazar).
+ * El residente sube de vuelta el convenio ya firmado junto con fotos de su
+ * INE (frente y reverso), para que la administración pueda corroborar que
+ * la firma corresponde a su identificación antes de la aprobación final.
+ * ineFrontPath/ineBackPath son rutas dentro del bucket privado
+ * resident_ine_documents (no URLs públicas — se leen con signed URLs).
  */
-export async function uploadSignedAgreementAction({ id, signedDocumentUrl }: { id: string; signedDocumentUrl: string }) {
+export async function uploadSignedAgreementAction({
+    id,
+    signedDocumentUrl,
+    ineFrontPath,
+    ineBackPath,
+}: {
+    id: string
+    signedDocumentUrl: string
+    ineFrontPath: string
+    ineBackPath: string
+}) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, error: 'No autorizado.' }
+
+    if (!signedDocumentUrl || !ineFrontPath || !ineBackPath) {
+        return { success: false, error: 'Debes subir el convenio firmado y ambos lados de tu INE.' }
+    }
 
     try {
         const adminSupabase = createAdminClient()
@@ -317,6 +336,8 @@ export async function uploadSignedAgreementAction({ id, signedDocumentUrl }: { i
                 status: 'pending_final_approval',
                 signed_document_url: signedDocumentUrl,
                 signed_document_uploaded_at: new Date().toISOString(),
+                ine_front_path: ineFrontPath,
+                ine_back_path: ineBackPath,
             })
             .eq('id', id)
             .select()
@@ -332,6 +353,54 @@ export async function uploadSignedAgreementAction({ id, signedDocumentUrl }: { i
         return { success: true, data }
     } catch (err: any) {
         console.error('❌ Excepción al subir convenio firmado:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * Genera signed URLs temporales para ver las fotos de INE del residente —
+ * viven en un bucket privado, así que nunca se exponen como URL pública.
+ */
+export async function getIneSignedUrlsAction({ agreementId }: { agreementId: string }) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'No autorizado.' }
+
+    try {
+        const adminSupabase = createAdminClient()
+
+        const { data: agreement } = await adminSupabase
+            .from('payment_agreements')
+            .select('resident_id, ine_front_path, ine_back_path')
+            .eq('id', agreementId)
+            .maybeSingle()
+
+        if (!agreement) return { success: false, error: 'Convenio no encontrado.' }
+
+        const allowed = await canAccessResident(supabase, user.id, agreement.resident_id)
+        if (!allowed) return { success: false, error: 'No tienes permiso para ver estos documentos.' }
+
+        if (!agreement.ine_front_path || !agreement.ine_back_path) {
+            return { success: false, error: 'Este convenio aún no tiene fotos de INE subidas.' }
+        }
+
+        const [frontRes, backRes] = await Promise.all([
+            adminSupabase.storage.from('resident_ine_documents').createSignedUrl(agreement.ine_front_path, 3600),
+            adminSupabase.storage.from('resident_ine_documents').createSignedUrl(agreement.ine_back_path, 3600),
+        ])
+
+        if (frontRes.error || backRes.error) {
+            console.error('❌ Error generando signed URLs de INE:', frontRes.error || backRes.error)
+            return { success: false, error: 'No se pudieron generar los enlaces de la INE.' }
+        }
+
+        return {
+            success: true,
+            frontUrl: frontRes.data.signedUrl,
+            backUrl: backRes.data.signedUrl,
+        }
+    } catch (err: any) {
+        console.error('❌ Excepción al generar signed URLs de INE:', err)
         return { success: false, error: err.message }
     }
 }

@@ -473,7 +473,7 @@ export function AgreementDetailsModal({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98, y: 15 }}
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="bg-zinc-900 border border-zinc-800/80 w-full max-w-6xl rounded-[2.5rem] shadow-2xl relative overflow-hidden my-8"
+                className="bg-zinc-900 border border-zinc-800/80 w-full max-w-6xl max-h-[90vh] rounded-[2.5rem] shadow-2xl relative overflow-hidden my-8 flex flex-col"
             >
                 {/* Background ambient glows */}
                 <div className="absolute top-0 left-1/4 w-[500px] h-[200px] rounded-full pointer-events-none blur-[120px] opacity-10 bg-gradient-to-r from-violet-600 to-indigo-600" />
@@ -489,7 +489,7 @@ export function AgreementDetailsModal({
                     <X size={18} />
                 </button>
 
-                <div className="p-6 md:p-8 space-y-8">
+                <div className="p-6 md:p-8 space-y-8 overflow-y-auto custom-scrollbar">
                     {/* 1. Header Section */}
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-zinc-800/50">
                         <div className="flex items-start gap-4">

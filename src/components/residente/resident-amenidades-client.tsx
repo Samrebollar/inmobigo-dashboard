@@ -59,53 +59,6 @@ interface Amenity {
     rules_pdf_url?: string
 }
 
-const DEFAULT_AMENITIES = [
-    {
-        name: 'Salón de Fiestas',
-        description: 'Espacio elegante para eventos sociales con cocina equipada y mobiliario premium.',
-        icon: 'PartyPopper',
-        base_price: 2500,
-        deposit_required: true,
-        deposit_amount: 5000,
-        capacity: 100,
-        rules: 'No se permite música después de las 12 AM. Máximo 100 personas.',
-        color: 'from-purple-600 to-indigo-600'
-    },
-    {
-        name: 'Alberca Infinity',
-        description: 'Relájate en nuestra alberca climatizada con vistas panorámicas a la ciudad.',
-        icon: 'Waves',
-        base_price: 0,
-        deposit_required: false,
-        deposit_amount: 0,
-        capacity: 30,
-        rules: 'Uso obligatorio de traje de baño. No se permiten envases de vidrio.',
-        color: 'from-blue-500 to-cyan-500'
-    },
-    {
-        name: 'Gimnasio Pro',
-        description: 'Equipamiento de última generación para cardio y pesas. Abierto 24/7.',
-        icon: 'Dumbbell',
-        base_price: 0,
-        deposit_required: false,
-        deposit_amount: 0,
-        capacity: 15,
-        rules: 'Uso de toalla obligatorio. Limpiar equipo después de usar.',
-        color: 'from-rose-500 to-orange-500'
-    },
-    {
-        name: 'Área de Asadores',
-        description: 'Zona al aire libre con asadores de gas, mesas y pérgola para convivencias.',
-        icon: 'Flame',
-        base_price: 500,
-        deposit_required: true,
-        deposit_amount: 1000,
-        capacity: 12,
-        rules: 'Dejar el asador limpio. Duración máxima de 5 horas.',
-        color: 'from-orange-600 to-amber-500'
-    }
-]
-
 const getIcon = (name: string) => {
     switch (name) {
         case 'PartyPopper': return <PartyPopper className="h-6 w-6" />
@@ -157,25 +110,16 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
         setFetching(true)
         try {
+            // getAmenitiesAction ya siembra un catálogo por defecto server-side
+            // cuando el condominio no tiene amenidades configuradas todavía —
+            // antes este componente además insertaba SU PROPIO catálogo
+            // inventado directamente desde el navegador, con precios/reglas
+            // distintos a los que siembra el server action. Eso escribía datos
+            // falsos y no deterministas en la tabla real de producción.
             const result = await getAmenitiesAction(orgId, resident?.condominium_id)
 
-            if (result.success && result.data && result.data.length > 0) {
+            if (result.success && result.data) {
                 setAmenities(result.data)
-            } else if (result.success) {
-                // Si llegamos aquí con orgId válidopero sin datos, intentamos sembrar
-                const amenitiesToSeed = DEFAULT_AMENITIES.map(a => ({
-                    ...a,
-                    organization_id: orgId
-                }))
-                
-                // Usamos la Server Action para insertar (bypass RLS)
-                // Añado una nueva acción para insertar masivamente si es necesario
-                const { data: seededData, error: seedError } = await supabase
-                    .from('amenities')
-                    .insert(amenitiesToSeed)
-                    .select()
-
-                if (seededData) setAmenities(seededData)
             }
         } catch (error) {
             console.error('Error grave en fetchAmenities:', error)
@@ -408,7 +352,18 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                         <p className="text-zinc-500 font-bold text-xs">Aviso importante</p>
                         <p className="text-sm font-medium text-zinc-300">Todas las reservaciones deben ser confirmadas por la administración. Los eventos del fin de semana requieren 48h de anticipación.</p>
                     </div>
-                    <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/5 text-indigo-400 font-black h-12 rounded-2xl px-6 text-xs uppercase tracking-widest shrink-0">
+                    <Button
+                        variant="outline"
+                        className="border-indigo-500/30 bg-indigo-500/5 text-indigo-400 font-black h-12 rounded-2xl px-6 text-xs uppercase tracking-widest shrink-0"
+                        onClick={() => {
+                            const url = resident?.condominiums?.reglamento_url
+                            if (url) {
+                                window.open(url, '_blank', 'noreferrer')
+                            } else {
+                                toast.info('Tu administración aún no ha subido el reglamento general del condominio.')
+                            }
+                        }}
+                    >
                         Reglamento General
                     </Button>
                 </div>

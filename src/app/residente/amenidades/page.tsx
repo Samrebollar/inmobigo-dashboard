@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import ResidentAmenidadesClient from '@/components/residente/resident-amenidades-client'
+import { NotLinkedState } from '@/components/residente/NotLinkedState'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -18,31 +19,18 @@ export default async function AmenidadesPage() {
 
     const { data: resident } = await supabase
         .from('residents')
-        .select('*, condominiums(name, organization_id), units(unit_number)')
+        .select('*, condominiums(name, organization_id, reglamento_url), units(unit_number)')
         .eq('user_id', user.id)
         .maybeSingle()
 
-    // 2. Get organization_id from multiple sources with priority
-    // Priority: 1. Condominium linked to resident, 2. Resident record, 3. User metadata
-    // @ts-ignore
-    let organizationId = resident?.condominiums?.organization_id || 
-                         // @ts-ignore
-                         resident?.organization_id || 
-                         user.user_metadata?.organization_id || 
-                         user.user_metadata?.orgId
-
-    const mockResident = resident ? { 
-        ...resident, 
-        organization_id: organizationId 
-    } : {
-        user_id: user.id,
-        first_name: user.user_metadata?.full_name?.split(' ')[0] || 'Residente',
-        condominiums: { name: resident?.condominiums?.name || 'Tu Condominio' },
-        units: { unit_number: resident?.units?.unit_number || 'N/A' },
-        organization_id: organizationId,
+    if (!resident) {
+        return <NotLinkedState email={user.email} />
     }
 
+    // @ts-ignore
+    const organizationId = resident.condominiums?.organization_id || (resident as any).organization_id
+
     return (
-        <ResidentAmenidadesClient resident={mockResident} />
+        <ResidentAmenidadesClient resident={{ ...resident, organization_id: organizationId }} />
     )
 }

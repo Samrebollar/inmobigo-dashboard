@@ -1,37 +1,67 @@
 'use server'
 
+import { createClient } from '@/utils/supabase/server'
+import { contactInmobiGoAction } from './contact-actions'
+
 /**
- * Premium Services Actions
- * Prepared for future n8n/WhatsApp integration
+ * Premium Services lead — envía la solicitud de cotización a InmobiGo por
+ * WhatsApp (mismo flujo n8n que "Contactar a InmobiGo"). Antes solo hacía
+ * console.log en el servidor y le decía al residente/admin que su
+ * solicitud se había enviado, sin mandar nada a ningún lado.
  */
-
 export async function preparePremiumLead(data: {
-    serviceName: string;
-    category: string;
-    userName: string;
+    serviceName: string
+    category: string
+    userName: string
 }) {
-    // 1. Generate dynamic message
-    const message = `Hola, quiero cotizar el servicio de ${data.serviceName} para mi condominio. ¿Me puedes dar más información?${data.userName ? ` Mi nombre es ${data.userName}.` : ''}`;
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    // 2. Prepare Payload for n8n
-    const payload = {
-        timestamp: new Date().toISOString(),
-        service_name: data.serviceName,
-        category: data.category,
-        user_name: data.userName,
-        message,
-        source: 'InmobiGo Dashboard'
-    };
+    let organizationName: string | null = null
+    let phone: string | null = null
 
-    // 3. Log for now (n8n preparation)
-    console.group('🚀 [n8n Lead Preparation]');
-    console.log('Payload Data:', payload);
-    console.groupEnd();
+    if (user) {
+        const { data: resident } = await supabase
+            .from('residents')
+            .select('phone, condominiums(name, organization_id)')
+            .eq('user_id', user.id)
+            .maybeSingle()
 
-    // 4. Return success (infrastructure ready)
+        if (resident) {
+            organizationName = (resident.condominiums as any)?.name || null
+            phone = resident.phone || null
+        } else {
+            const { data: orgUser } = await supabase
+                .from('organization_users')
+                .select('organization_id, organizations(name)')
+                .eq('user_id', user.id)
+                .maybeSingle()
+            organizationName = (orgUser?.organizations as any)?.name || null
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('phone')
+                .eq('id', user.id)
+                .maybeSingle()
+            phone = profile?.phone || null
+        }
+    }
+
+    const mensaje = `Solicitud de cotización — Servicios Premium\n\nServicio: ${data.serviceName}\nCategoría: ${data.category}\n\nHola, quiero cotizar el servicio de ${data.serviceName} para mi condominio. ¿Me pueden dar más información?`
+
+    const result = await contactInmobiGoAction({
+        organizationName,
+        adminName: data.userName,
+        adminPhone: phone,
+        mensaje,
+    })
+
+    if (!result.success) {
+        return { success: false, error: result.error || 'No se pudo enviar la solicitud.' }
+    }
+
     return {
         success: true,
-        message: 'Lead preparado correctamente para n8n.',
-        dynamicMessage: message
-    };
+        message: 'Solicitud enviada a InmobiGo por WhatsApp.',
+    }
 }

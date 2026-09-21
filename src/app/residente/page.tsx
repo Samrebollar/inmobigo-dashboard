@@ -1,5 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { getUserContext } from '@/utils/user-context'
+import { calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { NotLinkedState } from '@/components/residente/NotLinkedState'
 import Link from 'next/link'
 import nextDynamic from 'next/dynamic'
 
@@ -44,19 +46,14 @@ export default async function ResidentePage() {
         .eq('user_id', user.id)
         .maybeSingle()
 
-    const mockResident = {
-        ...(resident || {
-            first_name: firstName,
-            last_name: '',
-            condominiums: { name: 'Condominio Demo' },
-            units: { unit_number: 'A-101', monto_mensual: 2500, payment_deadline: 10 },
-            debt_amount: 0,
-            last_payment_amount: 0,
-            active_tickets_count: 0,
-            paid_installments_count: 0,
-        }),
+    if (!resident) {
+        return <NotLinkedState email={user.email} />
+    }
+
+    const residentData = {
+        ...resident,
         user_id: user.id,
-        organization_id: resident?.organization_id || (resident?.condominiums as any)?.organization_id || user.user_metadata?.organization_id
+        organization_id: (resident as any).organization_id || (resident?.condominiums as any)?.organization_id || user.user_metadata?.organization_id
     }
 
     // 3. Cargar facturas reales para calcular saldo pendiente y último pago
@@ -68,7 +65,7 @@ export default async function ResidentePage() {
         cuotasPagadasEsteAnio: 0,
     }
 
-    if (resident?.id) {
+    {
         const { data: invoices } = await supabase
             .from('resident_invoices')
             .select('*')
@@ -77,39 +74,25 @@ export default async function ResidentePage() {
 
         if (invoices && invoices.length > 0) {
             const today = new Date()
-            const montoCuota = resident?.units?.monto_mensual || 2500
-            const paymentDeadline = resident?.units?.payment_deadline || 10
 
-            // Agrupar por mes para calcular déficits
-            const monthlyPaid: Record<string, { paid: number; year: number; monthIndex: number }> = {}
-            invoices.forEach((inv: any) => {
-                const d = new Date(inv.due_date || inv.created_at)
-                const key = `${d.getFullYear()}-${d.getMonth()}`
-                if (!monthlyPaid[key]) monthlyPaid[key] = { paid: 0, year: d.getFullYear(), monthIndex: d.getMonth() }
-                if (inv.status === 'paid') {
-                    // paid_amount = amount - balance_due (no paid_amount column in resident_invoices)
-                    const paidAmt = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
-                    monthlyPaid[key].paid += paidAmt
-                }
+            // Misma fórmula que usan Propiedades > Residentes y Gestión de
+            // Cobranza, para que el residente vea exactamente lo mismo que
+            // su administrador (antes este cálculo era independiente y
+            // podía dar un número distinto).
+            const { debt } = calculateResidentDebtSummary({
+                resident,
+                invoices,
+                unit: resident.units,
             })
-
-            // Sumar déficit de todos los meses vencidos
-            let saldoAcumulado = 0
-            Object.values(monthlyPaid).forEach(({ year, monthIndex, paid }) => {
-                const deadline = new Date(year, monthIndex, paymentDeadline, 23, 59, 59)
-                if (today > deadline) {
-                    const diff = montoCuota - paid
-                    if (diff > 0) saldoAcumulado += diff
-                }
-            })
-            financialData.saldoPendiente = saldoAcumulado
+            financialData.saldoPendiente = debt
 
             // Último pago: la factura paid más reciente (usa balance_due=0 como indicador de pago)
             const lastPaid = invoices.find((inv: any) => inv.status === 'paid')
             if (lastPaid) {
                 financialData.ultimoPago = lastPaid.amount || 0
-                // resident_invoices no tiene paid_at, usamos updated_at
-                financialData.ultimaFechaPago = lastPaid.updated_at || lastPaid.created_at
+                // Facturas pagadas antes de que se empezara a registrar paid_at
+                // no lo tienen; usamos updated_at/created_at como respaldo.
+                financialData.ultimaFechaPago = lastPaid.paid_at || lastPaid.updated_at || lastPaid.created_at
                 const lastDate = new Date(financialData.ultimaFechaPago!)
                 financialData.diasDesdeUltimoPago = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
             }
@@ -131,16 +114,16 @@ export default async function ResidentePage() {
 
     if (businessType === 'propiedades') {
         return (
-            <ResidentDashboardPropiedadesClient 
-                resident={mockResident} 
-                userName={firstName} 
+            <ResidentDashboardPropiedadesClient
+                resident={residentData}
+                userName={firstName}
             />
         )
     }
 
     return (
-        <ResidentDashboardCondominioClient 
-            resident={mockResident} 
+        <ResidentDashboardCondominioClient
+            resident={residentData}
             userName={firstName}
             financialData={financialData}
         />

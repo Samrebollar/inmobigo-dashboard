@@ -367,25 +367,8 @@ export async function getTransparencyData(condominiumId: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Not authenticated')
 
-    // 1. SECURITY CHECK: Verify user is a resident or admin of this condo
-    const { data: isResident } = await supabase
-        .from('residents')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('condominium_id', condominiumId)
-        .maybeSingle()
-
-    const { data: isAdmin } = await supabase
-        .from('organization_users')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-    if (!isResident && !isAdmin) {
-        throw new Error('No tienes permiso para ver los datos de esta propiedad.')
-    }
-
-    // 2. FETCH DATA USING ADMIN CLIENT (Bypassing RLS for aggregate visibility)
+    // 1. FETCH CONDO FIRST — needed to verify the admin actually belongs to
+    // this condo's organization, not just any organization.
     const { data: condo } = await adminClient
         .from('condominiums')
         .select('organization_id, fiscal_regime, name')
@@ -395,6 +378,40 @@ export async function getTransparencyData(condominiumId: string) {
     if (!condo) throw new Error('Condominio no encontrado')
     const organizationId = condo.organization_id
     const regime = condo.fiscal_regime as FiscalRegime
+
+    // 2. SECURITY CHECK: Verify user is a resident or admin OF THIS
+    // condo's organization specifically. Antes solo se verificaba que el
+    // usuario tuviera ALGUNA fila en organization_users, sin comparar su
+    // organization_id contra el de este condominio — cualquier admin de
+    // cualquier organización podía pasar el condominiumId de otra
+    // organización y ver toda su información financiera (esta función
+    // usa el cliente admin, que salta RLS).
+    const { data: isResident } = await supabase
+        .from('residents')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('condominium_id', condominiumId)
+        .maybeSingle()
+
+    const { data: orgUser } = await supabase
+        .from('organization_users')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+
+    const { data: ownedOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', user.id)
+        .eq('id', organizationId)
+        .maybeSingle()
+
+    const isAdmin = !!orgUser || !!ownedOrg
+
+    if (!isResident && !isAdmin) {
+        throw new Error('No tienes permiso para ver los datos de esta propiedad.')
+    }
 
     // ─── FILTRO: SOLO EL MES EN CURSO ─────────────────────────────────────────
     const now = new Date()

@@ -5,13 +5,40 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { syncToLegacy, syncPaymentToLegacy, buildFolio } from '@/services/legacy-sync-service'
 
-export async function getValidations() {
+/**
+ * @param residentId - Cuando se pasa (pantalla del residente), acota el
+ * resultado a sus propios comprobantes. Sin este parámetro (pantalla del
+ * admin, ya protegida por rol en su página) devuelve todos los de su
+ * organización. Antes esta función siempre devolvía TODOS los comprobantes
+ * de la plataforma sin filtro, y la pantalla del residente los filtraba
+ * en el cliente por nombre/unidad (con OR en vez de AND) — cualquier
+ * residente autenticado podía ver comprobantes de otras personas.
+ */
+export async function getValidations(residentId?: string) {
     try {
         const supabase = await createClient()
-        const { data, error } = await supabase
-            .from('payment_validations')
-            .select('*, condominiums(name)')
-            .order('created_at', { ascending: false })
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        let data, error
+
+        if (residentId) {
+            ({ data, error } = await supabase
+                .from('payment_validations')
+                .select('*, condominiums(name)')
+                .eq('resident_id', residentId)
+                .order('created_at', { ascending: false }))
+        } else {
+            const { organizationId, isStaff } = await resolveStaffOrganization(supabase, user.id)
+            if (!isStaff || !organizationId) {
+                return { success: false, error: 'No tienes permiso para ver estos comprobantes.' }
+            }
+            ;({ data, error } = await supabase
+                .from('payment_validations')
+                .select('*, condominiums!inner(name, organization_id)')
+                .eq('condominiums.organization_id', organizationId)
+                .order('created_at', { ascending: false }))
+        }
 
         if (error) throw error
         return { success: true, data }
@@ -19,6 +46,31 @@ export async function getValidations() {
         console.error('Error reading validations:', error)
         return { success: false, error: 'Error al leer datos: ' + error.message }
     }
+}
+
+async function resolveStaffOrganization(supabase: any, userId: string): Promise<{ organizationId: string | null, isStaff: boolean }> {
+    const { data: orgUser } = await supabase
+        .from('organization_users')
+        .select('organization_id, role_new')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+    const staffRoles = ['owner', 'admin', 'super_admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security']
+    if (orgUser?.organization_id && staffRoles.includes(orgUser.role_new || '')) {
+        return { organizationId: orgUser.organization_id, isStaff: true }
+    }
+
+    const { data: ownedOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', userId)
+        .maybeSingle()
+
+    if (ownedOrg) {
+        return { organizationId: ownedOrg.id, isStaff: true }
+    }
+
+    return { organizationId: null, isStaff: false }
 }
 
 export async function updateValidationStatus(
@@ -29,15 +81,28 @@ export async function updateValidationStatus(
 ) {
     try {
         const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
 
         // 1. Obtener la validación actual
         const { data: validation, error: fetchErr } = await supabase
             .from('payment_validations')
-            .select('*')
+            .select('*, condominiums(organization_id)')
             .eq('id', id)
             .single()
 
         if (fetchErr || !validation) return { success: false, error: 'Registro no encontrado' }
+
+        // Aprobar/rechazar genera una factura pagada real y reduce la deuda
+        // real del residente — solo el staff de la organización del
+        // condominio puede hacerlo. Antes cualquier usuario autenticado
+        // podía llamar esto directamente (sin pasar por la UI de admin) y
+        // auto-aprobar su propio comprobante falso.
+        const { organizationId, isStaff } = await resolveStaffOrganization(supabase, user.id)
+        const belongsToOrg = validation.condominiums?.organization_id
+        if (!isStaff || !belongsToOrg || organizationId !== belongsToOrg) {
+            return { success: false, error: 'No tienes permiso para validar este comprobante.' }
+        }
 
         if (validation.status === 'aprobado' && status === 'aprobado') {
             return { success: true }
@@ -353,6 +418,10 @@ export async function submitValidation(data: {
     comprobante_url?: string
 }) {
     try {
+        if (!data.comprobante_url) {
+            return { success: false, error: 'Debes adjuntar el comprobante de pago.' }
+        }
+
         const supabase = await createClient()
 
         const { data: newValidation, error } = await supabase
@@ -362,9 +431,7 @@ export async function submitValidation(data: {
                 unit: data.unit || '',
                 amount: Number(data.amount) || 0,
                 date: data.date || new Date().toISOString().split('T')[0],
-                comprobante_url:
-                    data.comprobante_url ||
-                    'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=800&q=80',
+                comprobante_url: data.comprobante_url,
                 status: 'pendiente',
                 nota: data.nota || '',
                 resident_id: data.resident_id || null,
@@ -387,6 +454,31 @@ export async function submitValidation(data: {
 export async function deleteValidation(id: string) {
     try {
         const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        const { data: validation, error: fetchErr } = await supabase
+            .from('payment_validations')
+            .select('status, resident_id, condominiums(organization_id)')
+            .eq('id', id)
+            .maybeSingle()
+
+        if (fetchErr || !validation) return { success: false, error: 'Registro no encontrado' }
+
+        const { data: ownResident } = await supabase
+            .from('residents')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+        const isOwnPendingSubmission = validation.status === 'pendiente' && ownResident?.id === validation.resident_id
+        const { organizationId, isStaff } = await resolveStaffOrganization(supabase, user.id)
+        const isOrgStaff = isStaff && organizationId === (validation.condominiums as any)?.organization_id
+
+        if (!isOwnPendingSubmission && !isOrgStaff) {
+            return { success: false, error: 'No tienes permiso para eliminar este comprobante.' }
+        }
+
         const { error } = await supabase
             .from('payment_validations')
             .delete()

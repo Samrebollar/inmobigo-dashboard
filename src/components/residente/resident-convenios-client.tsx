@@ -81,12 +81,14 @@ interface ResidentConveniosClientProps {
     resident: any
     agreements: PaymentAgreement[]
     initialInstallments: AgreementInstallment[]
+    currentDebt: number
 }
 
-export function ResidentConveniosClient({ 
-    resident, 
+export function ResidentConveniosClient({
+    resident,
     agreements: initialAgreements,
-    initialInstallments 
+    initialInstallments,
+    currentDebt
 }: ResidentConveniosClientProps) {
     const [agreements, setAgreements] = useState<PaymentAgreement[]>(initialAgreements)
     const [activeAgreement, setActiveAgreement] = useState<PaymentAgreement | null>(
@@ -176,6 +178,11 @@ export function ResidentConveniosClient({
         e.preventDefault()
         if (!reqTotalDebt || parseFloat(reqTotalDebt) <= 0) {
             toast.error('Por favor ingresa un monto de deuda válido.')
+            return
+        }
+
+        if (currentDebt > 0 && parseFloat(reqTotalDebt) > currentDebt * 1.2) {
+            toast.error(`El monto ingresado supera tu adeudo registrado (${formatCurrency(currentDebt)}). Ajusta el monto o contacta a tu administración si consideras que hay un error.`)
             return
         }
 
@@ -464,8 +471,13 @@ export function ResidentConveniosClient({
                         Si tienes adeudos o cuotas de mantenimiento acumuladas, puedes proponer un plan de financiamiento flexible para regularizar tu situación.
                     </p>
 
-                    <button 
-                        onClick={() => setIsRequestModalOpen(true)}
+                    <button
+                        onClick={() => {
+                            if (currentDebt > 0) {
+                                setReqTotalDebt(currentDebt.toFixed(2))
+                            }
+                            setIsRequestModalOpen(true)
+                        }}
                         className="mt-8 px-8 h-14 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-[11px] rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.35)] transition-all active:scale-95 flex items-center justify-center gap-2 mx-auto cursor-pointer"
                     >
                         <Plus size={16} /> Solicitar convenio
@@ -768,6 +780,14 @@ export function ResidentConveniosClient({
                             </div>
 
                             <form onSubmit={handleCreateRequest} className="space-y-4 text-xs font-sans">
+                                {currentDebt > 0 && (
+                                    <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2">
+                                        <Info size={14} className="text-indigo-400 shrink-0" />
+                                        <p className="text-[10px] text-indigo-200 font-semibold leading-relaxed">
+                                            Tu adeudo actual registrado es de <span className="font-black">{formatCurrency(currentDebt)}</span>.
+                                        </p>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Deuda Total a Financiar (MXN)</label>

@@ -7,8 +7,7 @@ import {
     Plus, 
     CheckCircle2, 
     Clock, 
-    Download, 
-    Bell,
+    Download,
     ChevronRight,
     MessageSquare,
     AlertCircle,
@@ -420,13 +419,6 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                         />
                     </div>
                 </div>
-
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button variant="outline" className="border-indigo-500/30 bg-indigo-500/5 text-indigo-300 font-black h-14 rounded-2xl flex items-center gap-3 px-8 hover:bg-indigo-600 hover:text-white transition-all shadow-lg group-hover:shadow-indigo-600/20">
-                        <Bell className="h-5 w-5" />
-                        Configurar alertas
-                    </Button>
-                </motion.div>
             </motion.div>
 
             <CreateTicketModal 

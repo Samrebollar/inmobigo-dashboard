@@ -190,14 +190,9 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
 
     const fetchData = async () => {
         setLoading(true)
-        const res = await getValidations()
+        const res = await getValidations(resident.id)
         if (res.success) {
-            // Filter validations for this resident (by name or unit to be safe in the demo)
-            const filtered = (res.data ?? []).filter((v: any) => 
-                v.resident_name === `${resident.first_name} ${resident.last_name}`.trim() || 
-                v.unit === resident.units?.unit_number
-            )
-            setValidations(filtered)
+            setValidations(res.data ?? [])
         }
         setLoading(false)
     }
@@ -208,18 +203,19 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
             toast.error('Por favor completa los campos requeridos.')
             return
         }
+        if (!fileBase64) {
+            toast.error('Debes adjuntar el comprobante de pago.')
+            return
+        }
 
         setSubmitting(true)
-        
-        // Mock File Upload (Use a realistic placeholder if no URL provided)
-        const mockComprobanteUrl = fileBase64 || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=800&q=80"
 
         const res = await submitValidation({
             resident_name: `${resident.first_name} ${resident.last_name}`.trim(),
             unit: resident.units?.unit_number || 'Unidad S/N',
             amount: parseFloat(amount),
             date: date,
-            comprobante_url: mockComprobanteUrl,
+            comprobante_url: fileBase64,
             nota: nota,
             resident_id: resident.id,
             condominium_id: resident.condominium_id

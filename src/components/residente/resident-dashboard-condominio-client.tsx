@@ -18,7 +18,9 @@ import {
     ShieldCheck,
     Home,
     MapPin,
-    File
+    File,
+    BookOpenText,
+    DownloadCloud
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +43,7 @@ interface ResidentDashboardClientProps {
         ultimaFechaPago: string | null
         diasDesdeUltimoPago: number | null
         cuotasPagadasEsteAnio?: number
+        incidenciasActivas?: number
     }
 }
 
@@ -121,11 +124,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                     color: 'emerald'
                 }))
 
-                setMovements([
-                    ...mappedMovements,
-                    { title: 'Incidencia Reportada', desc: 'Fuga en el área común', date: 'Ayer', icon: MessageSquare, color: 'amber' },
-                    { title: 'Aviso Importante', desc: 'Mantenimiento preventivo', date: '24 Mar', icon: Bell, color: 'indigo' }
-                ])
+                setMovements(mappedMovements)
             }
         }
         fetchMovements();
@@ -230,10 +229,10 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
         },
         {
             label: 'Incidencias',
-            value: resident?.active_tickets_count || '0',
-            subtext: 'Activo',
+            value: String(financialData?.incidenciasActivas ?? 0),
+            subtext: (financialData?.incidenciasActivas ?? 0) > 0 ? 'Activas' : 'Sin pendientes',
             icon: Wrench,
-            color: 'amber',
+            color: (financialData?.incidenciasActivas ?? 0) > 0 ? 'amber' : 'emerald',
             accent: 'amber-500'
         },
         {
@@ -345,28 +344,38 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                         <motion.div
                             key={i}
                             variants={item}
-                            whileHover={{ y: -4 }}
+                            whileHover={{ y: -6, scale: 1.02 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                             className="group relative"
                         >
-                            <div className="h-full bg-zinc-900/40 backdrop-blur-md border border-white/5 p-5 rounded-2xl transition-all duration-300 hover:bg-zinc-900/60 ring-1 ring-white/5 shadow-lg">
+                            <div className={cn(
+                                "h-full bg-zinc-900/40 backdrop-blur-md border p-5 rounded-2xl transition-all duration-300 hover:bg-zinc-900/60 ring-1 ring-white/5 shadow-lg",
+                                stat.color === 'rose' ? "border-rose-500/20 hover:border-rose-500/50 hover:shadow-rose-500/10" :
+                                stat.color === 'emerald' ? "border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/10" :
+                                stat.color === 'amber' ? "border-amber-500/20 hover:border-amber-500/50 hover:shadow-amber-500/10" :
+                                "border-indigo-500/20 hover:border-indigo-500/50 hover:shadow-indigo-500/10"
+                            )}>
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className={cn(
-                                        "h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-105",
+                                    <motion.div
+                                        animate={{ scale: [1, 1.08, 1] }}
+                                        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+                                        className={cn(
+                                        "h-11 w-11 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110",
                                         stat.color === 'rose' ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
                                         stat.color === 'emerald' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
                                         stat.color === 'amber' ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
                                         "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
                                     )}>
-                                        <stat.icon size={20} />
-                                    </div>
-                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{stat.label}</p>
+                                        <stat.icon size={22} />
+                                    </motion.div>
+                                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{stat.label}</p>
                                 </div>
-                                <div className="space-y-0.5">
-                                    <h3 className="text-2xl font-bold text-white tracking-tight">{stat.value}</h3>
+                                <div className="space-y-1">
+                                    <h3 className="text-3xl md:text-4xl font-black text-white tracking-tight">{stat.value}</h3>
                                     <p className={cn(
-                                        "text-[10px] font-bold uppercase tracking-wide opacity-80",
-                                        stat.color === 'rose' ? 'text-rose-400' : 
-                                        stat.color === 'emerald' ? 'text-emerald-400' : 
+                                        "text-xs font-bold uppercase tracking-wide opacity-80",
+                                        stat.color === 'rose' ? 'text-rose-400' :
+                                        stat.color === 'emerald' ? 'text-emerald-400' :
                                         stat.color === 'amber' ? 'text-amber-400' : 'text-indigo-400'
                                     )}>
                                         {stat.subtext}
@@ -398,9 +407,48 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                                 </p>
                             </div>
                             
-                            <Button className="h-14 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 border border-white/10 font-bold tracking-wide transition-all active:scale-95">
-                                <DollarSign className="h-5 w-5 mr-2" />
-                                PAGAR AHORA
+                            <Link href="/residente/payments">
+                                <Button className="h-14 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 border border-white/10 font-bold tracking-wide transition-all active:scale-95">
+                                    <DollarSign className="h-5 w-5 mr-2" />
+                                    PAGAR AHORA
+                                </Button>
+                            </Link>
+                        </motion.div>
+
+                        {/* Reglamento Interno */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.05 }}
+                            whileHover={{ y: -2 }}
+                            className="bg-zinc-900/40 backdrop-blur-xl border border-indigo-500/10 hover:border-indigo-500/30 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 ring-1 ring-white/5 transition-all duration-300"
+                        >
+                            <div className="flex items-center gap-4 text-center md:text-left flex-col md:flex-row">
+                                <div className="h-12 w-12 shrink-0 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
+                                    <BookOpenText className="h-6 w-6" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Reglamento Interno del Condominio</h2>
+                                    <p className="text-zinc-500 text-sm max-w-sm leading-relaxed">
+                                        Consulta las normas y políticas oficiales subidas por tu administración.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                className="h-12 px-6 rounded-xl border-indigo-500/30 bg-indigo-500/5 text-indigo-300 hover:bg-indigo-600 hover:text-white font-bold tracking-wide transition-all active:scale-95 shrink-0"
+                                onClick={() => {
+                                    const url = resident?.condominiums?.reglamento_url
+                                    if (url) {
+                                        window.open(url, '_blank', 'noreferrer')
+                                    } else {
+                                        toast.info('Tu administración aún no ha subido el reglamento general del condominio.')
+                                    }
+                                }}
+                            >
+                                <DownloadCloud className="h-5 w-5 mr-2" />
+                                Descargar
                             </Button>
                         </motion.div>
 
@@ -411,12 +459,20 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                                     <TrendingUp size={18} className="text-indigo-500" />
                                     Actividad Reciente
                                 </h2>
-                                <Button variant="ghost" size="sm" className="text-indigo-400 text-xs font-bold hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg">
-                                    Ver historial
-                                </Button>
+                                <Link href="/residente/payments">
+                                    <Button variant="ghost" size="sm" className="text-indigo-400 text-xs font-bold hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg">
+                                        Ver historial
+                                    </Button>
+                                </Link>
                             </div>
 
                             <div className="space-y-3">
+                                {movements.length === 0 && (
+                                    <div className="h-32 flex flex-col items-center justify-center text-center space-y-2 opacity-40 bg-zinc-900/20 border border-white/5 rounded-xl">
+                                        <TrendingUp size={28} className="text-zinc-600" />
+                                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest italic">Sin actividad reciente</p>
+                                    </div>
+                                )}
                                 {movements.map((act, i) => (
                                     <div 
                                         key={i}

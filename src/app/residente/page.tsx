@@ -42,7 +42,7 @@ export default async function ResidentePage() {
     // 2. Get Resident Table Data
     const { data: resident } = await supabase
         .from('residents')
-        .select('*, condominiums(name, organization_id), units(unit_number, monto_mensual, payment_deadline)')
+        .select('*, condominiums(name, organization_id, reglamento_url), units(unit_number, monto_mensual, payment_deadline)')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -63,6 +63,17 @@ export default async function ResidentePage() {
         ultimaFechaPago: null as string | null,
         diasDesdeUltimoPago: null as number | null,
         cuotasPagadasEsteAnio: 0,
+        incidenciasActivas: 0,
+    }
+
+    {
+        const { count } = await supabase
+            .from('tickets')
+            .select('id', { count: 'exact', head: true })
+            .eq('resident_id', resident.id)
+            .in('status', ['open', 'in_progress'])
+
+        financialData.incidenciasActivas = count || 0
     }
 
     {

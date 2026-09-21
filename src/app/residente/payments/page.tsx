@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import ResidentPaymentsClient from '@/components/residente/resident-payments-client'
 import { NotLinkedState } from '@/components/residente/NotLinkedState'
@@ -90,33 +91,33 @@ export default async function PaymentsPage() {
                 return { ...invoice, folio: realFolio, atraso, paid_amount }
             })
 
-            // ── Cargar pagos directos desde la tabla payments ──────────────────
-            const invoiceIds = inv.map(i => i.id)
-            if (invoiceIds.length > 0) {
-                const { data: payRows } = await supabase
-                    .from('payments')
-                    .select('*')
-                    .in('invoice_id', invoiceIds)
-                    .order('created_at', { ascending: false })
+            // ── Cargar pagos directos desde resident_invoice_payments ────────────
+            // (La tabla legacy `payments` nunca se llena — ningún flujo de la app
+            // escribe ahí. resident_invoice_payments sí es la bitácora real de
+            // abonos, tanto manuales como de Mercado Pago. Su RLS solo permite
+            // lectura a staff de la organización, por eso se usa el admin client,
+            // ya filtrado de forma segura por el resident_id ya verificado arriba.)
+            const adminSupabase = createAdminClient()
+            const { data: payRows } = await adminSupabase
+                .from('resident_invoice_payments')
+                .select('*')
+                .eq('resident_id', resident.id)
+                .order('paid_at', { ascending: false })
 
-                if (payRows && payRows.length > 0) {
-                    const invMap: Record<string, any> = {}
-                    for (const i of inv) {
-                        invMap[i.id] = i
-                    }
-
-                    directPayments = payRows.map(p => {
-                        const relatedInv = invMap[p.invoice_id]
-                        return {
-                            ...p,
-                            concept: relatedInv?.description || 'Cuota de Mantenimiento',
-                            folio: relatedInv?.notes?.match(/^validation:(.+)$/) 
-                                ? (folioByValidationId[relatedInv.notes.match(/^validation:(.+)$/)[1]] || relatedInv.folio || p.id?.slice(0, 8))
-                                : (relatedInv?.folio || p.id?.slice(0, 8)),
-                            payment_method: p.payment_method || p.provider || 'Mercado Pago'
-                        }
-                    })
+            if (payRows && payRows.length > 0) {
+                const invMap: Record<string, any> = {}
+                for (const i of inv) {
+                    invMap[i.id] = i
                 }
+
+                directPayments = payRows.map(p => {
+                    const relatedInv = invMap[p.invoice_id]
+                    return {
+                        ...p,
+                        concept: relatedInv?.description || 'Cuota de Mantenimiento',
+                        payment_method: p.payment_method || 'N/A',
+                    }
+                })
             }
         }
     }

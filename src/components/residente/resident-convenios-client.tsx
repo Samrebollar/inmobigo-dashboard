@@ -624,6 +624,12 @@ export function ResidentConveniosClient({
         }
     }
 
+    // Convenio más reciente (agreements viene ordenado por created_at desc).
+    // Si no hay convenio activo pero el más reciente fue rechazado, se le
+    // muestra al residente el motivo en vez de simplemente "desaparecerlo".
+    const latestAgreement = agreements[0] || null
+    const rejectedAgreement = !activeAgreement && latestAgreement?.status === 'rejected' ? latestAgreement : null
+
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6 md:p-10 min-h-screen">
             {/* Header */}
@@ -646,15 +652,62 @@ export function ResidentConveniosClient({
             </div>
 
             {/* Content Switcher */}
-            {!activeAgreement ? (
+            {rejectedAgreement ? (
+                /* Rejected Agreement Card: se conserva el convenio y se muestra el motivo */
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative bg-zinc-900/30 backdrop-blur-xl border border-rose-500/20 rounded-[3rem] p-12 shadow-2xl text-center overflow-hidden max-w-2xl mx-auto ring-1 ring-rose-500/10 shadow-[0_0_50px_rgba(244,63,94,0.03)]"
+                >
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 blur-[100px] rounded-full pointer-events-none animate-pulse-soft" />
+
+                    <div className="h-20 w-20 bg-zinc-950 border border-rose-500/20 rounded-[2rem] flex items-center justify-center text-rose-400 mx-auto mb-6 shadow-inner ring-1 ring-rose-500/10">
+                        <XCircle size={36} />
+                    </div>
+
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-500/15 border border-rose-500/30 text-rose-400 mb-4">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" /> Convenio Rechazado
+                    </span>
+
+                    <h2 className="text-2xl font-black text-white tracking-tight">Tu propuesta de convenio no fue aprobada</h2>
+                    <p className="text-zinc-400 font-medium text-sm mt-2 max-w-md mx-auto leading-relaxed">
+                        La administración revisó tu solicitud de{' '}
+                        <span className="text-zinc-200 font-bold">{formatCurrency(rejectedAgreement.total_debt)}</span>{' '}
+                        del {format(new Date(rejectedAgreement.created_at), 'd MMM, yyyy', { locale: es })} y decidió rechazarla.
+                    </p>
+
+                    {rejectedAgreement.rejection_reason && (
+                        <div className="mt-6 text-left bg-rose-500/5 border border-rose-500/20 rounded-2xl p-5 max-w-lg mx-auto">
+                            <p className="text-[10px] text-rose-400/80 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                                <MessageSquare size={12} /> Motivo del rechazo
+                            </p>
+                            <p className="text-zinc-200 text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                                {rejectedAgreement.rejection_reason}
+                            </p>
+                        </div>
+                    )}
+
+                    <button
+                        onClick={() => {
+                            if (currentDebt > 0) {
+                                setReqTotalDebt(currentDebt.toFixed(2))
+                            }
+                            setIsRequestModalOpen(true)
+                        }}
+                        className="mt-8 px-8 h-14 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-[11px] rounded-2xl shadow-[0_0_20px_rgba(79,70,229,0.35)] transition-all active:scale-95 flex items-center justify-center gap-2 mx-auto cursor-pointer"
+                    >
+                        <Plus size={16} /> Solicitar nuevo convenio
+                    </button>
+                </motion.div>
+            ) : !activeAgreement ? (
                 /* Elegant Empty State Card */
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="relative bg-zinc-900/30 backdrop-blur-xl border border-white/5 rounded-[3rem] p-12 shadow-2xl text-center overflow-hidden max-w-2xl mx-auto ring-1 ring-white/5 shadow-[0_0_50px_rgba(99,102,241,0.02)]"
                 >
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none animate-pulse-soft" />
-                    
+
                     <div className="h-20 w-20 bg-zinc-950 border border-white/5 rounded-[2rem] flex items-center justify-center text-zinc-400 mx-auto mb-6 shadow-inner ring-1 ring-white/5">
                         <ClipboardList size={36} className="text-indigo-400" />
                     </div>

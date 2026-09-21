@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { createClient } from '@/utils/supabase/client'
 import {
     Clock,
     CheckCircle2,
@@ -35,7 +36,8 @@ import {
     getAgreementInstallmentsAction,
     updateInstallmentStatusAction,
     sendInstallmentReminderAction,
-    getAgreementHistoryAction
+    getAgreementHistoryAction,
+    getIneSignedUrlsAction
 } from '@/app/actions/payment-agreement-actions'
 
 interface PaymentAgreement {
@@ -55,6 +57,8 @@ interface PaymentAgreement {
     unsigned_document_sent_at?: string | null
     signed_document_url?: string | null
     signed_document_uploaded_at?: string | null
+    ine_front_path?: string | null
+    ine_back_path?: string | null
 }
 
 interface AgreementInstallment {
@@ -89,7 +93,7 @@ interface AgreementDetailsModalProps {
     admin: any
     onApprove: (id: string) => Promise<void>
     onReject: (id: string, reason: string) => Promise<void>
-    onSendForSignature: (id: string) => Promise<void>
+    onSendForSignature: (id: string, documentUrl: string) => Promise<void>
     actionLoadingId: string | null
     initialIsRejecting?: boolean
 }
@@ -122,6 +126,13 @@ export function AgreementDetailsModal({
     const [paymentReference, setPaymentReference] = useState('')
     const [paymentNotes, setPaymentNotes] = useState('')
 
+    // Envío de convenio para firma
+    const [uploadingConvenio, setUploadingConvenio] = useState(false)
+
+    // Verificación de INE (signed URLs, se generan al abrir en pending_final_approval)
+    const [ineUrls, setIneUrls] = useState<{ frontUrl: string; backUrl: string } | null>(null)
+    const [loadingIne, setLoadingIne] = useState(false)
+
     // Fetch installments and history logs
     const fetchInstallmentsAndLogs = async () => {
         try {
@@ -153,9 +164,29 @@ export function AgreementDetailsModal({
             setAgreement(initialAgreement)
             setIsRejecting(initialIsRejecting)
             setRejectionReason('')
+            setIneUrls(null)
             fetchInstallmentsAndLogs()
         }
     }, [isOpen, initialAgreement.id, initialIsRejecting])
+
+    useEffect(() => {
+        if (!isOpen || !agreement.ine_front_path || !agreement.ine_back_path) return
+
+        let cancelled = false
+        setLoadingIne(true)
+        getIneSignedUrlsAction({ agreementId: agreement.id })
+            .then(res => {
+                if (cancelled) return
+                if (res.success) {
+                    setIneUrls({ frontUrl: res.frontUrl!, backUrl: res.backUrl! })
+                } else {
+                    console.error('Error loading INE signed URLs:', res.error)
+                }
+            })
+            .finally(() => { if (!cancelled) setLoadingIne(false) })
+
+        return () => { cancelled = true }
+    }, [isOpen, agreement.id, agreement.ine_front_path, agreement.ine_back_path])
 
     if (!isOpen) return null
 
@@ -187,9 +218,40 @@ export function AgreementDetailsModal({
         fetchInstallmentsAndLogs() // Refresh to load newly created installments
     }
 
-    const handleSendForSignature = async () => {
-        await onSendForSignature(agreement.id)
-        setAgreement(prev => ({ ...prev, status: 'awaiting_signature', unsigned_document_sent_at: new Date().toISOString() }))
+    const handleUploadAndSendForSignature = async (file: File) => {
+        if (file.type !== 'application/pdf') {
+            toast.error('Solo se permiten archivos en formato PDF.')
+            return
+        }
+
+        try {
+            setUploadingConvenio(true)
+            const supabase = createClient()
+            const filePath = `convenios/${agreement.id}-${Date.now()}.pdf`
+
+            const { error: uploadError } = await supabase.storage
+                .from('condominium_documents')
+                .upload(filePath, file, { upsert: true })
+
+            if (uploadError) throw uploadError
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('condominium_documents')
+                .getPublicUrl(filePath)
+
+            await onSendForSignature(agreement.id, publicUrl)
+            setAgreement(prev => ({
+                ...prev,
+                status: 'awaiting_signature',
+                unsigned_document_url: publicUrl,
+                unsigned_document_sent_at: new Date().toISOString()
+            }))
+        } catch (error: any) {
+            console.error('Error uploading agreement document:', error)
+            toast.error(`No se pudo subir el convenio: ${error?.message || 'error desconocido'}`)
+        } finally {
+            setUploadingConvenio(false)
+        }
     }
 
     const handleReject = async () => {
@@ -486,19 +548,32 @@ export function AgreementDetailsModal({
                                 ) : (
                                     <>
                                         {agreement.status === 'pending' && (
-                                            <button
-                                                disabled={actionLoadingId === agreement.id}
-                                                onClick={handleSendForSignature}
-                                                className="h-10 px-5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
-                                            >
-                                                {actionLoadingId === agreement.id ? (
-                                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                ) : (
-                                                    <>
-                                                        <Send size={14} /> Enviar para Firma
-                                                    </>
-                                                )}
-                                            </button>
+                                            <>
+                                                <input
+                                                    id={`modal-convenio-upload-${agreement.id}`}
+                                                    type="file"
+                                                    accept="application/pdf"
+                                                    className="hidden"
+                                                    disabled={uploadingConvenio}
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0]
+                                                        if (file) handleUploadAndSendForSignature(file)
+                                                        e.target.value = ''
+                                                    }}
+                                                />
+                                                <label
+                                                    htmlFor={`modal-convenio-upload-${agreement.id}`}
+                                                    className={`h-10 px-5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1.5 cursor-pointer ${uploadingConvenio ? 'opacity-50 pointer-events-none' : ''}`}
+                                                >
+                                                    {uploadingConvenio ? (
+                                                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            <Upload size={14} /> Subir Convenio y Enviar
+                                                        </>
+                                                    )}
+                                                </label>
+                                            </>
                                         )}
 
                                         {agreement.status === 'awaiting_signature' && (
@@ -648,6 +723,37 @@ export function AgreementDetailsModal({
                                     </a>
                                 )}
                             </div>
+
+                            {(agreement.ine_front_path || agreement.ine_back_path) && (
+                                <div className="pt-4 border-t border-zinc-800/35 space-y-3">
+                                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                                        <User size={11} className="text-violet-400" /> Verificación de Identidad (INE) — compara con la firma del convenio
+                                    </p>
+                                    {loadingIne ? (
+                                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                            <div className="h-4 w-4 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+                                            Cargando fotos de INE...
+                                        </div>
+                                    ) : ineUrls ? (
+                                        <div className="grid grid-cols-2 gap-3 max-w-lg">
+                                            <a href={ineUrls.frontUrl} target="_blank" rel="noopener noreferrer" className="block group/ine">
+                                                <div className="rounded-2xl overflow-hidden border border-zinc-800 group-hover/ine:border-violet-500/40 transition-all">
+                                                    <img src={ineUrls.frontUrl} alt="INE Frente" className="w-full h-32 object-cover" />
+                                                </div>
+                                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 text-center">INE Frente</p>
+                                            </a>
+                                            <a href={ineUrls.backUrl} target="_blank" rel="noopener noreferrer" className="block group/ine">
+                                                <div className="rounded-2xl overflow-hidden border border-zinc-800 group-hover/ine:border-violet-500/40 transition-all">
+                                                    <img src={ineUrls.backUrl} alt="INE Reverso" className="w-full h-32 object-cover" />
+                                                </div>
+                                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 text-center">INE Reverso</p>
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-zinc-600">No se pudieron cargar las fotos de INE.</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 

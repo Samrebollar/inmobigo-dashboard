@@ -25,7 +25,8 @@ import {
     Upload,
     Plus,
     Loader2,
-    Check
+    Check,
+    Download
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -36,8 +37,11 @@ import {
     createResidentAgreementAction,
     getAgreementInstallmentsAction,
     getAgreementHistoryAction,
-    getResidentAgreementsAction
+    getResidentAgreementsAction,
+    uploadSignedAgreementAction
 } from '@/app/actions/payment-agreement-actions'
+
+const ACTIVE_AGREEMENT_STATUSES = ['pending', 'awaiting_signature', 'pending_final_approval', 'approved']
 
 interface PaymentAgreement {
     id: string
@@ -46,12 +50,16 @@ interface PaymentAgreement {
     total_debt: number | null
     agreement_details: string
     comments: string
-    status: 'pending' | 'approved' | 'rejected'
+    status: 'pending' | 'awaiting_signature' | 'pending_final_approval' | 'approved' | 'rejected'
     created_at: string
     approved_by?: string | null
     approved_at?: string | null
     condominium_id?: string
     rejection_reason?: string | null
+    unsigned_document_url?: string | null
+    unsigned_document_sent_at?: string | null
+    signed_document_url?: string | null
+    signed_document_uploaded_at?: string | null
 }
 
 interface AgreementInstallment {
@@ -94,8 +102,10 @@ export function ResidentConveniosClient({
 }: ResidentConveniosClientProps) {
     const [agreements, setAgreements] = useState<PaymentAgreement[]>(initialAgreements)
     const [activeAgreement, setActiveAgreement] = useState<PaymentAgreement | null>(
-        initialAgreements.find(ag => ag.status === 'approved' || ag.status === 'pending') || null
+        initialAgreements.find(ag => ACTIVE_AGREEMENT_STATUSES.includes(ag.status)) || null
     )
+    const [uploadingSignedDoc, setUploadingSignedDoc] = useState(false)
+    const signedDocInputRef = useRef<HTMLInputElement>(null)
     const [installments, setInstallments] = useState<AgreementInstallment[]>(initialInstallments)
     const [historyLogs, setHistoryLogs] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
@@ -164,7 +174,7 @@ export function ResidentConveniosClient({
             if (res.success && res.data) {
                 setAgreements(res.data as PaymentAgreement[])
                 const stillActive = (res.data as PaymentAgreement[]).find(
-                    ag => ag.status === 'approved' || ag.status === 'pending'
+                    ag => ACTIVE_AGREEMENT_STATUSES.includes(ag.status)
                 )
                 setActiveAgreement(stillActive || null)
             }
@@ -262,6 +272,54 @@ export function ResidentConveniosClient({
             toast.error('Ocurrió un error inesperado al enviar la solicitud.')
         } finally {
             setSubmitting(false)
+        }
+    }
+
+    // Handle uploading the signed convenio document back to administration
+    const handleSignedDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !activeAgreement) return
+
+        if (file.type !== 'application/pdf') {
+            toast.error('Solo se permiten archivos en formato PDF.')
+            e.target.value = ''
+            return
+        }
+
+        const supabase = createClient()
+        const condominiumId = resident?.condominium_id || resident?.condominiums?.id || 'sin-condominio'
+        const filePath = `${condominiumId}/convenios-firmados/${activeAgreement.id}-${Date.now()}.pdf`
+
+        try {
+            setUploadingSignedDoc(true)
+            const { error: uploadError } = await supabase.storage
+                .from('condominium_documents')
+                .upload(filePath, file, { upsert: true })
+
+            if (uploadError) throw uploadError
+
+            const { data } = supabase.storage
+                .from('condominium_documents')
+                .getPublicUrl(filePath)
+
+            const result = await uploadSignedAgreementAction({
+                id: activeAgreement.id,
+                signedDocumentUrl: data.publicUrl
+            })
+
+            if (result.success && result.data) {
+                toast.success('Convenio firmado enviado a la administración para su aprobación final.')
+                setActiveAgreement(result.data as PaymentAgreement)
+                setAgreements(prev => prev.map(ag => ag.id === activeAgreement.id ? (result.data as PaymentAgreement) : ag))
+            } else {
+                toast.error(result.error || 'No se pudo enviar el convenio firmado.')
+            }
+        } catch (error: any) {
+            console.error('Error uploading signed agreement:', error)
+            toast.error(`No se pudo subir el convenio firmado: ${error?.message || 'error desconocido'}`)
+        } finally {
+            setUploadingSignedDoc(false)
+            e.target.value = ''
         }
     }
 
@@ -380,7 +438,32 @@ export function ResidentConveniosClient({
             color: 'text-amber-400 bg-amber-500/10 border-amber-500/20'
         })
 
-        // 2. Status change event
+        // 2. Firma del convenio
+        if (activeAgreement.unsigned_document_sent_at) {
+            events.push({
+                id: 'sent-for-signature',
+                type: 'status_change',
+                date: activeAgreement.unsigned_document_sent_at,
+                title: 'Convenio enviado para firma',
+                description: 'La administración envió el documento de convenio para que lo firmes.',
+                icon: FileCheck,
+                color: 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+            })
+        }
+
+        if (activeAgreement.signed_document_uploaded_at) {
+            events.push({
+                id: 'signed-uploaded',
+                type: 'status_change',
+                date: activeAgreement.signed_document_uploaded_at,
+                title: 'Convenio firmado enviado',
+                description: 'Subiste el convenio firmado para la aprobación final.',
+                icon: Upload,
+                color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20'
+            })
+        }
+
+        // 2b. Status change event
         if (activeAgreement.status === 'approved' && activeAgreement.approved_at) {
             events.push({
                 id: 'approval',
@@ -470,6 +553,16 @@ export function ResidentConveniosClient({
         }
     }
 
+    const getAgreementStatusLabel = (status?: string) => {
+        switch (status) {
+            case 'approved': return 'Activo'
+            case 'awaiting_signature': return 'Esperando Firma'
+            case 'pending_final_approval': return 'En Revisión'
+            case 'rejected': return 'Rechazado'
+            default: return 'Pendiente'
+        }
+    }
+
     return (
         <div className="mx-auto max-w-7xl space-y-8 p-6 md:p-10 min-h-screen">
             {/* Header */}
@@ -486,7 +579,7 @@ export function ResidentConveniosClient({
                 {activeAgreement && (
                     <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest bg-zinc-900/50 px-4 py-2.5 rounded-2xl border border-zinc-800 flex items-center gap-2.5 backdrop-blur-md">
                         <span className={`h-2.5 w-2.5 rounded-full ${activeAgreement.status === 'approved' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
-                        Convenio {activeAgreement.status === 'approved' ? 'Activo' : 'Pendiente'}
+                        Convenio {getAgreementStatusLabel(activeAgreement.status)}
                     </div>
                 )}
             </div>
@@ -577,13 +670,15 @@ export function ResidentConveniosClient({
                                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-450 animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.5)]" /> Próximo Vencimiento
                             </p>
                             <p className="text-lg font-black text-white tracking-tight truncate pt-1 group-hover:text-indigo-300 transition-colors duration-300">
-                                {nextUnpaidInstallment 
-                                    ? format(new Date(nextUnpaidInstallment.due_date), 'd MMM, yyyy', { locale: es }) 
+                                {nextUnpaidInstallment
+                                    ? format(new Date(nextUnpaidInstallment.due_date), 'd MMM, yyyy', { locale: es })
+                                    : activeAgreement.status === 'awaiting_signature' ? 'Esperando tu firma'
+                                    : activeAgreement.status === 'pending_final_approval' ? 'En revisión final'
                                     : activeAgreement.status === 'pending' ? 'Pendiente aprobación' : 'Sin pendientes 🎉'}
                             </p>
                             <p className="text-[10px] text-zinc-550 mt-2 font-semibold transition-colors duration-300 group-hover:text-zinc-400">
-                                {nextUnpaidInstallment 
-                                    ? `Cuota #${nextUnpaidInstallment.installment_number} por ${formatCurrency(nextUnpaidInstallment.amount)}` 
+                                {nextUnpaidInstallment
+                                    ? `Cuota #${nextUnpaidInstallment.installment_number} por ${formatCurrency(nextUnpaidInstallment.amount)}`
                                     : 'Todo al corriente'}
                             </p>
                         </div>
@@ -616,6 +711,86 @@ export function ResidentConveniosClient({
                         </div>
                     </div>
 
+                    {/* Firma del Convenio: solo aplica en awaiting_signature / pending_final_approval */}
+                    {activeAgreement.status === 'awaiting_signature' && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-amber-500/5 border border-amber-500/20 rounded-[2rem] p-6 md:p-8 space-y-5"
+                        >
+                            <div className="flex items-start gap-4">
+                                <div className="h-11 w-11 shrink-0 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400">
+                                    <FileCheck size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white tracking-tight">Tu administración envió el convenio para firma</h3>
+                                    <p className="text-zinc-400 text-sm mt-1 leading-relaxed">
+                                        Descarga el documento, fírmalo y súbelo firmado para que la administración lo revise y dé la aprobación final.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                {activeAgreement.unsigned_document_url ? (
+                                    <a href={activeAgreement.unsigned_document_url} target="_blank" rel="noopener noreferrer" className="flex-1">
+                                        <button type="button" className="w-full h-12 px-6 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
+                                            <Download size={16} /> Descargar Convenio
+                                        </button>
+                                    </a>
+                                ) : (
+                                    <div className="flex-1 h-12 px-6 rounded-xl border border-dashed border-zinc-800 text-zinc-600 text-xs font-bold uppercase tracking-widest flex items-center justify-center">
+                                        Documento no disponible
+                                    </div>
+                                )}
+
+                                <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    className="hidden"
+                                    ref={signedDocInputRef}
+                                    onChange={handleSignedDocumentUpload}
+                                    disabled={uploadingSignedDoc}
+                                />
+                                <button
+                                    type="button"
+                                    disabled={uploadingSignedDoc}
+                                    onClick={() => signedDocInputRef.current?.click()}
+                                    className="flex-1 h-12 px-6 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                                >
+                                    {uploadingSignedDoc ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                    {uploadingSignedDoc ? 'Subiendo...' : 'Subir Convenio Firmado'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {activeAgreement.status === 'pending_final_approval' && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-indigo-500/5 border border-indigo-500/20 rounded-[2rem] p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
+                        >
+                            <div className="flex items-start gap-4">
+                                <div className="h-11 w-11 shrink-0 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
+                                    <Clock size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white tracking-tight">Convenio firmado enviado</h3>
+                                    <p className="text-zinc-400 text-sm mt-1 leading-relaxed">
+                                        Tu administración revisará el documento firmado para darle la aprobación final.
+                                    </p>
+                                </div>
+                            </div>
+                            {activeAgreement.signed_document_url && (
+                                <a href={activeAgreement.signed_document_url} target="_blank" rel="noopener noreferrer">
+                                    <button type="button" className="h-11 px-5 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 font-bold text-xs uppercase tracking-widest flex items-center gap-2 transition-all">
+                                        <FileText size={15} /> Ver Documento Firmado
+                                    </button>
+                                </a>
+                            )}
+                        </motion.div>
+                    )}
+
                     {/* Calendario de Pagos Table */}
                     <div className="space-y-5 w-full">
                             <div className="flex items-center justify-between">
@@ -641,8 +816,12 @@ export function ResidentConveniosClient({
                                     <h3 className="text-zinc-400 font-bold text-sm">No hay cuotas generadas</h3>
                                     <p className="text-zinc-650 text-xs mt-1.5 max-w-sm mx-auto leading-relaxed">
                                         {activeAgreement.status === 'pending'
-                                            ? 'Este convenio está pendiente de aprobación por parte de la administración. El calendario oficial de cuotas se generará automáticamente en cuanto la propuesta sea aprobada.'
-                                            : 'No se encontraron cuotas para este convenio.'}
+                                            ? 'Este convenio está pendiente de revisión por parte de la administración.'
+                                            : activeAgreement.status === 'awaiting_signature'
+                                                ? 'Firma el convenio y súbelo arriba para continuar con la aprobación.'
+                                                : activeAgreement.status === 'pending_final_approval'
+                                                    ? 'Tu convenio firmado está en revisión final. El calendario de cuotas se generará automáticamente en cuanto se apruebe.'
+                                                    : 'No se encontraron cuotas para este convenio.'}
                                     </p>
                                 </div>
                             ) : (

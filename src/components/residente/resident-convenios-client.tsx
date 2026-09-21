@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createClient } from '@/utils/supabase/client'
 import { 
     Clock, 
     CheckCircle2, 
@@ -29,12 +30,13 @@ import {
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { 
-    updateInstallmentStatusAction, 
-    sendInstallmentReminderAction, 
+import {
+    updateInstallmentStatusAction,
+    sendInstallmentReminderAction,
     createResidentAgreementAction,
     getAgreementInstallmentsAction,
-    getAgreementHistoryAction
+    getAgreementHistoryAction,
+    getResidentAgreementsAction
 } from '@/app/actions/payment-agreement-actions'
 
 interface PaymentAgreement {
@@ -150,6 +152,46 @@ export function ResidentConveniosClient({
         }
     }, [activeAgreement?.id])
 
+    // Suscripción en tiempo real: si la administración aprueba/rechaza el
+    // convenio (o genera/actualiza cuotas) mientras el residente tiene la
+    // página abierta, se refleja sin necesidad de recargar.
+    useEffect(() => {
+        if (!resident?.id) return
+        const supabase = createClient()
+
+        const refreshAgreements = async () => {
+            const res = await getResidentAgreementsAction(resident.id)
+            if (res.success && res.data) {
+                setAgreements(res.data as PaymentAgreement[])
+                const stillActive = (res.data as PaymentAgreement[]).find(
+                    ag => ag.status === 'approved' || ag.status === 'pending'
+                )
+                setActiveAgreement(stillActive || null)
+            }
+        }
+
+        const channel = supabase
+            .channel(`resident-agreements-${resident.id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'payment_agreements',
+                filter: `resident_id=eq.${resident.id}`
+            }, refreshAgreements)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'agreement_installments',
+                filter: `resident_id=eq.${resident.id}`
+            }, (payload: any) => {
+                const agreementId = payload.new?.agreement_id || payload.old?.agreement_id
+                if (agreementId) loadAgreementDetails(agreementId)
+            })
+            .subscribe()
+
+        return () => { supabase.removeChannel(channel) }
+    }, [resident?.id])
+
     // Format currency helper
     const formatCurrency = (amount: number | null) => {
         if (amount === null) return '$0.00'
@@ -188,17 +230,14 @@ export function ResidentConveniosClient({
 
         setSubmitting(true)
         try {
-            const fullName = `${resident.first_name || ''} ${resident.last_name || ''}`.trim() || 'Residente'
             const defaultDetails = `Plan propuesto de ${reqInstallments} cuotas para saldar deuda total de ${formatCurrency(parseFloat(reqTotalDebt))}.`
             const finalDetails = reqDetails.trim() || defaultDetails
 
             const res = await createResidentAgreementAction({
-                resident_id: resident.id,
-                resident_name: fullName,
                 total_debt: parseFloat(reqTotalDebt),
                 agreement_details: finalDetails,
                 comments: reqComments,
-                condominium_id: resident.condominium_id || resident.organization_id || ''
+                num_installments: parseInt(reqInstallments, 10)
             })
 
             if (res.success && res.data) {

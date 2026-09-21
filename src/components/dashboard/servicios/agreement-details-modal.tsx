@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { 
-    Clock, 
-    CheckCircle2, 
+import {
+    Clock,
+    CheckCircle2,
     XCircle,
     User,
     Calendar,
@@ -26,13 +26,16 @@ import {
     Receipt,
     ClipboardList,
     TrendingUp,
-    ExternalLink
+    ExternalLink,
+    Hourglass,
+    Upload,
+    Download
 } from 'lucide-react'
-import { 
-    getAgreementInstallmentsAction, 
-    updateInstallmentStatusAction, 
-    sendInstallmentReminderAction, 
-    getAgreementHistoryAction 
+import {
+    getAgreementInstallmentsAction,
+    updateInstallmentStatusAction,
+    sendInstallmentReminderAction,
+    getAgreementHistoryAction
 } from '@/app/actions/payment-agreement-actions'
 
 interface PaymentAgreement {
@@ -42,12 +45,16 @@ interface PaymentAgreement {
     total_debt: number | null
     agreement_details: string
     comments: string
-    status: 'pending' | 'approved' | 'rejected'
+    status: 'pending' | 'awaiting_signature' | 'pending_final_approval' | 'approved' | 'rejected'
     created_at: string
     approved_by?: string | null
     approved_at?: string | null
     condominium_id?: string
     rejection_reason?: string | null
+    unsigned_document_url?: string | null
+    unsigned_document_sent_at?: string | null
+    signed_document_url?: string | null
+    signed_document_uploaded_at?: string | null
 }
 
 interface AgreementInstallment {
@@ -82,6 +89,7 @@ interface AgreementDetailsModalProps {
     admin: any
     onApprove: (id: string) => Promise<void>
     onReject: (id: string, reason: string) => Promise<void>
+    onSendForSignature: (id: string) => Promise<void>
     actionLoadingId: string | null
     initialIsRejecting?: boolean
 }
@@ -93,6 +101,7 @@ export function AgreementDetailsModal({
     admin,
     onApprove,
     onReject,
+    onSendForSignature,
     actionLoadingId,
     initialIsRejecting = false
 }: AgreementDetailsModalProps) {
@@ -176,6 +185,11 @@ export function AgreementDetailsModal({
         await onApprove(agreement.id)
         setAgreement(prev => ({ ...prev, status: 'approved', approved_at: new Date().toISOString() }))
         fetchInstallmentsAndLogs() // Refresh to load newly created installments
+    }
+
+    const handleSendForSignature = async () => {
+        await onSendForSignature(agreement.id)
+        setAgreement(prev => ({ ...prev, status: 'awaiting_signature', unsigned_document_sent_at: new Date().toISOString() }))
     }
 
     const handleReject = async () => {
@@ -276,7 +290,32 @@ export function AgreementDetailsModal({
             color: 'text-amber-400 bg-amber-500/10 border-amber-500/20'
         })
 
-        // 2. Status change event
+        // 2. Firma del convenio
+        if (agreement.unsigned_document_sent_at) {
+            events.push({
+                id: 'sent-for-signature',
+                type: 'status_change',
+                date: agreement.unsigned_document_sent_at,
+                title: 'Convenio enviado para firma',
+                description: 'Se envió el documento de convenio al residente para que lo firme.',
+                icon: Hourglass,
+                color: 'text-orange-400 bg-orange-500/10 border-orange-500/20'
+            })
+        }
+
+        if (agreement.signed_document_uploaded_at) {
+            events.push({
+                id: 'signed-uploaded',
+                type: 'status_change',
+                date: agreement.signed_document_uploaded_at,
+                title: 'Convenio firmado recibido',
+                description: 'El residente subió el convenio firmado para la aprobación final.',
+                icon: Upload,
+                color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20'
+            })
+        }
+
+        // 2b. Status change event
         if (agreement.status === 'approved' && agreement.approved_at) {
             events.push({
                 id: 'approval',
@@ -340,6 +379,10 @@ export function AgreementDetailsModal({
         switch (status) {
             case 'pending':
                 return { bg: 'bg-amber-500/15 border-amber-500/30 text-amber-400', label: 'Pendiente', dot: 'bg-amber-500' }
+            case 'awaiting_signature':
+                return { bg: 'bg-orange-500/15 border-orange-500/30 text-orange-400', label: 'Esperando Firma', dot: 'bg-orange-500' }
+            case 'pending_final_approval':
+                return { bg: 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400', label: 'En Revisión Final', dot: 'bg-indigo-500' }
             case 'approved':
                 return { bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400', label: 'Aprobado', dot: 'bg-emerald-500' }
             case 'rejected':
@@ -414,8 +457,8 @@ export function AgreementDetailsModal({
                             </div>
                         </div>
 
-                        {/* Approval / Rejection Actions (when status is pending) */}
-                        {agreement.status === 'pending' && (
+                        {/* Approval / Rejection / Signature Actions (hidden once resuelto) */}
+                        {agreement.status !== 'approved' && agreement.status !== 'rejected' && (
                             <div className="flex flex-wrap items-center gap-3">
                                 {isRejecting ? (
                                     <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -442,19 +485,44 @@ export function AgreementDetailsModal({
                                     </div>
                                 ) : (
                                     <>
-                                        <button
-                                            disabled={actionLoadingId === agreement.id}
-                                            onClick={handleApprove}
-                                            className="h-10 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(16,185,129,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
-                                        >
-                                            {actionLoadingId === agreement.id ? (
-                                                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                            ) : (
-                                                <>
-                                                    <CheckCircle2 size={14} /> Aprobar Plan
-                                                </>
-                                            )}
-                                        </button>
+                                        {agreement.status === 'pending' && (
+                                            <button
+                                                disabled={actionLoadingId === agreement.id}
+                                                onClick={handleSendForSignature}
+                                                className="h-10 px-5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
+                                            >
+                                                {actionLoadingId === agreement.id ? (
+                                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <Send size={14} /> Enviar para Firma
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+
+                                        {agreement.status === 'awaiting_signature' && (
+                                            <div className="h-10 px-5 rounded-xl bg-orange-500/10 border border-orange-500/25 text-orange-400 text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                                <Hourglass size={14} /> Esperando Firma del Residente
+                                            </div>
+                                        )}
+
+                                        {agreement.status === 'pending_final_approval' && (
+                                            <button
+                                                disabled={actionLoadingId === agreement.id}
+                                                onClick={handleApprove}
+                                                className="h-10 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(16,185,129,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
+                                            >
+                                                {actionLoadingId === agreement.id ? (
+                                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <CheckCircle2 size={14} /> Aprobar Plan
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+
                                         <button
                                             disabled={actionLoadingId === agreement.id}
                                             onClick={() => setIsRejecting(true)}
@@ -519,8 +587,10 @@ export function AgreementDetailsModal({
                                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> Próximo Vencimiento
                             </p>
                             <p className="text-lg font-black text-white tracking-tight truncate pt-0.5">
-                                {nextUnpaidInstallment 
-                                    ? format(new Date(nextUnpaidInstallment.due_date), 'd MMM, yyyy', { locale: es }) 
+                                {nextUnpaidInstallment
+                                    ? format(new Date(nextUnpaidInstallment.due_date), 'd MMM, yyyy', { locale: es })
+                                    : agreement.status === 'awaiting_signature' ? 'Esperando firma'
+                                    : agreement.status === 'pending_final_approval' ? 'En revisión final'
                                     : agreement.status === 'pending' ? 'Pendiente aprobación' : 'Sin pendientes 🎉'}
                             </p>
                             <p className="text-[9px] text-zinc-600 mt-1.5 font-medium">
@@ -555,6 +625,32 @@ export function AgreementDetailsModal({
                         </div>
                     </div>
 
+                    {/* Documentos de firma */}
+                    {(agreement.unsigned_document_url || agreement.signed_document_url) && (
+                        <div className="bg-zinc-950/20 border border-zinc-800/40 rounded-3xl p-6 space-y-4">
+                            <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/35">
+                                <FileCheck size={16} className="text-violet-400" />
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Documentos de Firma</h3>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                                {agreement.unsigned_document_url && (
+                                    <a href={agreement.unsigned_document_url} target="_blank" rel="noopener noreferrer">
+                                        <button type="button" className="h-10 px-4 rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer">
+                                            <Download size={14} /> Convenio Enviado
+                                        </button>
+                                    </a>
+                                )}
+                                {agreement.signed_document_url && (
+                                    <a href={agreement.signed_document_url} target="_blank" rel="noopener noreferrer">
+                                        <button type="button" className="h-10 px-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer">
+                                            <FileText size={14} /> Ver Convenio Firmado
+                                        </button>
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* 3. Main Content Split Panel */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         {/* Left column (7 cols) - Calendario de pagos */}
@@ -582,8 +678,12 @@ export function AgreementDetailsModal({
                                     <h3 className="text-zinc-400 font-bold text-sm">No hay cuotas registradas</h3>
                                     <p className="text-zinc-600 text-xs mt-1.5 max-w-sm mx-auto leading-relaxed">
                                         {agreement.status === 'pending'
-                                            ? 'Este convenio aún no ha sido aprobado. El calendario de pagos se generará automáticamente en cuanto la propuesta sea aprobada.'
-                                            : 'No se encontraron cuotas para este convenio. Verifica si ocurrió un problema al activar el webhook de n8n.'}
+                                            ? 'Este convenio aún no ha sido aprobado. Envíalo para firma para continuar el proceso.'
+                                            : agreement.status === 'awaiting_signature'
+                                                ? 'Esperando a que el residente suba el convenio firmado.'
+                                                : agreement.status === 'pending_final_approval'
+                                                    ? 'El residente ya subió el convenio firmado. Apruébalo para generar el calendario de cuotas.'
+                                                    : 'No se encontraron cuotas para este convenio.'}
                                     </p>
                                 </div>
                             ) : (

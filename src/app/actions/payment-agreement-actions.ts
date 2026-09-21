@@ -123,6 +123,21 @@ interface UpdateStatusPayload {
     rejectionReason?: string
 }
 
+const NON_FINAL_STATUSES = ['pending', 'awaiting_signature', 'pending_final_approval']
+
+async function fireConvenioWebhook(agreementId: string, action: string, extra: Record<string, any> = {}) {
+    const webhookUrl = process.env.N8N_CONVENIO_ADMIN_WEBHOOK || 'https://n8n.inmobigo.mx/webhook/convenio-decision'
+    try {
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agreement_id: agreementId, action, ...extra }),
+        })
+    } catch (err: any) {
+        console.error(`❌ Error de red al contactar webhook de convenio (${action}):`, err.message)
+    }
+}
+
 export async function updatePaymentAgreementStatusAction({ id, status, rejectionReason }: UpdateStatusPayload) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -138,7 +153,7 @@ export async function updatePaymentAgreementStatusAction({ id, status, rejection
 
         const { data: agreement } = await adminSupabase
             .from('payment_agreements')
-            .select('id, resident_id, total_debt')
+            .select('id, resident_id, total_debt, status, num_installments')
             .eq('id', id)
             .maybeSingle()
 
@@ -155,6 +170,14 @@ export async function updatePaymentAgreementStatusAction({ id, status, rejection
         const agreementOrgId = (resident as any)?.condominiums?.organization_id
         if (agreementOrgId !== organizationId) {
             return { success: false, error: 'No tienes permiso para modificar este convenio.' }
+        }
+
+        if (status === 'approved' && agreement.status !== 'pending_final_approval') {
+            return { success: false, error: 'Debes enviar el convenio para firma y esperar a que el residente suba el documento firmado antes de aprobarlo.' }
+        }
+
+        if (status === 'rejected' && !NON_FINAL_STATUSES.includes(agreement.status)) {
+            return { success: false, error: 'Este convenio ya fue resuelto.' }
         }
 
         const updateData: any = {
@@ -182,10 +205,134 @@ export async function updatePaymentAgreementStatusAction({ id, status, rejection
             await generateInstallmentsForAgreement(adminSupabase, data)
         }
 
+        await fireConvenioWebhook(id, status, rejectionReason ? { reason: rejectionReason } : {})
+
         return { success: true, data }
     } catch (err: any) {
         console.error('❌ Excepción al actualizar convenio:', err)
         return { success: false, error: err.message || 'Error interno del servidor' }
+    }
+}
+
+/**
+ * Paso previo obligatorio a la aprobación: la administración envía al
+ * residente el archivo de convenio (el mismo subido en Propiedades >
+ * Configuración > Archivo de Convenios) para que lo firme.
+ */
+export async function sendAgreementForSignatureAction({ id }: { id: string }) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'No autorizado.' }
+
+    const { organizationId, isStaff } = await resolveStaffOrganization(supabase, user.id)
+    if (!isStaff || !organizationId) {
+        return { success: false, error: 'No tienes permiso para gestionar convenios.' }
+    }
+
+    try {
+        const adminSupabase = createAdminClient()
+
+        const { data: agreement } = await adminSupabase
+            .from('payment_agreements')
+            .select('id, resident_id, status')
+            .eq('id', id)
+            .maybeSingle()
+
+        if (!agreement) return { success: false, error: 'Convenio no encontrado.' }
+
+        if (!['pending', 'awaiting_signature'].includes(agreement.status)) {
+            return { success: false, error: 'Este convenio ya avanzó a otra etapa.' }
+        }
+
+        const { data: resident } = await adminSupabase
+            .from('residents')
+            .select('condominium_id, condominiums(organization_id, convenio_url)')
+            .eq('id', agreement.resident_id)
+            .maybeSingle()
+
+        const condo = (resident as any)?.condominiums
+        if (condo?.organization_id !== organizationId) {
+            return { success: false, error: 'No tienes permiso para modificar este convenio.' }
+        }
+
+        if (!condo?.convenio_url) {
+            return { success: false, error: 'Tu condominio aún no tiene un archivo de convenio subido. Súbelo en Propiedades > Configuración > Archivo de Convenios.' }
+        }
+
+        const { data, error } = await adminSupabase
+            .from('payment_agreements')
+            .update({
+                status: 'awaiting_signature',
+                unsigned_document_url: condo.convenio_url,
+                unsigned_document_sent_at: new Date().toISOString(),
+            })
+            .eq('id', id)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('❌ Error Supabase al enviar convenio para firma:', error)
+            return { success: false, error: error.message }
+        }
+
+        await fireConvenioWebhook(id, 'awaiting_signature', { document_url: condo.convenio_url })
+
+        return { success: true, data }
+    } catch (err: any) {
+        console.error('❌ Excepción al enviar convenio para firma:', err)
+        return { success: false, error: err.message }
+    }
+}
+
+/**
+ * El residente sube de vuelta el convenio ya firmado. Pasa a revisión final
+ * del administrador (que ahora sí puede aprobar o rechazar).
+ */
+export async function uploadSignedAgreementAction({ id, signedDocumentUrl }: { id: string; signedDocumentUrl: string }) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'No autorizado.' }
+
+    try {
+        const adminSupabase = createAdminClient()
+
+        const { data: agreement } = await adminSupabase
+            .from('payment_agreements')
+            .select('id, resident_id, status')
+            .eq('id', id)
+            .maybeSingle()
+
+        if (!agreement) return { success: false, error: 'Convenio no encontrado.' }
+
+        const allowed = await canAccessResident(supabase, user.id, agreement.resident_id)
+        if (!allowed) return { success: false, error: 'No tienes permiso para modificar este convenio.' }
+
+        if (agreement.status !== 'awaiting_signature') {
+            return { success: false, error: 'Este convenio no está esperando la firma en este momento.' }
+        }
+
+        const { data, error } = await adminSupabase
+            .from('payment_agreements')
+            .update({
+                status: 'pending_final_approval',
+                signed_document_url: signedDocumentUrl,
+                signed_document_uploaded_at: new Date().toISOString(),
+            })
+            .eq('id', id)
+            .select()
+            .single()
+
+        if (error) {
+            console.error('❌ Error Supabase al subir convenio firmado:', error)
+            return { success: false, error: error.message }
+        }
+
+        await fireConvenioWebhook(id, 'signed_uploaded', { document_url: signedDocumentUrl })
+
+        return { success: true, data }
+    } catch (err: any) {
+        console.error('❌ Excepción al subir convenio firmado:', err)
+        return { success: false, error: err.message }
     }
 }
 
@@ -460,7 +607,7 @@ export async function createResidentAgreementAction({
             .from('payment_agreements')
             .select('id, status')
             .eq('resident_id', resident.id)
-            .in('status', ['pending', 'approved'])
+            .in('status', ['pending', 'awaiting_signature', 'pending_final_approval', 'approved'])
             .maybeSingle()
 
         if (existingAgreement) {

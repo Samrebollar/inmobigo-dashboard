@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/utils/supabase/client'
-import { 
-    Clock, 
-    CheckCircle2, 
+import {
+    Clock,
+    CheckCircle2,
     XCircle,
     User,
     Calendar,
@@ -15,12 +15,15 @@ import {
     Eye,
     X,
     ClipboardList,
-    AlertCircle
+    AlertCircle,
+    Send,
+    FileCheck,
+    Hourglass
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { getPaymentAgreementsAction, updatePaymentAgreementStatusAction } from '@/app/actions/payment-agreement-actions'
+import { getPaymentAgreementsAction, updatePaymentAgreementStatusAction, sendAgreementForSignatureAction } from '@/app/actions/payment-agreement-actions'
 import { AgreementDetailsModal } from './agreement-details-modal'
 
 interface PaymentAgreement {
@@ -30,11 +33,16 @@ interface PaymentAgreement {
     total_debt: number | null
     agreement_details: string
     comments: string
-    status: 'pending' | 'approved' | 'rejected'
+    status: 'pending' | 'awaiting_signature' | 'pending_final_approval' | 'approved' | 'rejected'
     created_at: string
     approved_by?: string | null
     approved_at?: string | null
     condominium_id?: string
+    rejection_reason?: string | null
+    unsigned_document_url?: string | null
+    unsigned_document_sent_at?: string | null
+    signed_document_url?: string | null
+    signed_document_uploaded_at?: string | null
 }
 
 export function PaymentAgreementsAdmin({ 
@@ -50,7 +58,7 @@ export function PaymentAgreementsAdmin({
     const [agreements, setAgreements] = useState<PaymentAgreement[]>([])
     const [residentsMap, setResidentsMap] = useState<Record<string, string>>({}) // resident_id -> condominium_id
     const [loading, setLoading] = useState(true)
-    const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
+    const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'awaiting_signature' | 'pending_final_approval' | 'approved' | 'rejected'>('all')
     const [selectedAgreement, setSelectedAgreement] = useState<PaymentAgreement | null>(null)
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
     const [isRejecting, setIsRejecting] = useState(false)
@@ -127,6 +135,28 @@ export function PaymentAgreementsAdmin({
         } catch (error: any) {
             console.error('Error updating agreement status:', error)
             toast.error(error.message || 'No se pudo actualizar el estado del convenio')
+        } finally {
+            setActionLoadingId(null)
+        }
+    }
+
+    const handleSendForSignature = async (id: string) => {
+        try {
+            setActionLoadingId(id)
+            const result = await sendAgreementForSignatureAction({ id })
+
+            if (!result.success) {
+                throw new Error(result.error)
+            }
+
+            toast.success('Convenio enviado al residente para su firma.')
+            setAgreements(prev => prev.map(ag => ag.id === id ? { ...ag, ...result.data } : ag))
+            if (selectedAgreement && selectedAgreement.id === id) {
+                setSelectedAgreement(prev => prev ? { ...prev, ...result.data } : null)
+            }
+        } catch (error: any) {
+            console.error('Error sending agreement for signature:', error)
+            toast.error(error.message || 'No se pudo enviar el convenio para firma.')
         } finally {
             setActionLoadingId(null)
         }
@@ -261,6 +291,24 @@ export function PaymentAgreementsAdmin({
                     label: 'Pendiente',
                     icon: Clock
                 }
+            case 'awaiting_signature':
+                return {
+                    bg: 'bg-orange-500/15 border-orange-500/30 text-orange-400',
+                    cardBg: 'bg-gradient-to-br from-zinc-950 via-zinc-900/90 to-orange-950/15',
+                    glowBg: 'from-orange-600/20 via-amber-500/10 to-orange-600/20',
+                    border: 'border-zinc-800/40 group-hover:border-orange-500/30 shadow-[0_4px_30px_rgba(0,0,0,0.2)]',
+                    label: 'Esperando Firma',
+                    icon: Hourglass
+                }
+            case 'pending_final_approval':
+                return {
+                    bg: 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400',
+                    cardBg: 'bg-gradient-to-br from-zinc-950 via-zinc-900/90 to-indigo-950/15',
+                    glowBg: 'from-indigo-600/20 via-violet-500/10 to-indigo-600/20',
+                    border: 'border-indigo-500/20 group-hover:border-indigo-500/40 shadow-[0_4px_30px_rgba(99,102,241,0.02)]',
+                    label: 'En Revisión Final',
+                    icon: FileCheck
+                }
             case 'approved':
                 return {
                     bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400',
@@ -333,13 +381,15 @@ export function PaymentAgreementsAdmin({
             {/* Premium Inner Filter Bar */}
             <div className="flex justify-between items-center gap-4 bg-zinc-900/40 p-1 border border-zinc-800/50 rounded-2xl w-full sm:w-fit backdrop-blur-md">
                 <div className="flex flex-wrap gap-1">
-                    {(['all', 'pending', 'approved', 'rejected'] as const).map((status) => {
+                    {(['all', 'pending', 'awaiting_signature', 'pending_final_approval', 'approved', 'rejected'] as const).map((status) => {
                         const count = condoFilteredAgreements.filter(ag => status === 'all' || ag.status === status).length
                         let label = 'Todos'
                         let activeStyles = 'bg-zinc-800/80 text-white border border-zinc-700/50 shadow-lg'
                         let idleStyles = 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent'
-                        
+
                         if (status === 'pending') label = 'Pendientes'
+                        if (status === 'awaiting_signature') label = 'Esperando Firma'
+                        if (status === 'pending_final_approval') label = 'En Revisión'
                         if (status === 'approved') label = 'Aprobados'
                         if (status === 'rejected') label = 'Rechazados'
 
@@ -377,9 +427,9 @@ export function PaymentAgreementsAdmin({
                     </div>
                     <h3 className="text-zinc-400 font-bold text-lg">No hay convenios en esta sección</h3>
                     <p className="text-zinc-600 text-sm mt-1 max-w-sm">
-                        {filterStatus === 'all' 
-                            ? 'No se encontraron solicitudes de convenio registradas en esta propiedad.' 
-                            : `No hay convenios en estado "${filterStatus === 'pending' ? 'Pendiente' : filterStatus === 'approved' ? 'Aprobado' : 'Rechazado'}" en este momento.`}
+                        {filterStatus === 'all'
+                            ? 'No se encontraron solicitudes de convenio registradas en esta propiedad.'
+                            : `No hay convenios en estado "${getStatusStyles(filterStatus).label}" en este momento.`}
                     </p>
                 </motion.div>            ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -479,7 +529,41 @@ export function PaymentAgreementsAdmin({
  
                                         {/* Card Footer Actions */}
                                         <div className="px-6 pb-6 pt-2 flex gap-3 relative z-10">
-                                            {agreement.status === 'pending' ? (
+                                            {agreement.status === 'pending' && (
+                                                <>
+                                                    <button
+                                                        disabled={actionLoadingId === agreement.id}
+                                                        onClick={() => handleSendForSignature(agreement.id)}
+                                                        className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                                                    >
+                                                        <Send size={14} /> Enviar para Firma
+                                                    </button>
+                                                    <button
+                                                        disabled={actionLoadingId === agreement.id}
+                                                        onClick={() => { setSelectedAgreement(agreement); setIsRejecting(true) }}
+                                                        className="flex-1 h-11 bg-zinc-900/80 hover:bg-rose-500/10 hover:text-rose-450 text-zinc-400 rounded-xl text-[10px] font-black uppercase tracking-wider border border-zinc-800 hover:border-rose-500/35 transition-all active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                                                    >
+                                                        <XCircle size={14} /> Rechazar
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {agreement.status === 'awaiting_signature' && (
+                                                <>
+                                                    <div className="flex-1 p-3 rounded-xl border flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-orange-500/5 border-orange-500/15 text-orange-400">
+                                                        <Hourglass size={14} /> Esperando Firma
+                                                    </div>
+                                                    <button
+                                                        disabled={actionLoadingId === agreement.id}
+                                                        onClick={() => { setSelectedAgreement(agreement); setIsRejecting(true) }}
+                                                        className="h-11 px-4 bg-zinc-900/80 hover:bg-rose-500/10 hover:text-rose-450 text-zinc-400 rounded-xl text-[10px] font-black uppercase tracking-wider border border-zinc-800 hover:border-rose-500/35 transition-all active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                                                    >
+                                                        <XCircle size={14} />
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {agreement.status === 'pending_final_approval' && (
                                                 <>
                                                     <button
                                                         disabled={actionLoadingId === agreement.id}
@@ -496,17 +580,19 @@ export function PaymentAgreementsAdmin({
                                                         <XCircle size={14} /> Rechazar
                                                     </button>
                                                 </>
-                                            ) : (
+                                            )}
+
+                                            {(agreement.status === 'approved' || agreement.status === 'rejected') && (
                                                 <div className={`flex-1 p-3 rounded-xl border flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider ${
-                                                    agreement.status === 'approved' 
-                                                        ? 'bg-emerald-500/5 border-emerald-500/15 text-emerald-400' 
+                                                    agreement.status === 'approved'
+                                                        ? 'bg-emerald-500/5 border-emerald-500/15 text-emerald-400'
                                                         : 'bg-rose-500/5 border-rose-500/15 text-rose-400'
                                                 }`}>
                                                     <StatusIcon size={14} className={agreement.status === 'approved' ? 'text-emerald-400' : 'text-rose-400'} />
                                                     Convenio {agreement.status === 'approved' ? 'Aprobado' : 'Rechazado'}
                                                 </div>
                                             )}
- 
+
                                             <button
                                                 onClick={() => setSelectedAgreement(agreement)}
                                                 className="w-11 h-11 bg-zinc-900/40 hover:bg-zinc-800/60 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 rounded-xl transition-all active:scale-95 flex items-center justify-center shadow-md cursor-pointer"
@@ -531,6 +617,7 @@ export function PaymentAgreementsAdmin({
                         admin={admin}
                         onApprove={handleApproveAgreement}
                         onReject={handleRejectAgreement}
+                        onSendForSignature={handleSendForSignature}
                         actionLoadingId={actionLoadingId}
                         initialIsRejecting={isRejecting}
                     />

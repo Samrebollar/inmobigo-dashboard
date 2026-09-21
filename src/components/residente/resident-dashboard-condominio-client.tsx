@@ -232,7 +232,7 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
             value: String(financialData?.incidenciasActivas ?? 0),
             subtext: (financialData?.incidenciasActivas ?? 0) > 0 ? 'Activas' : 'Sin pendientes',
             icon: Wrench,
-            color: (financialData?.incidenciasActivas ?? 0) > 0 ? 'amber' : 'emerald',
+            color: 'amber',
             accent: 'amber-500'
         },
         {

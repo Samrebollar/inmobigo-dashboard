@@ -519,94 +519,67 @@ export function AgreementDetailsModal({
                             </div>
                         </div>
 
-                        {/* Approval / Rejection / Signature Actions (hidden once resuelto) */}
-                        {agreement.status !== 'approved' && agreement.status !== 'rejected' && (
+                        {/* Approval / Rejection / Signature Actions (hidden once resuelto o mientras se captura el motivo de rechazo) */}
+                        {agreement.status !== 'approved' && agreement.status !== 'rejected' && !isRejecting && (
                             <div className="flex flex-wrap items-center gap-3">
-                                {isRejecting ? (
-                                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                                        <input
-                                            type="text"
-                                            value={rejectionReason}
-                                            onChange={(e) => setRejectionReason(e.target.value)}
-                                            placeholder="Motivo del rechazo..."
-                                            className="bg-zinc-950/60 border border-rose-500/25 focus:border-rose-500/50 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none w-full sm:w-48 placeholder-zinc-600 focus:ring-1 focus:ring-rose-500/20"
-                                        />
-                                        <button
-                                            disabled={actionLoadingId === agreement.id}
-                                            onClick={handleReject}
-                                            className="h-9 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1 flex-shrink-0 cursor-pointer"
-                                        >
-                                            Confirmar
-                                        </button>
-                                        <button
-                                            onClick={() => { setIsRejecting(false); setRejectionReason('') }}
-                                            className="h-9 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl text-xs font-bold uppercase transition-all flex-shrink-0 cursor-pointer"
-                                        >
-                                            Cancelar
-                                        </button>
-                                    </div>
-                                ) : (
+                                {agreement.status === 'pending' && (
                                     <>
-                                        {agreement.status === 'pending' && (
-                                            <>
-                                                <input
-                                                    id={`modal-convenio-upload-${agreement.id}`}
-                                                    type="file"
-                                                    accept="application/pdf"
-                                                    className="hidden"
-                                                    disabled={uploadingConvenio}
-                                                    onChange={(e) => {
-                                                        const file = e.target.files?.[0]
-                                                        if (file) handleUploadAndSendForSignature(file)
-                                                        e.target.value = ''
-                                                    }}
-                                                />
-                                                <label
-                                                    htmlFor={`modal-convenio-upload-${agreement.id}`}
-                                                    className={`h-10 px-5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1.5 cursor-pointer ${uploadingConvenio ? 'opacity-50 pointer-events-none' : ''}`}
-                                                >
-                                                    {uploadingConvenio ? (
-                                                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    ) : (
-                                                        <>
-                                                            <Upload size={14} /> Subir Convenio y Enviar
-                                                        </>
-                                                    )}
-                                                </label>
-                                            </>
-                                        )}
-
-                                        {agreement.status === 'awaiting_signature' && (
-                                            <div className="h-10 px-5 rounded-xl bg-orange-500/10 border border-orange-500/25 text-orange-400 text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                                                <Hourglass size={14} /> Esperando Firma del Residente
-                                            </div>
-                                        )}
-
-                                        {agreement.status === 'pending_final_approval' && (
-                                            <button
-                                                disabled={actionLoadingId === agreement.id}
-                                                onClick={handleApprove}
-                                                className="h-10 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(16,185,129,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
-                                            >
-                                                {actionLoadingId === agreement.id ? (
-                                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                ) : (
-                                                    <>
-                                                        <CheckCircle2 size={14} /> Aprobar Plan
-                                                    </>
-                                                )}
-                                            </button>
-                                        )}
-
-                                        <button
-                                            disabled={actionLoadingId === agreement.id}
-                                            onClick={() => setIsRejecting(true)}
-                                            className="h-10 px-5 bg-zinc-950/60 hover:bg-rose-500/10 hover:text-rose-400 text-zinc-400 rounded-xl text-xs font-extrabold uppercase tracking-wider border border-zinc-800 hover:border-rose-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                        <input
+                                            id={`modal-convenio-upload-${agreement.id}`}
+                                            type="file"
+                                            accept="application/pdf"
+                                            className="hidden"
+                                            disabled={uploadingConvenio}
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0]
+                                                if (file) handleUploadAndSendForSignature(file)
+                                                e.target.value = ''
+                                            }}
+                                        />
+                                        <label
+                                            htmlFor={`modal-convenio-upload-${agreement.id}`}
+                                            className={`h-10 px-5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(99,102,241,0.25)] flex items-center justify-center gap-1.5 cursor-pointer ${uploadingConvenio ? 'opacity-50 pointer-events-none' : ''}`}
                                         >
-                                            <XCircle size={14} /> Rechazar Plan
-                                        </button>
+                                            {uploadingConvenio ? (
+                                                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                                <>
+                                                    <Upload size={14} /> Subir Convenio y Enviar
+                                                </>
+                                            )}
+                                        </label>
                                     </>
                                 )}
+
+                                {agreement.status === 'awaiting_signature' && (
+                                    <div className="h-10 px-5 rounded-xl bg-orange-500/10 border border-orange-500/25 text-orange-400 text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                        <Hourglass size={14} /> Esperando Firma del Residente
+                                    </div>
+                                )}
+
+                                {agreement.status === 'pending_final_approval' && (
+                                    <button
+                                        disabled={actionLoadingId === agreement.id}
+                                        onClick={handleApprove}
+                                        className="h-10 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-[0_4px_20px_-2px_rgba(16,185,129,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
+                                    >
+                                        {actionLoadingId === agreement.id ? (
+                                            <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            <>
+                                                <CheckCircle2 size={14} /> Aprobar Plan
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+
+                                <button
+                                    disabled={actionLoadingId === agreement.id}
+                                    onClick={() => setIsRejecting(true)}
+                                    className="h-10 px-5 bg-zinc-950/60 hover:bg-rose-500/10 hover:text-rose-400 text-zinc-400 rounded-xl text-xs font-extrabold uppercase tracking-wider border border-zinc-800 hover:border-rose-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                    <XCircle size={14} /> Rechazar Plan
+                                </button>
                             </div>
                         )}
                     </div>
@@ -676,28 +649,62 @@ export function AgreementDetailsModal({
                         </div>
                     </div>
 
-                    {/* Proposal Details Info Card */}
-                    <div className="bg-zinc-950/20 border border-zinc-800/40 rounded-3xl p-6 space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/35">
-                            <FileText size={16} className="text-violet-400" />
-                            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Detalles de la propuesta y comentarios</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-                            <div className="space-y-1.5">
-                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Plan Propuesto</p>
-                                <p className="text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">
-                                    {agreement.agreement_details || 'Sin detalles propuestos.'}
-                                </p>
+                    {/* Proposal Details Info Card (+ Motivo del Rechazo mientras se rechaza) */}
+                    <div className={`grid grid-cols-1 ${isRejecting ? 'lg:grid-cols-3' : ''} gap-6`}>
+                        <div className={`bg-zinc-950/20 border border-zinc-800/40 rounded-3xl p-6 space-y-4 ${isRejecting ? 'lg:col-span-2' : ''}`}>
+                            <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/35">
+                                <FileText size={16} className="text-violet-400" />
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Detalles de la propuesta y comentarios</h3>
                             </div>
-                            {agreement.comments && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
                                 <div className="space-y-1.5">
-                                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Comentarios del Residente</p>
-                                    <p className="text-zinc-400 font-medium italic leading-relaxed">
-                                        "{agreement.comments}"
+                                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Plan Propuesto</p>
+                                    <p className="text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">
+                                        {agreement.agreement_details || 'Sin detalles propuestos.'}
                                     </p>
                                 </div>
-                            )}
+                                {agreement.comments && (
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Comentarios del Residente</p>
+                                        <p className="text-zinc-400 font-medium italic leading-relaxed">
+                                            "{agreement.comments}"
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+
+                        {isRejecting && (
+                            <div className="bg-rose-500/5 border border-rose-500/25 rounded-3xl p-6 space-y-4 flex flex-col">
+                                <div className="flex items-center gap-2 pb-2 border-b border-rose-500/20">
+                                    <XCircle size={16} className="text-rose-400" />
+                                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Motivo del Rechazo</h3>
+                                </div>
+                                <textarea
+                                    autoFocus
+                                    value={rejectionReason}
+                                    onChange={(e) => setRejectionReason(e.target.value)}
+                                    placeholder="Describe el motivo del rechazo..."
+                                    rows={4}
+                                    className="w-full flex-1 bg-zinc-950/60 border border-rose-500/25 focus:border-rose-500/50 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none placeholder-zinc-600 focus:ring-1 focus:ring-rose-500/20 resize-none"
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setIsRejecting(false); setRejectionReason('') }}
+                                        className="flex-1 h-9 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl text-xs font-bold uppercase transition-all cursor-pointer"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        disabled={actionLoadingId === agreement.id}
+                                        onClick={handleReject}
+                                        className="flex-1 h-9 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer"
+                                    >
+                                        Confirmar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Documentos de firma */}

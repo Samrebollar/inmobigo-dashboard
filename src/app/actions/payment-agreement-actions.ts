@@ -456,6 +456,32 @@ export async function createResidentAgreementAction({
             return { success: false, error: 'No encontramos una propiedad vinculada a tu cuenta.' }
         }
 
+        const { data: existingAgreement } = await adminSupabase
+            .from('payment_agreements')
+            .select('id, status')
+            .eq('resident_id', resident.id)
+            .in('status', ['pending', 'approved'])
+            .maybeSingle()
+
+        if (existingAgreement) {
+            // Un convenio 'pending' siempre bloquea. Uno 'approved' solo deja
+            // pedir otro si ya se liquidaron todas sus cuotas — si no, seguiría
+            // bloqueando para siempre a un residente que ya terminó de pagar.
+            let isFullyPaid = false
+            if (existingAgreement.status === 'approved') {
+                const { data: existingInstallments } = await adminSupabase
+                    .from('agreement_installments')
+                    .select('status')
+                    .eq('agreement_id', existingAgreement.id)
+
+                isFullyPaid = !!existingInstallments?.length && existingInstallments.every((i: any) => i.status === 'paid')
+            }
+
+            if (!isFullyPaid) {
+                return { success: false, error: 'Ya tienes un convenio pendiente o activo. No puedes solicitar otro hasta que se resuelva o se liquide por completo.' }
+            }
+        }
+
         const resident_name = `${resident.first_name || ''} ${resident.last_name || ''}`.trim() || 'Residente'
 
         const { data, error } = await adminSupabase

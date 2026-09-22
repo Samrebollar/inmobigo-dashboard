@@ -52,7 +52,8 @@ export async function resetPasswordWithCodeAction(
     code?: string,
     token_hash?: string,
     type?: string,
-    access_token?: string
+    access_token?: string,
+    refresh_token?: string
 ) {
     console.log('🔑 [resetPasswordWithCodeAction] Iniciando intento de cambio de contraseña...');
     const supabase = await createClient();
@@ -61,9 +62,12 @@ export async function resetPasswordWithCodeAction(
         // Intento 1: ¿Viene un Access Token directo del cliente?
         if (access_token) {
             console.log('   - Intentando con Access Token...');
-            const { error: err } = await supabase.auth.setSession({ access_token, refresh_token: '' });
+            // El refresh_token es obligatorio: sin él, setSession no puede validar
+            // ni persistir la sesión (rompe justo el salto móvil correo -> navegador).
+            const { error: err } = await supabase.auth.setSession({ access_token, refresh_token: refresh_token || '' });
             if (!err) console.log('   ✅ Autenticación por Token exitosa');
-        } 
+            else console.log('   ❌ Error en Token:', err.message);
+        }
         
         // Intento 2: ¿Viene un Código de Invitación (PKCE)?
         else if (code) {

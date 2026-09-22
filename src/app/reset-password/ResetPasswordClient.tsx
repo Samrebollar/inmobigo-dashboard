@@ -24,11 +24,14 @@ function ResetPasswordForm() {
     // correo -> navegador): los tokens reales viajan en el fragmento de la URL, nunca
     // en query string, y solo los pone ahí /auth/confirm tras verificar el enlace.
     const [hashAccessToken, setHashAccessToken] = useState<string | null>(null)
+    const [hashRefreshToken, setHashRefreshToken] = useState<string | null>(null)
     const [checkedHash, setCheckedHash] = useState(false)
 
     useEffect(() => {
         const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
-        setHashAccessToken(new URLSearchParams(hash).get('access_token'))
+        const params = new URLSearchParams(hash)
+        setHashAccessToken(params.get('access_token'))
+        setHashRefreshToken(params.get('refresh_token'))
         setCheckedHash(true)
     }, [])
 
@@ -57,7 +60,8 @@ function ResetPasswordForm() {
                 code || undefined,
                 token_hash || undefined,
                 type || undefined,
-                hashAccessToken || undefined
+                hashAccessToken || undefined,
+                hashRefreshToken || undefined
             )
 
             if (!result.success) {

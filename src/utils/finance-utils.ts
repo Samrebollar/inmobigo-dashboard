@@ -629,6 +629,30 @@ export function calculateCondoMonthlyFinancials({
         }
     })
 
+    // Saldo inicial cargado a mano en residents.debt_amount (Propiedades > Residentes,
+    // al dar de alta o editar) para quienes NO tengan ya una factura real 'initial_balance'
+    // representando esa misma deuda — si ya existe esa factura, se cuenta arriba y sumar
+    // también el campo crudo la duplicaría. Antes esta tarjeta solo miraba facturas reales
+    // de tipo distinto a 'maintenance', así que un debt_amount cargado a mano (el caso más
+    // común: deuda previa capturada al dar de alta al residente, sin generar una factura
+    // aparte) nunca aparecía aquí, aunque sí contara como morosidad del residente en su
+    // propio panel y en la lista de Residentes.
+    const residentsWithInitialBalanceInvoice = new Set(
+        invoices
+            .filter(inv => inv.invoice_type === 'initial_balance' && Number(inv.balance_due || 0) > 0)
+            .map(inv => inv.resident_id)
+            .filter(Boolean)
+    )
+    residents.forEach(r => {
+        if (r.status === 'inactive') return
+        if (residentsWithInitialBalanceInvoice.has(r.id)) return
+        const debtAmount = Number(r.debt_amount || 0)
+        if (debtAmount > 0) {
+            saldoInicialPendiente += debtAmount
+            debtorResidents.add(r.id)
+        }
+    })
+
     maintenanceInvoicesForPeriod.forEach(inv => {
         const bal = Number(inv.balance_due || 0)
         if (bal <= 0) return

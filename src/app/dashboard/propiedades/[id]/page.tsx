@@ -26,6 +26,7 @@ import { SettingsTab } from '@/components/properties/tabs/SettingsTab'
 import { EditCondominiumModal } from '@/components/properties/EditCondominiumModal'
 import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
+import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
 
 export default function CondominiumPage() {
     const { isPropiedades } = useUserRole()
@@ -121,17 +122,21 @@ export default function CondominiumPage() {
                             const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
                             const currentDay = now.getDate()
 
-                            // 2. Active residents for this condominium (used to resolve resident data in alerts and activity)
+                            // 2. Residentes de este condominio (para resolver nombres en alertas/actividad,
+                            // y para el cálculo de morosidad). "delinquent" sigue facturando/generando
+                            // deuda — solo "inactive" debe excluirse; antes esto filtraba .eq('status',
+                            // 'active'), lo cual escondía del todo a los residentes ya marcados como
+                            // morosos tanto de "Residentes Morosos" como de la proyección de "Deuda Total".
                             const { data: activeResidents } = await supabase
                                 .from('residents')
-                                .select('id, first_name, last_name, status, unit_id, units(unit_number)')
+                                .select('id, first_name, last_name, status, unit_id, debt_amount, units(unit_number)')
                                 .eq('condominium_id', id)
-                                .eq('status', 'active')
+                                .neq('status', 'inactive')
 
-                            // 3. Active units
+                            // 3. Unidades activas
                             const { data: unitsData } = await supabase
                                 .from('units')
-                                .select('id, monto_mensual')
+                                .select('id, monto_mensual, facturacion_activa, payment_deadline')
                                 .eq('condominium_id', id)
 
                             // 4. Fetch ALL invoices for this condominium from resident_invoices
@@ -156,42 +161,26 @@ export default function CondominiumPage() {
 
                             ;(data as any).ingresos_mes = totalRecaudado
 
-                            // 6. Expected revenue from active billing units only
-                            const expectedTotal = (unitsData || []).reduce((acc, unit) => acc + (Number(unit.monto_mensual) || 0), 0)
-
-                            // 7. Morosidad logic — after day 10 all unpaid is overdue
-                            const maintenanceInvoicesThisMonth = invoices.filter(inv =>
-                                isInvoiceInCurrentMonth(inv) && inv.invoice_type === 'maintenance'
-                            )
-                            let unpaidBalance = 0
-                            if (maintenanceInvoicesThisMonth.length > 0) {
-                                // Use actual invoices when they exist
-                                unpaidBalance = maintenanceInvoicesThisMonth
-                                    .filter(inv => inv.status !== 'paid')
-                                    .reduce((acc, inv) => acc + Number(inv.balance_due || 0), 0)
-                            } else {
-                                // No invoices generated → project full expected amount as debt
-                                unpaidBalance = Math.max(0, expectedTotal - totalRecaudado)
-                            }
-                            const morosidadAmount = currentDay > 10 ? unpaidBalance : 0
-                            ;(data as any).deuda_total = morosidadAmount
-
-                            // 8. Residentes Morosos — count residents with unpaid balance this month
-                            let morososCount = 0
-                            if (currentDay > 10) {
-                                if (maintenanceInvoicesThisMonth.length > 0) {
-                                    // Count residents with unpaid invoices this month
-                                    const unpaidResidents = new Set<string>()
-                                    maintenanceInvoicesThisMonth
-                                        .filter(inv => inv.status !== 'paid' && Number(inv.balance_due || 0) > 0)
-                                        .forEach(inv => { if (inv.resident_id) unpaidResidents.add(inv.resident_id) })
-                                    morososCount = unpaidResidents.size
-                                } else {
-                                    // No invoices generated → all active residents are delinquent
-                                    morososCount = (activeResidents || []).length
-                                }
-                            }
-                            ;(data as any).morosos_count = morososCount
+                            // 6-8. Deuda Total / Residentes Morosos — misma función
+                            // (calculateCondoMonthlyFinancials) que usa Finanzas > Gestión de
+                            // Cobranza, para que el hero de arriba coincida exacto con esas
+                            // tarjetas: Deuda Total = Pendiente + Morosidad + Saldo Inicial
+                            // (Arrastre). Antes este bloque tenía su propio motor con umbral fijo
+                            // "día > 10" (ignorando el día límite de pago real de cada unidad),
+                            // sin considerar debt_amount, y su fallback de "residentes activos"
+                            // excluía a quienes ya estaban marcados como 'delinquent'.
+                            const condoFinancialsForHero = calculateCondoMonthlyFinancials({
+                                units: unitsData || [],
+                                residents: activeResidents || [],
+                                invoices,
+                                selectedMonth: now.getMonth(),
+                                selectedYear: now.getFullYear(),
+                            })
+                            ;(data as any).deuda_total =
+                                condoFinancialsForHero.porCobrar +
+                                condoFinancialsForHero.vencido +
+                                condoFinancialsForHero.saldoInicialPendiente
+                            ;(data as any).morosos_count = condoFinancialsForHero.morososCount
 
                             // 9. Morosidad alerts
                             const residentsList = activeResidents?.map((r: any) => ({

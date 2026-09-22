@@ -49,11 +49,14 @@ export async function GET(request: Request) {
         const { data: units } = await unitsQuery
 
         // Residentes (residents no tiene organization_id, se resuelve vía condominiums)
+        // debt_amount es obligatorio: calculateCondoMonthlyFinancials lo suma a
+        // "Saldo Inicial (Arrastre)" — sin seleccionarlo aquí, esa tarjeta siempre
+        // calculaba con debt_amount=undefined y mostraba $0.
         let residents: any[] = []
         if (condominiumId) {
             const { data } = await supabase
                 .from('residents')
-                .select('id, status, condominium_id')
+                .select('id, status, condominium_id, debt_amount')
                 .eq('condominium_id', condominiumId)
             residents = data || []
         } else if (organizationId) {
@@ -65,7 +68,7 @@ export async function GET(request: Request) {
             if (condoIds.length > 0) {
                 const { data } = await supabase
                     .from('residents')
-                    .select('id, status, condominium_id')
+                    .select('id, status, condominium_id, debt_amount')
                     .in('condominium_id', condoIds)
                 residents = data || []
             }

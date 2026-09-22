@@ -139,15 +139,16 @@ export async function getAccountingData(condominiumId: string = 'all') {
     const units = unitsData || []
 
     // Fetch Residents (para calculateCondoMonthlyFinancials: conteo de
-    // morosos en la proyección de meses sin recibos generados)
+    // morosos en la proyección de meses sin recibos generados, y debt_amount
+    // para "Saldo Inicial (Arrastre)")
     let residents: any[] = []
     if (condominiumId && condominiumId !== 'all') {
-        const { data } = await supabase.from('residents').select('id, status, condominium_id').eq('condominium_id', condominiumId)
+        const { data } = await supabase.from('residents').select('id, status, condominium_id, debt_amount').eq('condominium_id', condominiumId)
         residents = data || []
     } else {
         const condoIds = condominiums.map(c => c.id)
         if (condoIds.length > 0) {
-            const { data } = await supabase.from('residents').select('id, status, condominium_id').in('condominium_id', condoIds)
+            const { data } = await supabase.from('residents').select('id, status, condominium_id, debt_amount').in('condominium_id', condoIds)
             residents = data || []
         }
     }
@@ -467,7 +468,7 @@ export async function getTransparencyData(condominiumId: string) {
 
     const { data: residentsData } = await adminClient
         .from('residents')
-        .select('id, status, condominium_id')
+        .select('id, status, condominium_id, debt_amount')
         .eq('condominium_id', condominiumId)
 
     const billingData = billing || []

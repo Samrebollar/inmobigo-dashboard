@@ -39,9 +39,13 @@ export async function GET(
             if (unitsError) throw unitsError
 
             // 2. Fetch residents
+            // debt_amount es obligatorio: calculateCondoMonthlyFinancials lo suma a
+            // "Saldo Inicial (Arrastre)" — sin seleccionarlo aquí, esa tarjeta siempre
+            // calculaba con debt_amount=undefined y mostraba $0 aunque el residente sí
+            // tuviera saldo inicial cargado.
             const { data: residents, error: residentsError } = await adminSupabase
                 .from('residents')
-                .select('id, unit_id, fecha_ingreso, status')
+                .select('id, unit_id, fecha_ingreso, status, debt_amount')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError

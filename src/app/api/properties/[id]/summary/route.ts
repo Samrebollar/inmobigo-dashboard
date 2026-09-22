@@ -40,7 +40,7 @@ export async function GET(
         // 2. Fetch residents
         const { data: residents, error: residentsError } = await adminSupabase
             .from('residents')
-            .select('id, unit_id, first_name, last_name, fecha_ingreso, status')
+            .select('id, unit_id, first_name, last_name, fecha_ingreso, status, debt_amount')
             .eq('condominium_id', condoId)
 
         if (residentsError) throw residentsError

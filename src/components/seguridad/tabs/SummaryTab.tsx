@@ -54,7 +54,7 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 // 2. Fetch residents — select id, first_name, last_name to build alert titles
                 const { data: residentsData, error: residentsError } = await supabase
                     .from('residents')
-                    .select('id, unit_id, first_name, last_name, fecha_ingreso, status')
+                    .select('id, unit_id, first_name, last_name, fecha_ingreso, status, debt_amount')
                     .eq('condominium_id', condo.id)
 
                 if (residentsError) throw residentsError

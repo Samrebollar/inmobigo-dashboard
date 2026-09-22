@@ -133,8 +133,11 @@ export async function resendInvitationAction(email: string) {
         if (!email) throw new Error('El correo electrónico es requerido');
 
         // Intentamos enviar un correo de recuperación de contraseña (que funciona como invitación para establecer password)
+        // El '?e=' es obligatorio aunque no se use en la página: sin query string previo,
+        // {{ .RedirectTo }} en el template de correo no tiene dónde "enganchar" el &token_hash=
+        // y el link queda mal formado (cae en la ruta de QR /[id] en vez de /reset-password).
         const { error } = await admin.auth.resetPasswordForEmail(email, {
-            redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password`,
+            redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?e=${encodeURIComponent(email.trim())}`,
         });
 
         if (error) {

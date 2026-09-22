@@ -14,19 +14,19 @@ import {
     Clock,
     DollarSign,
     ShieldCheck,
-    TrendingUp,
     AlertCircle,
     ArrowUpRight,
     History,
     Receipt,
-    ShieldAlert,
     Loader2,
-    Lock
+    Lock,
+    Sparkles,
+    AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateResidentMonthlyFinancials, calculateResidentDebtSummary } from '@/utils/finance-utils'
 import { createResidentPaymentCheckout } from '@/app/actions/mercadopago-payment-actions'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -306,7 +306,9 @@ export default function ResidentPaymentsClient({
         }))
     }, [liveInvoices, dbInvoices])
 
-    const [selectedMonth, setSelectedMonth] = useState('Todos')
+    // Mismo mes por defecto que el detalle de residente en el panel del administrador
+    // (mes en curso), para que las tarjetas coincidan exacto al abrir la pantalla.
+    const [selectedMonth, setSelectedMonth] = useState(MESES_ES[today.getMonth()])
     
     const availableMonths = [
         'Todos', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 
@@ -328,15 +330,9 @@ export default function ResidentPaymentsClient({
     // aunque el admin sí proyectara la cuota vencida correspondiente.
     const rawSource = liveInvoices.length > 0 ? liveInvoices : dbInvoices
 
-    // 2. Total Pagado → responde al filtro de la tabla
-    const totalPagado = useMemo(() =>
-        filteredHistory
-            .filter((p: any) => p.rawStatus === 'paid' || p.status === 'Pagado')
-            .reduce((acc: number, curr: any) => acc + curr.amount, 0)
-    , [filteredHistory])
     const cuotasPagadas = filteredHistory.filter((p: any) => p.rawStatus === 'paid' || p.status === 'Pagado').length
 
-    // 3 y 4. Pendiente / Morosidad del periodo seleccionado en el filtro de la tabla
+    // Pendiente / Morosidad del periodo seleccionado en el filtro de la tabla
     const selectedMonthForCalc = selectedMonth === 'Todos' ? 'all' : String(MES_INDEX_BY_NAME[selectedMonth] ?? 'all')
     const periodFinancials = useMemo(() =>
         calculateResidentMonthlyFinancials({
@@ -347,10 +343,8 @@ export default function ResidentPaymentsClient({
         })
     , [resident, rawSource, selectedMonthForCalc, montoCuota])
 
-    const montoPendiente = periodFinancials.totalPending
     const montoMorosidad = periodFinancials.overdueAmount
 
-    const cuotasTotalesGeneradas = cuotasPagadas + (montoMorosidad > 0 ? 1 : 0)
     const cumplimientoPorcentaje = Math.round((cuotasPagadas / 12) * 100)
 
     // ─── ESTADO FINANCIERO DEL HERO ─────────────────────────────────────────────
@@ -370,11 +364,20 @@ export default function ResidentPaymentsClient({
     const montoMorosidadTotal = currentMonthFinancials.overdueAmount
     const montoPendienteTotal = currentMonthFinancials.totalPending
 
+    // Saldo Pendiente "real" del residente — misma fórmula (calculateResidentDebtSummary)
+    // que usa la tarjeta "Saldo Pendiente" del detalle de residente en el panel del
+    // administrador: suma la cuota del mes en curso más el debt_amount arrastrado, sin
+    // importar el filtro de mes de la tabla de abajo. Se usa tanto en la tarjeta de
+    // Saldo Pendiente como en el Hero, para que ambos coincidan exacto con el admin.
+    const saldoPendienteTotal = useMemo(() =>
+        calculateResidentDebtSummary({ resident, invoices: rawSource, unit }).debt
+    , [resident, rawSource, unit])
+
     // Banderas del Hero (siempre sobre el estado global, ignorando el filtro)
     const heroIsOverdue = montoMorosidadTotal > 0
     const heroIsPending = !heroIsOverdue && montoPendienteTotal > 0
     const heroIsUpToDate = !heroIsOverdue && !heroIsPending
-    const heroDebt = heroIsOverdue ? montoMorosidadTotal : heroIsPending ? montoPendienteTotal : 0
+    const heroDebt = heroIsUpToDate ? 0 : saldoPendienteTotal
 
     return (
         <div className="mx-auto max-w-7xl space-y-12 p-6 md:p-10 animate-in fade-in duration-500 bg-[#09090b] min-h-screen font-sans">
@@ -532,45 +535,62 @@ export default function ResidentPaymentsClient({
                 </div>
             </motion.div>
 
-            {/* 2. CUATRO TARJETAS FINANCIERAS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard 
-                    title="Cuota Mensual" 
-                    value={`$${montoCuota.toLocaleString('es-MX')}`} 
-                    subtitle="Cuota fija del condominio" 
+            {/* 2. TARJETAS FINANCIERAS — mismas 5 que el detalle de residente en el
+                panel del administrador (Cuota Mensual, Total Pagado, Saldo Pendiente,
+                Cuotas Vencidas, Saldo a Favor), con la misma fórmula, para que
+                coincidan exacto. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <MetricCard
+                    title="Cuota Mensual"
+                    value={`$${periodFinancials.cuotaMensual.toLocaleString('es-MX')}`}
+                    subtitle={unit?.unit_number ? `Cuota fija asignada · Unidad ${unit.unit_number}` : 'Cuota fija asignada'}
                     icon={DollarSign}
                     color="indigo"
                     delay={0.1}
                 />
-                <MetricCard 
-                    title="Total Pagado" 
-                    value={`$${totalPagado.toLocaleString('es-MX')}`} 
-                    subtitle={cuotasPagadas > 0 ? `${cuotasPagadas} cuota${cuotasPagadas > 1 ? 's' : ''} liquidada${cuotasPagadas > 1 ? 's' : ''}` : 'Sin pagos registrados'} 
-                    icon={TrendingUp}
+                <MetricCard
+                    title="Total Pagado"
+                    value={`$${periodFinancials.totalPaid.toLocaleString('es-MX')}`}
+                    subtitle="Al día"
+                    icon={CheckCircle2}
                     color="emerald"
                     delay={0.2}
                 />
-                <MetricCard 
-                    title="Pendiente" 
-                    value={`$${montoPendiente.toLocaleString('es-MX')}`} 
-                    subtitle={
-                        montoPendiente > 0 
-                            ? `Vence el día ${paymentDeadline} del mes`
-                            : dayOfMonth <= paymentDeadline 
-                                ? 'Sin cargos pendientes'
-                                : 'Periodo de pago cerrado'
-                    }
-                    icon={Clock}
+                <MetricCard
+                    title="Saldo Pendiente"
+                    value={`$${saldoPendienteTotal.toLocaleString('es-MX')}`}
+                    subtitle="Pendiente de pago"
+                    icon={AlertTriangle}
                     color="amber"
                     delay={0.3}
                 />
-                <MetricCard 
-                    title="Morosidad" 
-                    value={`$${montoMorosidad.toLocaleString('es-MX')}`} 
-                    subtitle={montoMorosidad > 0 ? `Después del día ${paymentDeadline}` : 'Sin pagos vencidos'} 
-                    icon={ShieldAlert}
+                <MetricCard
+                    title="Cuotas Vencidas"
+                    value={
+                        periodFinancials.overdueAmount > 0
+                            ? `$${periodFinancials.overdueAmount.toLocaleString('es-MX')}`
+                            : periodFinancials.overdueCount > 0
+                                ? `${periodFinancials.overdueCount} cuota${periodFinancials.overdueCount > 1 ? 's' : ''}`
+                                : '$0'
+                    }
+                    subtitle={
+                        (periodFinancials.overdueAmount > 0 || periodFinancials.overdueCount > 0)
+                            ? periodFinancials.maxDaysOverdue > 0
+                                ? `${periodFinancials.maxDaysOverdue} días de atraso`
+                                : 'Pago vencido'
+                            : 'Sin vencimientos'
+                    }
+                    icon={Clock}
                     color="rose"
                     delay={0.4}
+                />
+                <MetricCard
+                    title="Saldo a Favor"
+                    value={`$${periodFinancials.creditBalance.toLocaleString('es-MX')}`}
+                    subtitle={periodFinancials.creditBalance > 0 ? 'Excedente del periodo' : 'Sin saldo a favor'}
+                    icon={Sparkles}
+                    color="purple"
+                    delay={0.5}
                 />
             </div>
 
@@ -599,24 +619,37 @@ export default function ResidentPaymentsClient({
                     </div>
                 </div>
 
-                <div className="bg-zinc-900/30 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
-                    <table className="w-full text-left border-collapse">
+                <div className="bg-zinc-900/30 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[1100px]">
                         <thead>
                             <tr className="bg-white/[0.02]">
+                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha de Movimiento</th>
                                 <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Folio</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</th>
                                 <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Concepto</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Monto</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Atraso</th>
                                 <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</th>
+                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Monto</th>
+                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Vencimiento</th>
+                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Método de Pago</th>
+                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Días de atraso</th>
                                 <th className="px-10 py-8 text-right text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Acción</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.03]">
                             <AnimatePresence mode='popLayout'>
-                                {filteredHistory.map((payment, i) => (
-                                    <motion.tr 
-                                        key={payment.folio} 
+                                {periodFinancials.filteredInvoices.map((inv: any, i: number) => {
+                                    const isPaid = inv.status === 'paid'
+                                    const dueDate = inv.due_date ? new Date(inv.due_date) : null
+                                    let atrasoDias = 0
+                                    if (isPaid && inv.paid_at && dueDate) {
+                                        atrasoDias = Math.max(0, Math.floor((new Date(inv.paid_at).getTime() - dueDate.getTime()) / 86400000))
+                                    } else if (!isPaid && dueDate && today > dueDate) {
+                                        atrasoDias = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / 86400000))
+                                    }
+                                    const isRealPaidReceipt = isPaid && inv.folio && !String(inv.id).startsWith('virtual-')
+
+                                    return (
+                                    <motion.tr
+                                        key={inv.id}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.95 }}
@@ -624,64 +657,63 @@ export default function ResidentPaymentsClient({
                                         className="group hover:bg-white/[0.02] transition-colors"
                                     >
                                         <td className="px-10 py-8">
-                                            <span className="text-white font-bold tracking-tight">{payment.folio}</span>
+                                            <span className="text-zinc-400 font-medium">{formatDate(inv.created_at)}</span>
                                         </td>
                                         <td className="px-10 py-8">
-                                            <div className="flex flex-col">
-                                                <span className="text-zinc-400 font-medium">{payment.date}</span>
-                                                {(payment as any).rawStatus === 'paid' && (
-                                                    <span className="text-[10px] text-emerald-500 font-black uppercase">Confirmado</span>
-                                                )}
-                                            </div>
+                                            <span className="text-white font-bold tracking-tight">{inv.folio}</span>
                                         </td>
                                         <td className="px-10 py-8">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                                                     <Receipt size={16} />
                                                 </div>
-                                                <span className="text-zinc-400 font-medium">{payment.concept}</span>
+                                                <span className="text-zinc-400 font-medium">{inv.description}</span>
                                             </div>
                                         </td>
                                         <td className="px-10 py-8">
+                                            <Badge className={cn(
+                                                "px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest border",
+                                                inv.status === 'paid'
+                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                    : inv.status === 'overdue'
+                                                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                            )}>
+                                                {inv.status === 'paid' ? 'Pagado' : inv.status === 'overdue' ? 'Vencida' : 'Pendiente'}
+                                            </Badge>
+                                        </td>
+                                        <td className="px-10 py-8">
                                             <span className="text-2xl font-black text-white tracking-tighter italic">
-                                                ${payment.amount.toLocaleString()}
+                                                ${Number(inv.monto || 0).toLocaleString('es-MX')}
                                             </span>
                                         </td>
                                         <td className="px-10 py-8">
-                                            {payment.atraso > 0 ? (
+                                            <span className="text-zinc-400 font-medium">{dueDate ? formatDate(inv.due_date) : '—'}</span>
+                                        </td>
+                                        <td className="px-10 py-8">
+                                            <span className="text-zinc-500 text-sm">{inv.payment_method || '—'}</span>
+                                        </td>
+                                        <td className="px-10 py-8">
+                                            {atrasoDias > 0 ? (
                                                 <span className={cn(
                                                     "text-xs font-bold tabular-nums",
-                                                    payment.atraso > 15 ? "text-rose-400" : "text-amber-400"
+                                                    atrasoDias > 15 ? "text-rose-400" : "text-amber-400"
                                                 )}>
-                                                    {payment.atraso} día{payment.atraso !== 1 ? 's' : ''}
+                                                    {atrasoDias} día{atrasoDias !== 1 ? 's' : ''}
                                                 </span>
                                             ) : (
                                                 <span className="text-zinc-600 text-xs font-bold">—</span>
                                             )}
                                         </td>
                                         <td className="px-10 py-8">
-                                            <Badge className={cn(
-                                                "px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest border",
-                                                ((payment as any).rawStatus === 'paid' || payment.status === 'Pagado')
-                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                    : ((payment as any).rawStatus === 'overdue' || payment.status === 'Vencido')
-                                                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                                        : ((payment as any).rawStatus === 'pending' || payment.status === 'Pendiente')
-                                                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                                            : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
-                                            )}>
-                                                {payment.status}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-10 py-8">
                                             <div className="flex justify-end">
-                                                {payment.folio && payment.folio !== '—' && (payment as any).rawStatus === 'paid' ? (
+                                                {isRealPaidReceipt ? (
                                                     <motion.button
-                                                        title={`Descargar recibo ${payment.folio}`}
+                                                        title={`Descargar recibo ${inv.folio}`}
                                                         whileHover={{ scale: 1.2, rotate: 12 }}
                                                         whileTap={{ scale: 0.9 }}
                                                         onClick={() => generateReceiptForResident(
-                                                            payment,
+                                                            { folio: inv.folio, amount: inv.monto, date: formatDate(inv.paid_at || inv.due_date || inv.created_at) },
                                                             resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
                                                             resident.condominiums?.name || ''
                                                         )}
@@ -700,7 +732,8 @@ export default function ResidentPaymentsClient({
                                             </div>
                                         </td>
                                     </motion.tr>
-                                ))}
+                                    )
+                                })}
                             </AnimatePresence>
                         </tbody>
                     </table>
@@ -847,6 +880,12 @@ function MetricCard({ title, value, subtitle, icon: Icon, color, delay }: any) {
             border: "border-rose-500/30 hover:border-rose-500/50",
             glow: "shadow-[0_0_20px_-12px_rgba(244,63,94,0.5)] hover:shadow-[0_0_30px_-10px_rgba(244,63,94,0.6)]",
             accent: "bg-rose-500"
+        },
+        purple: {
+            icon: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+            border: "border-purple-500/30 hover:border-purple-500/50",
+            glow: "shadow-[0_0_20px_-12px_rgba(168,85,247,0.5)] hover:shadow-[0_0_30px_-10px_rgba(168,85,247,0.6)]",
+            accent: "bg-purple-500"
         }
     }
 

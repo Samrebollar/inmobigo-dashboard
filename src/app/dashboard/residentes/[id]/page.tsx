@@ -72,6 +72,10 @@ export default function ResidentMovementsPage() {
         overdueCount: 0,
         maxDaysOverdue: 0
     })
+    // debt_amount arrastrado (saldo inicial/ajustes manuales) — siempre es deuda YA
+    // vencida (viene de antes), nunca "pendiente dentro del plazo". Se suma a
+    // "Cuotas vencidas", nunca a "Saldo Pendiente".
+    const [carriedOverDebt, setCarriedOverDebt] = useState(0)
     const [monthlyFee, setMonthlyFee] = useState(0)
     const [unitNumber, setUnitNumber] = useState('')
 
@@ -142,18 +146,18 @@ export default function ResidentMovementsPage() {
                 .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
 
             // Misma fórmula que usa el panel del propio residente y la lista de
-            // Residentes (calculateResidentDebtSummary), para que el "Saldo
-            // Pendiente" de esta página no se quede corto: antes salía únicamente
-            // del balance_due de las facturas reales + debt_amount, ignorando la
-            // cuota del mes en curso cuando el cron de facturación aún no había
-            // generado su recibo (el mismo caso que dejaba a "Cuotas vencidas"
-            // mostrando $10 mientras el residente y la lista de admin ya mostraban
-            // $60 de morosidad total).
-            const { debt: totalPending } = calculateResidentDebtSummary({
+            // Residentes (calculateResidentDebtSummary). `debt` (total real que debe
+            // el residente, incluyendo debt_amount) se usa para el recordatorio de
+            // WhatsApp; `carriedOverDebt` (solo la porción de debt_amount) se suma a
+            // "Cuotas vencidas" más abajo — nunca a "Saldo Pendiente", porque una
+            // deuda arrastrada de antes ya está vencida, no "pendiente dentro del
+            // plazo" (eso solo aplica a la cuota del mes en curso).
+            const { debt: totalPending, carriedOverDebt: carriedOverDebtValue } = calculateResidentDebtSummary({
                 resident: residentData,
                 invoices: invoicesData,
                 unit: unitData,
             })
+            setCarriedOverDebt(carriedOverDebtValue)
             const overdueInvoices = invoicesData.filter(inv => inv.status === 'overdue')
 
             let maxDays = 0
@@ -587,7 +591,7 @@ export default function ResidentMovementsPage() {
                                     </div>
                                     <span className="text-sm font-bold">Saldo Pendiente</span>
                                 </div>
-                                <div className="text-3xl font-bold text-amber-500 tracking-tight mt-2">{formatMoney(stats.totalPending)}</div>
+                                <div className="text-3xl font-bold text-amber-500 tracking-tight mt-2">{formatMoney(dynamicStats.totalPending)}</div>
                             </div>
                             <div className="text-xs text-amber-500 mt-4 flex items-center gap-1 font-medium">
                                 ● Pendiente de pago
@@ -617,16 +621,11 @@ export default function ResidentMovementsPage() {
                                     <span className="text-sm font-bold">Cuotas vencidas</span>
                                 </div>
                                 <div className="text-3xl font-bold text-red-400 tracking-tight mt-2">
-                                    {dynamicStats.overdueAmount > 0
-                                        ? formatMoney(dynamicStats.overdueAmount)
-                                        : dynamicStats.overdueCount > 0
-                                            ? `${dynamicStats.overdueCount} cuota${dynamicStats.overdueCount > 1 ? 's' : ''}`
-                                            : '0'
-                                    }
+                                    {formatMoney(dynamicStats.overdueAmount + carriedOverDebt)}
                                 </div>
                             </div>
                             <div className="text-xs text-red-400/80 mt-4 flex items-center gap-1 font-medium">
-                                {(dynamicStats.overdueAmount > 0 || dynamicStats.overdueCount > 0)
+                                {(dynamicStats.overdueAmount + carriedOverDebt) > 0
                                     ? dynamicStats.maxDaysOverdue > 0
                                         ? `● ${dynamicStats.maxDaysOverdue} días de atraso`
                                         : '● Pago vencido'

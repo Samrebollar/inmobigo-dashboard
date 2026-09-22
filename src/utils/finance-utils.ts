@@ -776,6 +776,12 @@ export function calculateCondoMonthlyFinancials({
 
 export interface ResidentDebtSummary {
     debt: number
+    // Porción de `debt` que viene del debt_amount arrastrado (saldo inicial, ajustes
+    // manuales), ya neto de paymentSurplus y de facturas 'initial_balance' que lo
+    // representen. Siempre es deuda YA vencida (viene de antes), nunca "pendiente
+    // dentro del plazo" — quien muestre por separado Saldo Pendiente vs Cuotas
+    // Vencidas debe sumar esto al lado de "vencida", no al de "pendiente".
+    carriedOverDebt: number
     paymentSurplus: number
     overdueCount: number
     maxDaysOverdue: number
@@ -854,5 +860,5 @@ export function calculateResidentDebtSummary({
         maxDaysOverdue = Math.floor((today.getTime() - new Date(oldest.due_date).getTime()) / (1000 * 60 * 60 * 24))
     }
 
-    return { debt, paymentSurplus, overdueCount, maxDaysOverdue }
+    return { debt, carriedOverDebt: remainingDebtAmount, paymentSurplus, overdueCount, maxDaysOverdue }
 }

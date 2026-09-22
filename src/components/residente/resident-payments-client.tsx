@@ -26,7 +26,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { calculateResidentMonthlyFinancials, calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { calculateResidentMonthlyFinancials, calculateResidentDebtSummary, getLocalDateParts } from '@/utils/finance-utils'
 import { createResidentPaymentCheckout } from '@/app/actions/mercadopago-payment-actions'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -54,12 +54,17 @@ const MES_INDEX_BY_NAME: Record<string, number> = Object.fromEntries(
     Object.entries(MESES_ES).map(([idx, name]) => [name, Number(idx)])
 )
 
+// getLocalDateParts evita el bug de "new Date('2026-09-01')": al no traer hora,
+// JS lo interpreta en UTC, y con un navegador en un huso horario negativo (México,
+// UTC-6) .getDate()/.getMonth() locales lo corrían un día atrás (mostraba 31 Ago
+// en vez de 01 Sep). getLocalDateParts ya resuelve esto (usado en toda la app vía
+// finance-utils), extrayendo las partes en UTC cuando el string es solo fecha.
 function formatDate(dateStr: string) {
-    const d = new Date(dateStr)
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = MESES_ES[d.getMonth()]?.slice(0, 3) || ''
-    const year = d.getFullYear()
-    return `${day} ${month} ${year}`
+    const parts = getLocalDateParts(dateStr)
+    if (!parts) return ''
+    const day = String(parts.day).padStart(2, '0')
+    const month = MESES_ES[parts.month]?.slice(0, 3) || ''
+    return `${day} ${month} ${parts.year}`
 }
 
 function mapStatus(status: string) {
@@ -364,20 +369,19 @@ export default function ResidentPaymentsClient({
     const montoMorosidadTotal = currentMonthFinancials.overdueAmount
     const montoPendienteTotal = currentMonthFinancials.totalPending
 
-    // Saldo Pendiente "real" del residente — misma fórmula (calculateResidentDebtSummary)
-    // que usa la tarjeta "Saldo Pendiente" del detalle de residente en el panel del
-    // administrador: suma la cuota del mes en curso más el debt_amount arrastrado, sin
-    // importar el filtro de mes de la tabla de abajo. Se usa tanto en la tarjeta de
-    // Saldo Pendiente como en el Hero, para que ambos coincidan exacto con el admin.
-    const saldoPendienteTotal = useMemo(() =>
-        calculateResidentDebtSummary({ resident, invoices: rawSource, unit }).debt
+    // debt_amount arrastrado (saldo inicial/ajustes manuales) — siempre es deuda YA
+    // vencida (viene de antes), nunca "pendiente dentro del plazo". No depende del
+    // filtro de mes de la tabla. calculateResidentDebtSummary es la misma fórmula
+    // que usa el detalle de residente en el panel del administrador.
+    const carriedOverDebt = useMemo(() =>
+        calculateResidentDebtSummary({ resident, invoices: rawSource, unit }).carriedOverDebt
     , [resident, rawSource, unit])
 
     // Banderas del Hero (siempre sobre el estado global, ignorando el filtro)
-    const heroIsOverdue = montoMorosidadTotal > 0
+    const heroIsOverdue = montoMorosidadTotal > 0 || carriedOverDebt > 0
     const heroIsPending = !heroIsOverdue && montoPendienteTotal > 0
     const heroIsUpToDate = !heroIsOverdue && !heroIsPending
-    const heroDebt = heroIsUpToDate ? 0 : saldoPendienteTotal
+    const heroDebt = heroIsUpToDate ? 0 : montoPendienteTotal + montoMorosidadTotal + carriedOverDebt
 
     return (
         <div className="mx-auto max-w-7xl space-y-12 p-6 md:p-10 animate-in fade-in duration-500 bg-[#09090b] min-h-screen font-sans">
@@ -558,7 +562,7 @@ export default function ResidentPaymentsClient({
                 />
                 <MetricCard
                     title="Saldo Pendiente"
-                    value={`$${saldoPendienteTotal.toLocaleString('es-MX')}`}
+                    value={`$${periodFinancials.totalPending.toLocaleString('es-MX')}`}
                     subtitle="Pendiente de pago"
                     icon={AlertTriangle}
                     color="amber"
@@ -566,15 +570,9 @@ export default function ResidentPaymentsClient({
                 />
                 <MetricCard
                     title="Cuotas Vencidas"
-                    value={
-                        periodFinancials.overdueAmount > 0
-                            ? `$${periodFinancials.overdueAmount.toLocaleString('es-MX')}`
-                            : periodFinancials.overdueCount > 0
-                                ? `${periodFinancials.overdueCount} cuota${periodFinancials.overdueCount > 1 ? 's' : ''}`
-                                : '$0'
-                    }
+                    value={`$${(periodFinancials.overdueAmount + carriedOverDebt).toLocaleString('es-MX')}`}
                     subtitle={
-                        (periodFinancials.overdueAmount > 0 || periodFinancials.overdueCount > 0)
+                        (periodFinancials.overdueAmount + carriedOverDebt) > 0
                             ? periodFinancials.maxDaysOverdue > 0
                                 ? `${periodFinancials.maxDaysOverdue} días de atraso`
                                 : 'Pago vencido'

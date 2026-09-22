@@ -26,7 +26,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
 import { createResidentPaymentCheckout } from '@/app/actions/mercadopago-payment-actions'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -49,6 +49,10 @@ const MESES_ES: Record<number, string> = {
     4: 'Mayo', 5: 'Junio', 6: 'Julio', 7: 'Agosto',
     8: 'Septiembre', 9: 'Octubre', 10: 'Noviembre', 11: 'Diciembre'
 }
+
+const MES_INDEX_BY_NAME: Record<string, number> = Object.fromEntries(
+    Object.entries(MESES_ES).map(([idx, name]) => [name, Number(idx)])
+)
 
 function formatDate(dateStr: string) {
     const d = new Date(dateStr)
@@ -314,36 +318,15 @@ export default function ResidentPaymentsClient({
         return initialPaymentHistory.filter(p => p.month === selectedMonth)
     }, [selectedMonth, initialPaymentHistory])
 
-    // ─── MOTOR DE CÁLCULO INTELIGENTE ────────────────────────────────────────
-    const currentMonthStr = MESES_ES[today.getMonth()]
-    const currentYear = today.getFullYear()
+    // ─── MOTOR DE CÁLCULO ─────────────────────────────────────────────────────
+    // Misma función (calculateResidentMonthlyFinancials) que usa el detalle del
+    // residente en el panel del administrador, para que ambas pantallas
+    // muestren exactamente el mismo número. Antes este archivo tenía su propio
+    // motor de "déficit mes a mes" basado únicamente en facturas reales
+    // (agrupadas por mes vía due_date): si el cron de facturación aún no había
+    // generado el recibo del mes, ese motor devolvía $0 de morosidad/pendiente
+    // aunque el admin sí proyectara la cuota vencida correspondiente.
     const rawSource = liveInvoices.length > 0 ? liveInvoices : dbInvoices
-
-    // Agrupa cuánto se pagó (paid) por año-mes real usando due_date
-    const monthlyPaid = useMemo(() => {
-        const map: Record<string, { paid: number; year: number; monthIndex: number; monthStr: string }> = {}
-        rawSource.forEach((inv: any) => {
-            const d = new Date(inv.due_date || inv.created_at)
-            const monthIndex = d.getMonth()
-            const year = d.getFullYear()
-            const monthStr = MESES_ES[monthIndex]
-            const key = `${year}-${monthStr}`
-            if (!map[key]) map[key] = { paid: 0, year, monthIndex, monthStr }
-            if (inv.status === 'paid') map[key].paid += inv.amount || 0
-        })
-        return map
-    }, [rawSource])
-
-    // ¿Ya pasó el día límite de pago de ese mes?
-    const isMonthPastDeadline = (year: number, monthIndex: number): boolean =>
-        today > new Date(year, monthIndex, paymentDeadline, 23, 59, 59)
-
-    // Déficit de un mes = cuota - pagado (solo si ya venció el plazo)
-    const getMonthDeficit = (year: number, monthIndex: number, monthStr: string): number => {
-        if (!isMonthPastDeadline(year, monthIndex)) return 0
-        const paid = monthlyPaid[`${year}-${monthStr}`]?.paid || 0
-        return Math.max(0, montoCuota - paid)
-    }
 
     // 2. Total Pagado → responde al filtro de la tabla
     const totalPagado = useMemo(() =>
@@ -353,48 +336,39 @@ export default function ResidentPaymentsClient({
     , [filteredHistory])
     const cuotasPagadas = filteredHistory.filter((p: any) => p.rawStatus === 'paid' || p.status === 'Pagado').length
 
-    // 3. Pendiente → sólo aplica al mes actual dentro del plazo
-    const montoPendiente = useMemo(() => {
-        const targetMonth = selectedMonth === 'Todos' ? currentMonthStr : selectedMonth
-        if (targetMonth !== currentMonthStr) return 0
-        if (dayOfMonth > paymentDeadline) return 0
-        const paid = monthlyPaid[`${currentYear}-${currentMonthStr}`]?.paid || 0
-        return Math.max(0, montoCuota - paid)
-    }, [monthlyPaid, selectedMonth, currentMonthStr, currentYear, dayOfMonth, paymentDeadline, montoCuota])
+    // 3 y 4. Pendiente / Morosidad del periodo seleccionado en el filtro de la tabla
+    const selectedMonthForCalc = selectedMonth === 'Todos' ? 'all' : String(MES_INDEX_BY_NAME[selectedMonth] ?? 'all')
+    const periodFinancials = useMemo(() =>
+        calculateResidentMonthlyFinancials({
+            resident,
+            invoices: rawSource,
+            selectedMonth: selectedMonthForCalc,
+            monthlyFee: montoCuota,
+        })
+    , [resident, rawSource, selectedMonthForCalc, montoCuota])
 
-    // 4. Morosidad inteligente: déficit acumulado por mes
-    //    → Filtro mes específico: déficit de ESE mes (cuota - pagado ese mes)
-    //    → Filtro 'Todos': suma déficit de todos los meses vencidos
-    //    → Persiste mes a mes hasta que el residente liquide
-    const montoMorosidad = useMemo(() => {
-        if (selectedMonth === 'Todos') {
-            return Object.values(monthlyPaid).reduce((acc, { year, monthIndex, monthStr }) => {
-                return acc + getMonthDeficit(year, monthIndex, monthStr)
-            }, 0)
-        } else {
-            const entry = Object.values(monthlyPaid).find(e => e.monthStr === selectedMonth)
-            if (!entry) return 0
-            return getMonthDeficit(entry.year, entry.monthIndex, entry.monthStr)
-        }
-    }, [monthlyPaid, selectedMonth, montoCuota, paymentDeadline])
+    const montoPendiente = periodFinancials.totalPending
+    const montoMorosidad = periodFinancials.overdueAmount
 
     const cuotasTotalesGeneradas = cuotasPagadas + (montoMorosidad > 0 ? 1 : 0)
     const cumplimientoPorcentaje = Math.round((cuotasPagadas / 12) * 100)
 
     // ─── ESTADO FINANCIERO DEL HERO ─────────────────────────────────────────────
-    // Misma fórmula que usan Propiedades > Residentes y Gestión de Cobranza, para
-    // que el residente vea exactamente la misma deuda que su administrador (antes
-    // este cálculo era independiente — su propio motor de déficit mes a mes — y
-    // podía dar un número distinto al que ve el admin para la misma persona).
-    const montoMorosidadTotal = useMemo(() =>
-        calculateResidentDebtSummary({ resident, invoices: rawSource, unit }).debt
-    , [resident, rawSource, unit])
+    // Siempre sobre el mes en curso, ignorando el filtro de la tabla — misma
+    // fórmula que usa el detalle del residente en el panel del administrador,
+    // para que el "Estado Financiero" que ve el residente coincida exacto con
+    // lo que su administrador ve para él.
+    const currentMonthFinancials = useMemo(() =>
+        calculateResidentMonthlyFinancials({
+            resident,
+            invoices: rawSource,
+            selectedMonth: String(today.getMonth()),
+            monthlyFee: montoCuota,
+        })
+    , [resident, rawSource, montoCuota])
 
-    const montoPendienteTotal = useMemo(() => {
-        if (dayOfMonth > paymentDeadline) return 0
-        const paid = monthlyPaid[`${currentYear}-${currentMonthStr}`]?.paid || 0
-        return Math.max(0, montoCuota - paid)
-    }, [monthlyPaid, currentYear, currentMonthStr, dayOfMonth, paymentDeadline, montoCuota])
+    const montoMorosidadTotal = currentMonthFinancials.overdueAmount
+    const montoPendienteTotal = currentMonthFinancials.totalPending
 
     // Banderas del Hero (siempre sobre el estado global, ignorando el filtro)
     const heroIsOverdue = montoMorosidadTotal > 0

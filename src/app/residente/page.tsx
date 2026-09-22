@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { getUserContext } from '@/utils/user-context'
-import { calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
 import { NotLinkedState } from '@/components/residente/NotLinkedState'
 import Link from 'next/link'
 import nextDynamic from 'next/dynamic'
@@ -86,23 +86,24 @@ export default async function ResidentePage() {
         const invoices = invoicesData || []
         const today = new Date()
 
-        // Misma fórmula que usan Propiedades > Residentes y Gestión de
-        // Cobranza, para que el residente vea exactamente lo mismo que
-        // su administrador (antes este cálculo era independiente y
-        // podía dar un número distinto). Se calcula SIEMPRE, incluso sin
-        // facturas reales todavía: calculateResidentDebtSummary ya cubre la
-        // cuota del mes en curso y el debt_amount arrastrado del residente
+        // Misma función (calculateResidentMonthlyFinancials) que usa el
+        // detalle del residente en el panel del administrador, sobre el mes
+        // en curso, para que el residente vea exactamente el mismo número
+        // que su administrador. Se calcula SIEMPRE, incluso sin facturas
+        // reales todavía: esta función ya proyecta la cuota del mes en curso
         // aunque el cron de facturación no haya generado el recibo. Antes
         // esto vivía detrás de un "if (invoices.length > 0)", así que un
         // residente sin facturas generadas (el caso más común: recién dado
         // de alta, o el mes actual sin cron corrido) siempre veía $0 aquí
         // aunque el panel del administrador sí le mostrara deuda.
-        const { debt } = calculateResidentDebtSummary({
+        const monthlyFee = Number((resident as any).units?.monto_mensual || 0)
+        const currentMonthFinancials = calculateResidentMonthlyFinancials({
             resident,
             invoices,
-            unit: resident.units,
+            selectedMonth: String(today.getMonth()),
+            monthlyFee,
         })
-        financialData.saldoPendiente = debt
+        financialData.saldoPendiente = currentMonthFinancials.totalPending + currentMonthFinancials.overdueAmount
 
         if (invoices.length > 0) {
             // Último pago: la factura paid más reciente (usa balance_due=0 como indicador de pago)

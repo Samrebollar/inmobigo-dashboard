@@ -106,6 +106,27 @@ export function PaymentAgreementsAdmin({
         fetchAgreementsAndResidents()
     }, [admin?.organization_id])
 
+    // Suscripción en tiempo real: si un residente sube su convenio firmado +
+    // INE (o cualquier cambio de estado) mientras el admin tiene la pantalla
+    // abierta, se refleja sin necesidad de recargar. payment_agreements no
+    // tiene organization_id propio para filtrar en el canal, así que se
+    // escucha sin filtro y el refetch ya viene scopeado a la organización
+    // del admin (vía el Server Action).
+    useEffect(() => {
+        if (!admin?.organization_id) return
+
+        const channel = supabase
+            .channel(`admin-payment-agreements-${admin.organization_id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'payment_agreements'
+            }, fetchAgreementsAndResidents)
+            .subscribe()
+
+        return () => { supabase.removeChannel(channel) }
+    }, [admin?.organization_id])
+
     const handleUpdateStatus = async (id: string, newStatus: 'approved' | 'rejected') => {
         try {
             setActionLoadingId(id)

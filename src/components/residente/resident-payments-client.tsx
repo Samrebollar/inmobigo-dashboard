@@ -521,16 +521,16 @@ export default function ResidentPaymentsClient({
                                         onClick={handleRegularizarClick}
                                         disabled={isCheckingOut}
                                         className={cn(
-                                            "h-16 px-8 rounded-2xl text-sm font-black shadow-2xl transition-all flex items-center gap-3 group/btn disabled:opacity-70",
+                                            "h-20 px-10 rounded-2xl text-base font-black shadow-2xl transition-all flex items-center gap-3 group/btn disabled:opacity-70",
                                             heroIsOverdue ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/40"
                                         )}
                                     >
                                         {isCheckingOut ? (
-                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                            <Loader2 className="h-6 w-6 animate-spin" />
                                         ) : (
                                             <>
                                                 Pagar ahora
-                                                <ChevronRight className="h-5 w-5 group-hover/btn:translate-x-1 transition-transform" />
+                                                <ChevronRight className="h-6 w-6 group-hover/btn:translate-x-1 transition-transform" />
                                             </>
                                         )}
                                     </Button>
@@ -539,15 +539,15 @@ export default function ResidentPaymentsClient({
 
                             <motion.div
                                 whileHover={{ scale: 1.02 }}
-                                className="relative flex items-center gap-4 h-16 px-6 rounded-2xl bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] border border-blue-400/20 shadow-[0_8px_24px_-8px_rgba(0,158,247,0.35)] overflow-hidden group/mp"
+                                className="relative flex items-center gap-4 h-20 px-8 rounded-2xl bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] border border-blue-400/20 shadow-[0_8px_24px_-8px_rgba(0,158,247,0.35)] overflow-hidden group/mp"
                             >
                                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover/mp:translate-x-[150%] transition-transform duration-1000 ease-out" />
-                                <div className="h-9 w-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center relative z-10 shrink-0">
-                                    <Lock className="h-4 w-4 text-sky-300" />
+                                <div className="h-11 w-11 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center relative z-10 shrink-0">
+                                    <Lock className="h-5 w-5 text-sky-300" />
                                 </div>
                                 <div className="relative z-10 leading-tight">
-                                    <p className="text-white text-xs font-black uppercase tracking-widest">Pago 100% seguro</p>
-                                    <p className="text-sky-300/80 text-[10px] font-bold uppercase tracking-wider">Procesado por Mercado Pago</p>
+                                    <p className="text-white text-sm font-black uppercase tracking-widest">Pago 100% seguro</p>
+                                    <p className="text-sky-300/80 text-xs font-bold uppercase tracking-wider">Procesado por Mercado Pago</p>
                                 </div>
                             </motion.div>
                         </div>
@@ -562,13 +562,13 @@ export default function ResidentPaymentsClient({
                             }}
                             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                             className={cn(
-                                "relative z-10 p-10 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-[3rem] border-2 shadow-2xl transition-colors",
+                                "relative z-10 p-10 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-[3rem] border-4 transition-colors",
                                 heroIsOverdue
-                                    ? "border-rose-500/40 group-hover:border-rose-500/70 shadow-rose-950/50"
-                                    : "border-blue-500/30 group-hover:border-blue-500/60 shadow-blue-950/50"
+                                    ? "border-rose-500 shadow-[0_0_50px_-5px_rgba(244,63,94,0.5)] group-hover:shadow-[0_0_65px_-5px_rgba(244,63,94,0.7)]"
+                                    : "border-blue-500 shadow-[0_0_50px_-5px_rgba(59,130,246,0.5)] group-hover:shadow-[0_0_65px_-5px_rgba(59,130,246,0.7)]"
                             )}
                         >
-                            <CreditCard className="h-32 w-32 text-white/10 absolute -top-10 -right-10 rotate-12" />
+                            <CreditCard className="h-32 w-32 text-white/5 absolute -top-10 -right-10 rotate-12" />
                             <div className="space-y-8 relative">
                                 <div className="h-12 w-20 bg-indigo-500/20 rounded-xl" />
                                 <div className="space-y-4">

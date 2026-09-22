@@ -23,7 +23,11 @@ import {
     Sparkles,
     AlertTriangle,
     Landmark,
-    X
+    X,
+    Wallet,
+    Store,
+    ArrowRightLeft,
+    Banknote
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -910,7 +914,7 @@ export default function ResidentPaymentsClient({
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 shadow-2xl"
+                            className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 shadow-2xl"
                         >
                             <button
                                 onClick={() => setShowPaymentMethodModal(false)}
@@ -927,16 +931,52 @@ export default function ResidentPaymentsClient({
                             <div className="space-y-4">
                                 <button
                                     onClick={handlePayWithMercadoPago}
-                                    className="w-full text-left p-5 rounded-2xl border border-blue-500/20 bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] hover:border-blue-400/40 transition-all flex items-center gap-4 group"
+                                    className="w-full text-left p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#00203d] via-[#003d7a] to-[#0a3d91] hover:border-blue-400/40 transition-all group relative overflow-hidden"
                                 >
-                                    <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
-                                        <Lock className="h-5 w-5 text-sky-300" />
+                                    {/* Shine sweep */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-out pointer-events-none" />
+
+                                    <div className="relative z-10 flex items-start gap-4 mb-5">
+                                        <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                                            <Lock className="h-5 w-5 text-sky-300" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <p className="text-white font-black">Pagar con Mercado Pago</p>
+                                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase tracking-wider border border-emerald-400/30">
+                                                    Recomendado
+                                                </span>
+                                            </div>
+                                            <p className="text-sky-300/80 text-xs font-bold mt-0.5">Pago 100% seguro. Tu recibo se genera automáticamente.</p>
+                                        </div>
+                                        <ChevronRight className="h-5 w-5 text-sky-300 group-hover:translate-x-1 transition-transform shrink-0" />
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-white font-black">Pagar con Mercado Pago</p>
-                                        <p className="text-sky-300/80 text-xs font-bold">Pago 100% seguro. Tu recibo se genera automáticamente.</p>
+
+                                    {/* Formas de pago disponibles dentro de Mercado Pago */}
+                                    <div className="relative z-10 flex flex-wrap gap-2 mb-4">
+                                        {[
+                                            { icon: Wallet, label: 'Saldo Mercado Pago' },
+                                            { icon: CreditCard, label: 'Tarjeta' },
+                                            { icon: Store, label: 'OXXO' },
+                                            { icon: ArrowRightLeft, label: 'Transferencia SPEI' },
+                                            { icon: Banknote, label: 'Efectivo' },
+                                        ].map(({ icon: MethodIcon, label }) => (
+                                            <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10">
+                                                <MethodIcon className="h-3.5 w-3.5 text-sky-300" />
+                                                <span className="text-[10px] font-bold text-white/90">{label}</span>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <ChevronRight className="h-5 w-5 text-sky-300 group-hover:translate-x-1 transition-transform" />
+
+                                    {/* Beneficios */}
+                                    <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-1.5 pt-4 border-t border-white/10">
+                                        {['Confirmación al instante', 'Recibo automático', 'Sin subir comprobante'].map(b => (
+                                            <div key={b} className="flex items-center gap-1.5 text-[10px] font-bold text-sky-100/80">
+                                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                                {b}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </button>
 
                                 <button

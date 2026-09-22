@@ -103,11 +103,15 @@ export default function PropiedadesPage() {
                           .from('resident_invoices')
                           .select('resident_id, status, due_date, balance_due, invoice_type, condominium_id')
                           .in('condominium_id', condoIds),
+                      // 'delinquent' sigue ocupando su unidad y debe poder contar como moroso —
+                      // solo 'inactive' (dado de baja) se excluye. Antes .eq('status','active')
+                      // excluía a los residentes ya marcados 'delinquent' tanto de "Unidades
+                      // Ocupadas" como del propio conteo de morosos de abajo.
                       supabase
                           .from('residents')
                           .select('id, condominium_id, status, unit_id')
                           .in('condominium_id', condoIds)
-                          .eq('status', 'active')
+                          .neq('status', 'inactive')
                   ])
 
                   const invoicesList = invoicesRes.data || []

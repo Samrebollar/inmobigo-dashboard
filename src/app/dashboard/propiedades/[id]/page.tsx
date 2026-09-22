@@ -273,12 +273,15 @@ export default function CondominiumPage() {
                             recentActivity.sort((a, b) => b.date - a.date)
                             ;(data as any).recent_activity = recentActivity.slice(0, 10)
 
-                            // 11. Unidades ocupadas — count units that have at least one active resident
+                            // 11. Unidades ocupadas — cuenta unidades con al menos un residente
+                            // no dado de baja. 'delinquent' sigue ocupando la unidad — solo
+                            // 'inactive' debe excluirse; antes esto filtraba .eq('status','active'),
+                            // el mismo bug ya corregido en otras tarjetas de esta misma página.
                             const { count: ocupadasCount } = await supabase
                                 .from('residents')
                                 .select('unit_id', { count: 'exact', head: true })
                                 .eq('condominium_id', id)
-                                .eq('status', 'active')
+                                .neq('status', 'inactive')
                                 .not('unit_id', 'is', null)
                             ;(data as any).ocupadas_count = ocupadasCount || 0
 

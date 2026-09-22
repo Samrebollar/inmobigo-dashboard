@@ -788,8 +788,23 @@ export function FinanceTab() {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
-                                            Aún no hay facturas registradas.
+                                        <td colSpan={10} className="px-4 py-10 text-center">
+                                            {(metrics.vencido > 0 || metrics.porCobrar > 0) ? (
+                                                <div className="flex flex-col items-center gap-2 max-w-md mx-auto">
+                                                    <span className="text-zinc-300 font-medium">
+                                                        {selectedPeriod.label === 'Todos los meses' ? 'Este periodo' : selectedPeriod.label} tiene
+                                                        {' '}${(metrics.vencido + metrics.porCobrar).toLocaleString('es-MX', { minimumFractionDigits: 2 })}{' '}
+                                                        en cuotas todavía sin facturar
+                                                    </span>
+                                                    <span className="text-zinc-500 text-sm">
+                                                        Ese monto es una proyección de la cuota mensual de las unidades activas; no existe
+                                                        todavía como recibo. Da clic en <strong className="text-indigo-400">"Generar Facturas"</strong> arriba
+                                                        para crear los recibos reales y que aparezcan aquí con su folio y unidad.
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-zinc-500">Aún no hay facturas registradas.</span>
+                                            )}
                                         </td>
                                     </tr>
                                 )}

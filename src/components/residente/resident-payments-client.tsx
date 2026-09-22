@@ -21,7 +21,9 @@ import {
     Loader2,
     Lock,
     Sparkles,
-    AlertTriangle
+    AlertTriangle,
+    Landmark,
+    X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -151,6 +153,7 @@ export default function ResidentPaymentsClient({
     const router = useRouter()
     const searchParams = useSearchParams()
     const [isCheckingOut, setIsCheckingOut] = useState(false)
+    const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false)
 
     useEffect(() => {
         const status = searchParams.get('mp_status')
@@ -167,12 +170,21 @@ export default function ResidentPaymentsClient({
         router.replace('/residente/payments')
     }, [searchParams, router])
 
-    const handlePayNow = async () => {
+    // Con Mercado Pago conectado, el residente puede pagar por dos vías: MP
+    // (recibo automático al confirmarse el pago) o transferencia bancaria a la
+    // cuenta del condominio (el pago queda "pendiente" hasta que el admin lo
+    // valide en /seguridad/validacion-pagos, vía subir-comprobante). Si no hay
+    // MP conectado no hay elección: se va directo a subir comprobante.
+    const handleRegularizarClick = () => {
         if (!mpConnected) {
             router.push('/residente/subir-comprobante')
             return
         }
+        setShowPaymentMethodModal(true)
+    }
 
+    const handlePayWithMercadoPago = async () => {
+        setShowPaymentMethodModal(false)
         setIsCheckingOut(true)
         try {
             const result = await createResidentPaymentCheckout()
@@ -187,6 +199,11 @@ export default function ResidentPaymentsClient({
             toast.error('No se pudo iniciar el pago.')
             setIsCheckingOut(false)
         }
+    }
+
+    const handlePayWithBankTransfer = () => {
+        setShowPaymentMethodModal(false)
+        router.push('/residente/subir-comprobante')
     }
 
     const today = new Date()
@@ -472,7 +489,7 @@ export default function ResidentPaymentsClient({
                             {!heroIsUpToDate && (
                                 <motion.div whileHover={{ scale: isCheckingOut ? 1 : 1.05 }} whileTap={{ scale: isCheckingOut ? 1 : 0.95 }}>
                                     <Button
-                                        onClick={handlePayNow}
+                                        onClick={handleRegularizarClick}
                                         disabled={isCheckingOut}
                                         className={cn(
                                             "h-16 px-10 rounded-2xl text-lg font-black shadow-2xl transition-all flex items-center gap-4 group/btn disabled:opacity-70",
@@ -849,6 +866,69 @@ export default function ResidentPaymentsClient({
                     </div>
                 </div>
             </motion.div>
+
+            {/* Modal: elegir método de pago (Mercado Pago vs. transferencia bancaria) */}
+            <AnimatePresence>
+                {showPaymentMethodModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowPaymentMethodModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 shadow-2xl"
+                        >
+                            <button
+                                onClick={() => setShowPaymentMethodModal(false)}
+                                className="absolute top-6 right-6 p-2 rounded-full text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+
+                            <h3 className="text-2xl font-black text-white mb-1">¿Cómo quieres pagar?</h3>
+                            <p className="text-zinc-400 text-sm mb-8">
+                                Elige la forma en la que quieres regularizar tu saldo de ${heroDebt.toLocaleString('es-MX')} MXN.
+                            </p>
+
+                            <div className="space-y-4">
+                                <button
+                                    onClick={handlePayWithMercadoPago}
+                                    className="w-full text-left p-5 rounded-2xl border border-blue-500/20 bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] hover:border-blue-400/40 transition-all flex items-center gap-4 group"
+                                >
+                                    <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                                        <Lock className="h-5 w-5 text-sky-300" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-black">Pagar con Mercado Pago</p>
+                                        <p className="text-sky-300/80 text-xs font-bold">Pago 100% seguro. Tu recibo se genera automáticamente.</p>
+                                    </div>
+                                    <ChevronRight className="h-5 w-5 text-sky-300 group-hover:translate-x-1 transition-transform" />
+                                </button>
+
+                                <button
+                                    onClick={handlePayWithBankTransfer}
+                                    className="w-full text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-indigo-500/40 transition-all flex items-center gap-4 group"
+                                >
+                                    <div className="h-12 w-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                                        <Landmark className="h-5 w-5 text-indigo-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-black">Transferencia bancaria</p>
+                                        <p className="text-zinc-500 text-xs font-bold">Deposita a la cuenta del condominio y sube tu comprobante. Queda pendiente hasta que el administrador lo valide.</p>
+                                    </div>
+                                    <ChevronRight className="h-5 w-5 text-zinc-500 group-hover:translate-x-1 transition-transform" />
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

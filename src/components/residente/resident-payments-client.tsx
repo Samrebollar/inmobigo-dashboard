@@ -9,6 +9,7 @@ import {
     CreditCard,
     Calendar,
     ChevronRight,
+    ChevronLeft,
     ChevronDown,
     CheckCircle2,
     Clock,
@@ -24,10 +25,7 @@ import {
     AlertTriangle,
     Landmark,
     X,
-    Wallet,
-    Store,
-    ArrowRightLeft,
-    Banknote
+    ArrowRightLeft
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -158,6 +156,10 @@ export default function ResidentPaymentsClient({
     const searchParams = useSearchParams()
     const [isCheckingOut, setIsCheckingOut] = useState(false)
     const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false)
+    // 'choose' = Mercado Pago vs. transferencia bancaria. 'mp-methods' = ya
+    // eligió Mercado Pago y ahora ve las formas específicas (Saldo, OXXO,
+    // Tarjeta, SPEI) — solo al elegir una de esas se manda a pagar.
+    const [paymentModalStep, setPaymentModalStep] = useState<'choose' | 'mp-methods'>('choose')
     // null = pagar el saldo total (botón del hero). Con valor = pagar solo esa
     // cuota puntual (icono de pago de una fila específica de la tabla).
     const [paymentTarget, setPaymentTarget] = useState<{ amount: number; concept?: string } | null>(null)
@@ -184,6 +186,7 @@ export default function ResidentPaymentsClient({
     // MP conectado no hay elección: se va directo a subir comprobante.
     const handleRegularizarClick = () => {
         setPaymentTarget(null)
+        setPaymentModalStep('choose')
         if (!mpConnected) {
             router.push('/residente/subir-comprobante')
             return
@@ -196,6 +199,7 @@ export default function ResidentPaymentsClient({
     const handlePayInvoiceClick = (inv: any) => {
         const amount = Number(inv.monto || inv.balance_due || inv.amount || 0)
         setPaymentTarget({ amount, concept: inv.description || undefined })
+        setPaymentModalStep('choose')
         if (!mpConnected) {
             router.push('/residente/subir-comprobante')
             return
@@ -203,13 +207,16 @@ export default function ResidentPaymentsClient({
         setShowPaymentMethodModal(true)
     }
 
-    const handlePayWithMercadoPago = async () => {
+    // Se llama solo hasta que el residente elige una forma concreta dentro de
+    // Mercado Pago (Saldo, OXXO, Tarjeta, SPEI) — nunca al abrir el selector.
+    const handlePayWithMercadoPago = async (defaultPaymentMethodId?: string) => {
         setShowPaymentMethodModal(false)
         setIsCheckingOut(true)
         try {
-            const result = await createResidentPaymentCheckout(
-                paymentTarget ? { amount: paymentTarget.amount, concept: paymentTarget.concept } : undefined
-            )
+            const result = await createResidentPaymentCheckout({
+                ...(paymentTarget ? { amount: paymentTarget.amount, concept: paymentTarget.concept } : {}),
+                ...(defaultPaymentMethodId ? { defaultPaymentMethodId } : {}),
+            })
             if (result.success && result.checkoutUrl) {
                 window.location.href = result.checkoutUrl
             } else {
@@ -923,76 +930,155 @@ export default function ResidentPaymentsClient({
                                 <X className="h-5 w-5" />
                             </button>
 
-                            <h3 className="text-2xl font-black text-white mb-1">¿Cómo quieres pagar?</h3>
+                            {paymentModalStep === 'mp-methods' && (
+                                <button
+                                    onClick={() => setPaymentModalStep('choose')}
+                                    className="flex items-center gap-1.5 text-zinc-500 hover:text-white text-xs font-bold mb-4 transition-colors"
+                                >
+                                    <ChevronLeft className="h-3.5 w-3.5" /> Volver
+                                </button>
+                            )}
+
+                            <h3 className="text-2xl font-black text-white mb-1">
+                                {paymentModalStep === 'choose' ? '¿Cómo quieres pagar?' : 'Elige tu forma de pago'}
+                            </h3>
                             <p className="text-zinc-400 text-sm mb-8">
-                                Elige la forma en la que quieres pagar {paymentTarget ? (paymentTarget.concept || 'esta cuota') : 'tu saldo'} de ${(paymentTarget ? paymentTarget.amount : heroDebt).toLocaleString('es-MX')} MXN.
+                                {paymentModalStep === 'choose' ? 'Elige' : 'Con Mercado Pago, elige'} la forma en la que quieres pagar {paymentTarget ? (paymentTarget.concept || 'esta cuota') : 'tu saldo'} de ${(paymentTarget ? paymentTarget.amount : heroDebt).toLocaleString('es-MX')} MXN.
                             </p>
 
-                            <div className="space-y-4">
-                                <button
-                                    onClick={handlePayWithMercadoPago}
-                                    className="w-full text-left p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#00203d] via-[#003d7a] to-[#0a3d91] hover:border-blue-400/40 transition-all group relative overflow-hidden"
-                                >
-                                    {/* Shine sweep */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-out pointer-events-none" />
+                            <AnimatePresence mode="wait">
+                                {paymentModalStep === 'choose' ? (
+                                    <motion.div
+                                        key="choose"
+                                        initial={{ opacity: 0, x: -12 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -12 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="space-y-4"
+                                    >
+                                        <button
+                                            onClick={() => setPaymentModalStep('mp-methods')}
+                                            className="w-full text-left p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#00203d] via-[#003d7a] to-[#0a3d91] hover:border-blue-400/40 transition-all group relative overflow-hidden"
+                                        >
+                                            {/* Shine sweep */}
+                                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-out pointer-events-none" />
 
-                                    <div className="relative z-10 flex items-start gap-4 mb-5">
-                                        <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
-                                            <Lock className="h-5 w-5 text-sky-300" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <p className="text-white font-black">Pagar con Mercado Pago</p>
-                                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase tracking-wider border border-emerald-400/30">
-                                                    Recomendado
-                                                </span>
+                                            <div className="relative z-10 flex items-start gap-4 mb-5">
+                                                <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                                                    <Lock className="h-5 w-5 text-sky-300" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="text-white font-black">Mercado Pago</p>
+                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase tracking-wider border border-emerald-400/30">
+                                                            Recomendado
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sky-300/80 text-xs font-bold mt-0.5">Saldo, tarjeta, OXXO o transferencia. Tu recibo se genera automáticamente.</p>
+                                                </div>
+                                                <ChevronRight className="h-5 w-5 text-sky-300 group-hover:translate-x-1 transition-transform shrink-0" />
                                             </div>
-                                            <p className="text-sky-300/80 text-xs font-bold mt-0.5">Pago 100% seguro. Tu recibo se genera automáticamente.</p>
-                                        </div>
-                                        <ChevronRight className="h-5 w-5 text-sky-300 group-hover:translate-x-1 transition-transform shrink-0" />
-                                    </div>
 
-                                    {/* Formas de pago disponibles dentro de Mercado Pago */}
-                                    <div className="relative z-10 flex flex-wrap gap-2 mb-4">
-                                        {[
-                                            { icon: Wallet, label: 'Saldo Mercado Pago' },
-                                            { icon: CreditCard, label: 'Tarjeta' },
-                                            { icon: Store, label: 'OXXO' },
-                                            { icon: ArrowRightLeft, label: 'Transferencia SPEI' },
-                                            { icon: Banknote, label: 'Efectivo' },
-                                        ].map(({ icon: MethodIcon, label }) => (
-                                            <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/10">
-                                                <MethodIcon className="h-3.5 w-3.5 text-sky-300" />
-                                                <span className="text-[10px] font-bold text-white/90">{label}</span>
+                                            {/* Beneficios */}
+                                            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-1.5 pt-4 border-t border-white/10">
+                                                {['Confirmación al instante', 'Recibo automático', 'Sin subir comprobante'].map(b => (
+                                                    <div key={b} className="flex items-center gap-1.5 text-[10px] font-bold text-sky-100/80">
+                                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                                        {b}
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
+                                        </button>
 
-                                    {/* Beneficios */}
-                                    <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-1.5 pt-4 border-t border-white/10">
-                                        {['Confirmación al instante', 'Recibo automático', 'Sin subir comprobante'].map(b => (
-                                            <div key={b} className="flex items-center gap-1.5 text-[10px] font-bold text-sky-100/80">
-                                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                                {b}
+                                        <button
+                                            onClick={handlePayWithBankTransfer}
+                                            className="w-full text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-indigo-500/40 transition-all flex items-center gap-4 group"
+                                        >
+                                            <div className="h-12 w-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                                                <Landmark className="h-5 w-5 text-indigo-400" />
                                             </div>
-                                        ))}
-                                    </div>
-                                </button>
+                                            <div className="flex-1">
+                                                <p className="text-white font-black">Transferencia bancaria</p>
+                                                <p className="text-zinc-500 text-xs font-bold">Deposita a la cuenta del condominio y sube tu comprobante. Queda pendiente hasta que el administrador lo valide.</p>
+                                            </div>
+                                            <ChevronRight className="h-5 w-5 text-zinc-500 group-hover:translate-x-1 transition-transform" />
+                                        </button>
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="methods"
+                                        initial={{ opacity: 0, x: 12 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 12 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                                    >
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago('account_money')}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-blue-500/40 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-10 w-24 rounded-lg bg-gradient-to-r from-[#3483fa] to-[#2968d1] flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                                <span className="text-white text-xs font-black italic tracking-tight">mercado pago</span>
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">Saldo Mercado Pago</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Paga al instante con tu cuenta</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
 
-                                <button
-                                    onClick={handlePayWithBankTransfer}
-                                    className="w-full text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-indigo-500/40 transition-all flex items-center gap-4 group"
-                                >
-                                    <div className="h-12 w-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
-                                        <Landmark className="h-5 w-5 text-indigo-400" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-white font-black">Transferencia bancaria</p>
-                                        <p className="text-zinc-500 text-xs font-bold">Deposita a la cuenta del condominio y sube tu comprobante. Queda pendiente hasta que el administrador lo valide.</p>
-                                    </div>
-                                    <ChevronRight className="h-5 w-5 text-zinc-500 group-hover:translate-x-1 transition-transform" />
-                                </button>
-                            </div>
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago('oxxo')}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-rose-500/40 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-10 w-24 rounded-lg bg-[#e32118] flex items-center justify-center shadow-lg shadow-rose-500/20">
+                                                <span className="text-white text-sm font-black italic tracking-tighter">OXXO</span>
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">OXXO</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Paga en efectivo en tienda</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-rose-400 group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago()}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-zinc-600 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center">
+                                                <CreditCard className="h-5 w-5 text-zinc-300" />
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">Tarjeta</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Crédito, débito o prepagada</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago()}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-zinc-600 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center">
+                                                <ArrowRightLeft className="h-5 w-5 text-zinc-300" />
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">Transferencia SPEI</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Desde tu banca en línea</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </motion.div>
                     </div>
                 )}

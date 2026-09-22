@@ -10,7 +10,7 @@ import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-servi
  * su saldo — el cobro se hace directo a la cuenta de Mercado Pago del propio
  * condominio (OAuth Connect en payment_accounts), no a la de InmobiGo.
  */
-export async function createResidentPaymentCheckout(options?: { amount?: number; concept?: string }) {
+export async function createResidentPaymentCheckout(options?: { amount?: number; concept?: string; defaultPaymentMethodId?: string }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -98,6 +98,14 @@ export async function createResidentPaymentCheckout(options?: { amount?: number;
                 },
                 auto_return: 'approved',
                 notification_url: `${appUrl}/api/mercadopago/resident-webhook`,
+                // Cuando el residente ya eligió una forma específica en nuestro
+                // selector (p.ej. "Saldo Mercado Pago" u "OXXO"), se manda como
+                // sugerencia a Mercado Pago para que su checkout abra con esa
+                // opción ya resaltada — es solo un hint, el residente puede
+                // cambiarla en la propia pantalla de Mercado Pago.
+                ...(options?.defaultPaymentMethodId
+                    ? { payment_methods: { default_payment_method_id: options.defaultPaymentMethodId } }
+                    : {}),
             }),
         })
 

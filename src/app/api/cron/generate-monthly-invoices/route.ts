@@ -244,7 +244,15 @@ async function handleRequest(request: Request) {
                     results.skipped++
                     continue
                 }
-                if (todayDayOfMonth !== billingDay) {
+                // ">= billingDay" (no "==="): un residente dado de alta DESPUÉS de que
+                // ya pasó el día de cobro de su unidad en el mes en curso (el caso más
+                // común: unidad con billing_day=1 y residente agregado a mitad de mes)
+                // se quedaba sin facturar hasta el día de cobro del MES SIGUIENTE, ya
+                // que el cron corre todos los días pero solo actuaba si coincidía
+                // exacto con el día. La idempotencia (alreadyBilledResidentIds, más
+                // abajo) ya evita duplicar la factura de quien sí se facturó a tiempo,
+                // así que relajar esto a "ya pasó o es hoy" es seguro.
+                if (todayDayOfMonth < billingDay) {
                     results.skipped++
                     continue
                 }

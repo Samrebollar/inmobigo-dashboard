@@ -1017,8 +1017,8 @@ export default function ResidentPaymentsClient({
                                             onClick={() => handlePayWithMercadoPago('account_money')}
                                             className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-blue-500/40 transition-all flex flex-col gap-3 group"
                                         >
-                                            <div className="h-10 w-24 rounded-lg bg-gradient-to-r from-[#3483fa] to-[#2968d1] flex items-center justify-center shadow-lg shadow-blue-500/20">
-                                                <span className="text-white text-xs font-black italic tracking-tight">mercado pago</span>
+                                            <div className="h-14 w-24 rounded-lg bg-white flex items-center justify-center p-1.5 shadow-lg shadow-blue-500/20">
+                                                <img src="/logos/mercadopago-logo.png" alt="Mercado Pago" className="h-full w-full object-contain" />
                                             </div>
                                             <div className="flex items-end justify-between gap-2">
                                                 <div>
@@ -1033,8 +1033,8 @@ export default function ResidentPaymentsClient({
                                             onClick={() => handlePayWithMercadoPago('oxxo')}
                                             className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-rose-500/40 transition-all flex flex-col gap-3 group"
                                         >
-                                            <div className="h-10 w-24 rounded-lg bg-[#e32118] flex items-center justify-center shadow-lg shadow-rose-500/20">
-                                                <span className="text-white text-sm font-black italic tracking-tighter">OXXO</span>
+                                            <div className="h-14 w-24 rounded-lg bg-white flex items-center justify-center p-1.5 shadow-lg shadow-rose-500/20 overflow-hidden">
+                                                <img src="/logos/oxxo-logo.webp" alt="OXXO" className="h-full w-full object-contain" />
                                             </div>
                                             <div className="flex items-end justify-between gap-2">
                                                 <div>

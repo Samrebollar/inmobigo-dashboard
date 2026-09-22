@@ -24,7 +24,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/utils/supabase/client'
-import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateResidentMonthlyFinancials, calculateResidentDebtSummary } from '@/utils/finance-utils'
 
 const MONTHS = [
     { value: 'all', label: 'Este Año' },
@@ -106,13 +106,15 @@ export default function ResidentMovementsPage() {
             }
 
             // Fetch unit monthly fee
+            let unitData: { monto_mensual?: number; unit_number?: string; payment_deadline?: number } | null = null
             if (residentData?.unit_id) {
                 const supabase = createClient()
-                const { data: unitData } = await supabase
+                const { data } = await supabase
                     .from('units')
-                    .select('monto_mensual, unit_number')
+                    .select('monto_mensual, unit_number, payment_deadline')
                     .eq('id', residentData.unit_id)
                     .single()
+                unitData = data
                 if (unitData) {
                     setMonthlyFee(Number(unitData.monto_mensual) || 0)
                     setUnitNumber(unitData.unit_number || '')
@@ -134,13 +136,24 @@ export default function ResidentMovementsPage() {
             const paymentsData = await financeService.getPaymentsByInvoiceIds(invoicesData.map(inv => inv.id))
             setPayments(paymentsData)
 
-                                    const totalBilled = invoicesData.reduce((sum, inv) => sum + inv.amount, 0) + Number(residentData?.debt_amount || 0)
+            const totalBilled = invoicesData.reduce((sum, inv) => sum + inv.amount, 0) + Number(residentData?.debt_amount || 0)
             const totalPaid = invoicesData
                 .filter(inv => inv.status === 'paid')
                 .reduce((sum, inv) => sum + ((inv as any).paid_amount ?? inv.amount), 0)
-            const totalPending = invoicesData
-                .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
-                .reduce((sum, inv) => sum + ((inv as any).balance_due ?? inv.amount), 0) + Number(residentData?.debt_amount || 0)
+
+            // Misma fórmula que usa el panel del propio residente y la lista de
+            // Residentes (calculateResidentDebtSummary), para que el "Saldo
+            // Pendiente" de esta página no se quede corto: antes salía únicamente
+            // del balance_due de las facturas reales + debt_amount, ignorando la
+            // cuota del mes en curso cuando el cron de facturación aún no había
+            // generado su recibo (el mismo caso que dejaba a "Cuotas vencidas"
+            // mostrando $10 mientras el residente y la lista de admin ya mostraban
+            // $60 de morosidad total).
+            const { debt: totalPending } = calculateResidentDebtSummary({
+                resident: residentData,
+                invoices: invoicesData,
+                unit: unitData,
+            })
             const overdueInvoices = invoicesData.filter(inv => inv.status === 'overdue')
 
             let maxDays = 0
@@ -574,7 +587,7 @@ export default function ResidentMovementsPage() {
                                     </div>
                                     <span className="text-sm font-bold">Saldo Pendiente</span>
                                 </div>
-                                <div className="text-3xl font-bold text-amber-500 tracking-tight mt-2">{formatMoney(dynamicStats.totalPending)}</div>
+                                <div className="text-3xl font-bold text-amber-500 tracking-tight mt-2">{formatMoney(stats.totalPending)}</div>
                             </div>
                             <div className="text-xs text-amber-500 mt-4 flex items-center gap-1 font-medium">
                                 ● Pendiente de pago

@@ -1,5 +1,19 @@
 export type ResidentStatus = 'active' | 'inactive' | 'delinquent'
 
+// Categorías de deuda previa que un residente puede traer arrastrando al darlo
+// de alta. 'maintenance' entra al mismo mecanismo que las cuotas normales
+// (recibe un mes y se factura como invoice_type='maintenance'); el resto son
+// cargos de una sola vez sin ciclo mensual.
+export type DebtCategory = 'maintenance' | 'fine' | 'special_assessment' | 'water' | 'electricity' | 'other'
+
+export interface DebtLineItem {
+    category: DebtCategory
+    // 'YYYY-MM' — obligatorio solo cuando category === 'maintenance'
+    month?: string
+    amount: number
+    note?: string
+}
+
 export interface Resident {
     id: string
     condominium_id: string
@@ -52,6 +66,10 @@ export interface CreateResidentDTO {
     phone: string
     status: ResidentStatus
     debt_amount?: number
+    // Desglose de la deuda previa por categoría/mes (alta manual). Cuando se
+    // manda esto, el servidor crea una factura real por cada línea en vez de
+    // guardar un solo número suelto en debt_amount.
+    debt_items?: DebtLineItem[]
     credit_amount?: number
     vehicles?: {
         plate: string

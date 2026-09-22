@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Check, Plus, Trash2, Car } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CreateResidentDTO, Resident } from '@/types/residents'
+import { CreateResidentDTO, Resident, DebtLineItem, DebtCategory } from '@/types/residents'
 import { residentsService } from '@/services/residents-service'
 import { unitsService } from '@/services/units-service'
 import { Unit } from '@/types/units'
@@ -21,6 +21,21 @@ interface CreateResidentModalProps {
     onSuccess: (newResident?: Resident) => void
     condominiumId: string
     residentToEdit?: Resident | null
+}
+
+const DEBT_CATEGORY_OPTIONS: { value: DebtCategory; label: string }[] = [
+    { value: 'maintenance', label: 'Mantenimiento' },
+    { value: 'fine', label: 'Multa' },
+    { value: 'special_assessment', label: 'Cuota Extraordinaria' },
+    { value: 'water', label: 'Agua' },
+    { value: 'electricity', label: 'Luz' },
+    { value: 'other', label: 'Otro' },
+]
+
+function previousMonthValue() {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId, residentToEdit }: CreateResidentModalProps) {
@@ -39,6 +54,32 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
         debt_amount: 0,
         vehicles: []
     })
+
+    // Deuda previa desglosada — solo aplica al dar de alta (no en edición, donde
+    // el residente ya podría tener facturas reales; ese caso se maneja aparte
+    // desde su propio detalle).
+    const [debtItems, setDebtItems] = useState<DebtLineItem[]>([])
+
+    const addDebtItem = () => {
+        setDebtItems(prev => [...prev, { category: 'maintenance', month: previousMonthValue(), amount: 0, note: '' }])
+    }
+
+    const removeDebtItem = (index: number) => {
+        setDebtItems(prev => prev.filter((_, i) => i !== index))
+    }
+
+    const updateDebtItem = (index: number, patch: Partial<DebtLineItem>) => {
+        setDebtItems(prev => prev.map((item, i) => {
+            if (i !== index) return item
+            const next = { ...item, ...patch }
+            // Al cambiar a una categoría distinta de mantenimiento, el mes ya no aplica.
+            if (patch.category && patch.category !== 'maintenance') next.month = undefined
+            if (patch.category === 'maintenance' && !next.month) next.month = previousMonthValue()
+            return next
+        }))
+    }
+
+    const debtItemsTotal = debtItems.reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
 
     const addVehicle = () => {
         const currentVehicles = formData.vehicles || []
@@ -90,21 +131,37 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                     vehicles: []
                 })
             }
+            setDebtItems([])
         }
     }, [isOpen, condominiumId, residentToEdit])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        // Toda línea de deuda con monto capturado necesita su categoría resuelta;
+        // "Mantenimiento" además necesita el mes al que corresponde.
+        if (!residentToEdit) {
+            const invalidMaintenance = debtItems.some(i => Number(i.amount) > 0 && i.category === 'maintenance' && !i.month)
+            if (invalidMaintenance) {
+                toast.error('Falta el mes', { description: 'Selecciona a qué mes corresponde cada línea de Mantenimiento.' })
+                return
+            }
+        }
+
         setLoading(true)
 
         try {
             const normalizedPhone = normalizeMexicanPhone(formData.phone || '')
+            const validDebtItems = debtItems.filter(i => Number(i.amount) > 0)
 
             // Prepare common data
             const submitData = {
                 ...formData,
                 phone: normalizedPhone,
-                unit_id: formData.unit_id === '' ? null : formData.unit_id
+                unit_id: formData.unit_id === '' ? null : formData.unit_id,
+                // En alta manual, la deuda previa se captura desglosada (debt_items);
+                // debt_amount se queda en 0 — cada línea se vuelve su propia factura.
+                ...(residentToEdit ? {} : { debt_amount: 0, debt_items: validDebtItems })
             }
 
             let result: Resident
@@ -114,8 +171,10 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                 result = await residentsService.update(residentToEdit.id, updatePayload as any)
             } else if (condominiumId.startsWith('demo-')) {
                 // MODO DEMO: Usar el servicio directamente para persistir en localStorage
+                // (no genera facturas reales, así que se refleja el total como debt_amount)
                 result = await residentsService.create({
                     ...submitData,
+                    debt_amount: debtItemsTotal,
                     condominium_id: condominiumId
                 } as CreateResidentDTO)
             } else {
@@ -129,7 +188,7 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                 if (!resAction.success) {
                     throw new Error(resAction.error)
                 }
-                
+
                 result = resAction.data as unknown as Resident
             }
             onSuccess(result)
@@ -198,15 +257,92 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                                 required
                             />
 
-                            <Input
-                                label="Saldo Pendiente (MXN)"
-                                type="number"
-                                placeholder="0.00"
-                                value={formData.debt_amount || ''}
-                                onChange={(e) => setFormData({ ...formData, debt_amount: parseFloat(e.target.value) })}
-                                min="0"
-                                step="0.01"
-                            />
+                            {residentToEdit ? (
+                                <Input
+                                    label="Saldo Pendiente (MXN)"
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={formData.debt_amount || ''}
+                                    onChange={(e) => setFormData({ ...formData, debt_amount: parseFloat(e.target.value) })}
+                                    min="0"
+                                    step="0.01"
+                                />
+                            ) : (
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-zinc-400">Deuda que trae de antes (opcional)</label>
+                                        <button
+                                            type="button"
+                                            onClick={addDebtItem}
+                                            className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                                        >
+                                            <Plus className="h-3 w-3" /> Agregar concepto de deuda
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {debtItems.map((item, index) => (
+                                            <div key={index} className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+                                                <div className="flex gap-2 items-start">
+                                                    <select
+                                                        className="flex-1 rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                        value={item.category}
+                                                        onChange={(e) => updateDebtItem(index, { category: e.target.value as DebtCategory })}
+                                                    >
+                                                        {DEBT_CATEGORY_OPTIONS.map(opt => (
+                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                        ))}
+                                                    </select>
+                                                    {item.category === 'maintenance' && (
+                                                        <input
+                                                            type="month"
+                                                            className="w-36 rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 [color-scheme:dark]"
+                                                            value={item.month || ''}
+                                                            onChange={(e) => updateDebtItem(index, { month: e.target.value })}
+                                                            required
+                                                        />
+                                                    )}
+                                                    <div className="relative w-28">
+                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">$</span>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0.00"
+                                                            min="0"
+                                                            step="0.01"
+                                                            className="w-full rounded-lg bg-zinc-900 border border-zinc-800 pl-5 pr-2 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                            value={item.amount || ''}
+                                                            onChange={(e) => updateDebtItem(index, { amount: parseFloat(e.target.value) || 0 })}
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeDebtItem(index)}
+                                                        className="text-zinc-500 hover:text-rose-400 p-2"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                                <input
+                                                    placeholder="Nota (opcional)"
+                                                    className="w-full bg-transparent border-b border-zinc-800 text-xs py-1 focus:outline-none focus:border-indigo-500 text-white placeholder:text-zinc-600"
+                                                    value={item.note || ''}
+                                                    onChange={(e) => updateDebtItem(index, { note: e.target.value })}
+                                                />
+                                            </div>
+                                        ))}
+                                        {debtItems.length === 0 && (
+                                            <div className="text-center py-4 border border-dashed border-zinc-800 rounded-lg text-zinc-600 text-sm">
+                                                Sin deuda previa registrada
+                                            </div>
+                                        )}
+                                        {debtItems.length > 0 && (
+                                            <div className="flex justify-between items-center px-1 text-sm">
+                                                <span className="text-zinc-500">Total deuda previa</span>
+                                                <span className="font-bold text-amber-400">${debtItemsTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             <Input
                                 label="Teléfono"

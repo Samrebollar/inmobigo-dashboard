@@ -1,6 +1,120 @@
 'use server'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+import type { DebtLineItem } from '@/types/residents'
+
+const DEBT_CATEGORY_LABEL: Record<string, string> = {
+    maintenance: 'Cuota de Mantenimiento',
+    fine: 'Multa',
+    special_assessment: 'Cuota Extraordinaria',
+    water: 'Agua',
+    electricity: 'Luz',
+    other: 'Otro cargo',
+}
+
+const MESES_ES_LARGO = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
+/**
+ * Crea una factura real (invoices) por cada línea de deuda previa capturada al
+ * dar de alta a un residente, en vez de guardar un número suelto en
+ * residents.debt_amount. Así cada concepto (mantenimiento de un mes puntual,
+ * multa, cuota extraordinaria, agua, luz, otro) queda visible en Movimientos
+ * y se clasifica solo como pendiente/vencida según su fecha — el mismo
+ * mecanismo que ya usan las cuotas generadas por el cron mensual.
+ */
+async function createDebtLineInvoices(
+    admin: ReturnType<typeof createAdminClient>,
+    { residentId, condominiumId, unitId, items }: {
+        residentId: string
+        condominiumId: string
+        unitId: string | null
+        items: DebtLineItem[]
+    }
+) {
+    const validItems = items.filter(i => Number(i.amount) > 0)
+    if (validItems.length === 0) return { error: null }
+
+    const { data: condo } = await admin
+        .from('condominiums')
+        .select('organization_id')
+        .eq('id', condominiumId)
+        .maybeSingle()
+    const organizationId = condo?.organization_id || null
+
+    let unitPaymentDeadline = 10
+    if (unitId) {
+        const { data: unit } = await admin
+            .from('units')
+            .select('payment_deadline')
+            .eq('id', unitId)
+            .maybeSingle()
+        unitPaymentDeadline = Number(unit?.payment_deadline) || 10
+    }
+
+    const todayStr = new Date().toISOString().substring(0, 10)
+
+    const rows = validItems.map((item) => {
+        const folio = `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+        const categoryLabel = DEBT_CATEGORY_LABEL[item.category] || 'Otro cargo'
+
+        if (item.category === 'maintenance' && item.month) {
+            const [yearStr, monthStr] = item.month.split('-')
+            const year = parseInt(yearStr, 10)
+            const monthIndex = parseInt(monthStr, 10) - 1
+            const lastDayOfMonth = new Date(year, monthIndex + 1, 0).getDate()
+            const billingDay = Math.min(unitPaymentDeadline, lastDayOfMonth)
+            const mm = String(monthIndex + 1).padStart(2, '0')
+            const dueDateStr = `${year}-${mm}-${String(billingDay).padStart(2, '0')}`
+            const monthLabel = `${MESES_ES_LARGO[monthIndex]} ${year}`
+
+            return {
+                condominium_id: condominiumId,
+                organization_id: organizationId,
+                resident_id: residentId,
+                unit_id: unitId,
+                invoice_type: 'maintenance',
+                invoice_scope: 'resident',
+                status: 'pending',
+                amount: item.amount,
+                balance_due: item.amount,
+                currency: 'MXN',
+                due_date: dueDateStr,
+                period_start: `${year}-${mm}-01`,
+                period_end: `${year}-${mm}-${String(lastDayOfMonth).padStart(2, '0')}`,
+                description: item.note ? `${categoryLabel} ${monthLabel} (saldo previo) - ${item.note}` : `${categoryLabel} ${monthLabel} (saldo previo)`,
+                folio,
+                reminder_sent: false,
+                recargo_aplicado: false,
+            }
+        }
+
+        return {
+            condominium_id: condominiumId,
+            organization_id: organizationId,
+            resident_id: residentId,
+            unit_id: unitId,
+            invoice_type: item.category,
+            invoice_scope: 'resident',
+            status: 'pending',
+            amount: item.amount,
+            balance_due: item.amount,
+            currency: 'MXN',
+            due_date: todayStr,
+            period_start: todayStr,
+            period_end: todayStr,
+            description: item.note ? `${categoryLabel} - ${item.note}` : `${categoryLabel} (saldo previo)`,
+            folio,
+            reminder_sent: false,
+            recargo_aplicado: false,
+        }
+    })
+
+    const { error } = await admin.from('invoices').insert(rows)
+    return { error }
+}
 
 /**
  * Verifica si un correo está pre-aprobado para registrarse como residente.
@@ -166,17 +280,18 @@ export async function registerResidentAction(formData: any) {
  * Maneja la invitación por email, creación de usuario en auth y vinculación.
  */
 export async function adminCreateResidentAction(payload: any) {
-    const { 
-        email, 
-        first_name, 
-        last_name, 
-        phone, 
-        condominium_id, 
-        unit_id, 
-        debt_amount, 
+    const {
+        email,
+        first_name,
+        last_name,
+        phone,
+        condominium_id,
+        unit_id,
+        debt_amount,
+        debt_items,
         status,
         vehicles,
-        business_type 
+        business_type
     } = payload;
     
     const cleanEmail = email.trim().toLowerCase();
@@ -355,6 +470,20 @@ export async function adminCreateResidentAction(payload: any) {
             }));
             const { error: vehError } = await admin.from('vehicles').insert(vehicleInserts);
             if (vehError) console.error('⚠️ Error insertando vehículos:', vehError);
+        }
+
+        // 6. Deuda previa desglosada (alta manual) — una factura real por línea
+        // en vez de un número suelto en debt_amount, para que cada concepto
+        // aparezca en Movimientos y se clasifique solo (pendiente/vencida)
+        // según su fecha, igual que cualquier otro recibo.
+        if (Array.isArray(debt_items) && debt_items.length > 0) {
+            const { error: debtError } = await createDebtLineInvoices(admin, {
+                residentId: newResident.id,
+                condominiumId: condominium_id,
+                unitId: unit_id || null,
+                items: debt_items,
+            });
+            if (debtError) console.error('⚠️ Error creando facturas de deuda previa:', debtError);
         }
 
         console.log(`✅ [adminCreateResidentAction] Todo completado con éxito para: ${cleanEmail}`);

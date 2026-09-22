@@ -722,7 +722,17 @@ export default function ResidentPaymentsClient({
                                         </td>
                                         <td className="px-10 py-8">
                                             <div className="flex justify-end">
-                                                {isRealPaidReceipt ? (
+                                                {!isPaid ? (
+                                                    <motion.button
+                                                        title="Pagar / regularizar saldo"
+                                                        whileHover={{ scale: 1.2, rotate: -12 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        onClick={handleRegularizarClick}
+                                                        className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30 transition-all shadow-[0_0_20px_rgba(99,102,241,0)] hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                                                    >
+                                                        <CreditCard size={20} />
+                                                    </motion.button>
+                                                ) : isRealPaidReceipt ? (
                                                     <motion.button
                                                         title={`Descargar recibo ${inv.folio}`}
                                                         whileHover={{ scale: 1.2, rotate: 12 }}

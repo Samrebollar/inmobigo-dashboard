@@ -154,6 +154,9 @@ export default function ResidentPaymentsClient({
     const searchParams = useSearchParams()
     const [isCheckingOut, setIsCheckingOut] = useState(false)
     const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false)
+    // null = pagar el saldo total (botón del hero). Con valor = pagar solo esa
+    // cuota puntual (icono de pago de una fila específica de la tabla).
+    const [paymentTarget, setPaymentTarget] = useState<{ amount: number; concept?: string } | null>(null)
 
     useEffect(() => {
         const status = searchParams.get('mp_status')
@@ -176,6 +179,19 @@ export default function ResidentPaymentsClient({
     // valide en /seguridad/validacion-pagos, vía subir-comprobante). Si no hay
     // MP conectado no hay elección: se va directo a subir comprobante.
     const handleRegularizarClick = () => {
+        setPaymentTarget(null)
+        if (!mpConnected) {
+            router.push('/residente/subir-comprobante')
+            return
+        }
+        setShowPaymentMethodModal(true)
+    }
+
+    // Icono de pago de una fila puntual en la tabla: a diferencia del botón del
+    // hero (que cobra el saldo total), aquí solo se cobra el monto de esa cuota.
+    const handlePayInvoiceClick = (inv: any) => {
+        const amount = Number(inv.monto || inv.balance_due || inv.amount || 0)
+        setPaymentTarget({ amount, concept: inv.description || undefined })
         if (!mpConnected) {
             router.push('/residente/subir-comprobante')
             return
@@ -187,7 +203,9 @@ export default function ResidentPaymentsClient({
         setShowPaymentMethodModal(false)
         setIsCheckingOut(true)
         try {
-            const result = await createResidentPaymentCheckout()
+            const result = await createResidentPaymentCheckout(
+                paymentTarget ? { amount: paymentTarget.amount, concept: paymentTarget.concept } : undefined
+            )
             if (result.success && result.checkoutUrl) {
                 window.location.href = result.checkoutUrl
             } else {
@@ -724,10 +742,10 @@ export default function ResidentPaymentsClient({
                                             <div className="flex justify-end">
                                                 {!isPaid ? (
                                                     <motion.button
-                                                        title="Pagar / regularizar saldo"
+                                                        title={`Pagar esta cuota ($${Number(inv.monto || 0).toLocaleString('es-MX')})`}
                                                         whileHover={{ scale: 1.2, rotate: -12 }}
                                                         whileTap={{ scale: 0.9 }}
-                                                        onClick={handleRegularizarClick}
+                                                        onClick={() => handlePayInvoiceClick(inv)}
                                                         className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30 transition-all shadow-[0_0_20px_rgba(99,102,241,0)] hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
                                                     >
                                                         <CreditCard size={20} />
@@ -903,7 +921,7 @@ export default function ResidentPaymentsClient({
 
                             <h3 className="text-2xl font-black text-white mb-1">¿Cómo quieres pagar?</h3>
                             <p className="text-zinc-400 text-sm mb-8">
-                                Elige la forma en la que quieres regularizar tu saldo de ${heroDebt.toLocaleString('es-MX')} MXN.
+                                Elige la forma en la que quieres pagar {paymentTarget ? (paymentTarget.concept || 'esta cuota') : 'tu saldo'} de ${(paymentTarget ? paymentTarget.amount : heroDebt).toLocaleString('es-MX')} MXN.
                             </p>
 
                             <div className="space-y-4">

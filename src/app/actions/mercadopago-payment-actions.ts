@@ -10,7 +10,7 @@ import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-servi
  * su saldo — el cobro se hace directo a la cuenta de Mercado Pago del propio
  * condominio (OAuth Connect en payment_accounts), no a la de InmobiGo.
  */
-export async function createResidentPaymentCheckout() {
+export async function createResidentPaymentCheckout(options?: { amount?: number; concept?: string }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -41,15 +41,21 @@ export async function createResidentPaymentCheckout() {
         .eq('resident_id', resident.id)
         .order('created_at', { ascending: false })
 
-    const debt = calculateResidentDebtSummary({
+    const totalDebt = calculateResidentDebtSummary({
         resident,
         invoices: invoices || [],
         unit: resident.units,
     }).debt
 
-    if (debt <= 0) {
+    if (totalDebt <= 0) {
         return { success: false, error: 'no_debt', message: 'No tienes saldo pendiente por pagar.' }
     }
+
+    // Si se manda un monto (pago de una cuota específica desde la tabla), se
+    // cobra ese monto en vez del total de la deuda — nunca más de lo que en
+    // realidad se debe.
+    const requestedAmount = Number(options?.amount)
+    const debt = requestedAmount > 0 ? Math.min(requestedAmount, totalDebt) : totalDebt
 
     const account = await getCondoMercadoPagoAccount(condominiumId)
     if (!account.connected || !account.accessToken) {
@@ -59,6 +65,9 @@ export async function createResidentPaymentCheckout() {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.inmobigo.mx'
     const condoName = resident.condominiums?.name || 'tu condominio'
     const unitLabel = resident.units?.unit_number ? ` — Unidad ${resident.units.unit_number}` : ''
+    const itemTitle = options?.concept
+        ? `${options.concept} — ${condoName}${unitLabel}`
+        : `Cuota de mantenimiento — ${condoName}${unitLabel}`
 
     try {
         const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
@@ -70,7 +79,7 @@ export async function createResidentPaymentCheckout() {
             body: JSON.stringify({
                 items: [
                     {
-                        title: `Cuota de mantenimiento — ${condoName}${unitLabel}`,
+                        title: itemTitle,
                         quantity: 1,
                         unit_price: Number(debt.toFixed(2)),
                         currency_id: 'MXN',

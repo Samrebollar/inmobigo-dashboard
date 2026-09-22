@@ -437,7 +437,12 @@ export default function ResidentPaymentsClient({
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 whileHover={{ scale: 1.005 }}
-                className="relative overflow-hidden bg-zinc-900/50 border border-white/[0.05] rounded-[3rem] p-8 md:p-12 shadow-[0_0_50px_rgba(0,0,0,0.5)] group transition-all duration-700 hover:border-white/10"
+                className={cn(
+                    "relative overflow-hidden bg-zinc-900/50 rounded-[3rem] p-8 md:p-12 group transition-all duration-700 border-4",
+                    heroIsOverdue
+                        ? "border-rose-500 shadow-[0_0_60px_-10px_rgba(244,63,94,0.5)] hover:shadow-[0_0_75px_-10px_rgba(244,63,94,0.7)]"
+                        : "border-blue-500 shadow-[0_0_60px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_0_75px_-10px_rgba(59,130,246,0.7)]"
+                )}
             >
                 {/* Glow Effects Animados */}
                 <motion.div 
@@ -521,7 +526,11 @@ export default function ResidentPaymentsClient({
                                         onClick={handleRegularizarClick}
                                         disabled={isCheckingOut}
                                         className={cn(
-                                            "h-20 px-10 rounded-2xl text-base font-black shadow-2xl transition-all flex items-center gap-3 group/btn disabled:opacity-70",
+                                            // El componente Button trae por defecto "h-10 md:h-9 ... text-base md:text-sm"
+                                            // (size='md') — sin repetir el mismo prefijo "md:" aquí, twMerge no las
+                                            // considera del mismo grupo y las deja convivir, así que en desktop
+                                            // (md+) terminaba ganando el tamaño chico del default.
+                                            "h-20 md:h-20 px-10 md:px-10 rounded-2xl text-base md:text-base font-black shadow-2xl transition-all flex items-center gap-3 group/btn disabled:opacity-70",
                                             heroIsOverdue ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/40"
                                         )}
                                     >
@@ -561,14 +570,9 @@ export default function ResidentPaymentsClient({
                                 rotate: [3, 5, 3]
                             }}
                             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                            className={cn(
-                                "relative z-10 p-10 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-[3rem] border-4 transition-colors",
-                                heroIsOverdue
-                                    ? "border-rose-500 shadow-[0_0_50px_-5px_rgba(244,63,94,0.5)] group-hover:shadow-[0_0_65px_-5px_rgba(244,63,94,0.7)]"
-                                    : "border-blue-500 shadow-[0_0_50px_-5px_rgba(59,130,246,0.5)] group-hover:shadow-[0_0_65px_-5px_rgba(59,130,246,0.7)]"
-                            )}
+                            className="relative z-10 p-10 bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-[3rem] border border-white/10 shadow-2xl group-hover:border-white/20 transition-colors"
                         >
-                            <CreditCard className="h-32 w-32 text-white/5 absolute -top-10 -right-10 rotate-12" />
+                            <CreditCard className="h-32 w-32 text-white/10 absolute -top-10 -right-10 rotate-12" />
                             <div className="space-y-8 relative">
                                 <div className="h-12 w-20 bg-indigo-500/20 rounded-xl" />
                                 <div className="space-y-4">

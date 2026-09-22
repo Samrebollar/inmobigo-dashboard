@@ -438,10 +438,12 @@ export default function ResidentPaymentsClient({
                 animate={{ opacity: 1, y: 0 }}
                 whileHover={{ scale: 1.005 }}
                 className={cn(
-                    "relative overflow-hidden bg-zinc-900/50 rounded-[3rem] p-8 md:p-12 group transition-all duration-700 border-4",
+                    // Contorno apagado en reposo — solo se ilumina al pasar el mouse, y con
+                    // un tono más cálido/apagado que el neón saturado de antes.
+                    "relative overflow-hidden bg-zinc-900/50 rounded-[3rem] p-8 md:p-12 group transition-all duration-500 border-2 shadow-none",
                     heroIsOverdue
-                        ? "border-rose-500 shadow-[0_0_60px_-10px_rgba(244,63,94,0.5)] hover:shadow-[0_0_75px_-10px_rgba(244,63,94,0.7)]"
-                        : "border-blue-500 shadow-[0_0_60px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_0_75px_-10px_rgba(59,130,246,0.7)]"
+                        ? "border-rose-500/20 hover:border-rose-400/50 hover:shadow-[0_0_40px_-12px_rgba(225,29,72,0.35)]"
+                        : "border-blue-500/20 hover:border-blue-400/50 hover:shadow-[0_0_40px_-12px_rgba(37,99,235,0.35)]"
                 )}
             >
                 {/* Glow Effects Animados */}

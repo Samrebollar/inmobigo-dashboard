@@ -77,26 +77,34 @@ export default async function ResidentePage() {
     }
 
     {
-        const { data: invoices } = await supabase
+        const { data: invoicesData } = await supabase
             .from('resident_invoices')
             .select('*')
             .eq('resident_id', resident.id)
             .order('created_at', { ascending: false })
 
-        if (invoices && invoices.length > 0) {
-            const today = new Date()
+        const invoices = invoicesData || []
+        const today = new Date()
 
-            // Misma fórmula que usan Propiedades > Residentes y Gestión de
-            // Cobranza, para que el residente vea exactamente lo mismo que
-            // su administrador (antes este cálculo era independiente y
-            // podía dar un número distinto).
-            const { debt } = calculateResidentDebtSummary({
-                resident,
-                invoices,
-                unit: resident.units,
-            })
-            financialData.saldoPendiente = debt
+        // Misma fórmula que usan Propiedades > Residentes y Gestión de
+        // Cobranza, para que el residente vea exactamente lo mismo que
+        // su administrador (antes este cálculo era independiente y
+        // podía dar un número distinto). Se calcula SIEMPRE, incluso sin
+        // facturas reales todavía: calculateResidentDebtSummary ya cubre la
+        // cuota del mes en curso y el debt_amount arrastrado del residente
+        // aunque el cron de facturación no haya generado el recibo. Antes
+        // esto vivía detrás de un "if (invoices.length > 0)", así que un
+        // residente sin facturas generadas (el caso más común: recién dado
+        // de alta, o el mes actual sin cron corrido) siempre veía $0 aquí
+        // aunque el panel del administrador sí le mostrara deuda.
+        const { debt } = calculateResidentDebtSummary({
+            resident,
+            invoices,
+            unit: resident.units,
+        })
+        financialData.saldoPendiente = debt
 
+        if (invoices.length > 0) {
             // Último pago: la factura paid más reciente (usa balance_due=0 como indicador de pago)
             const lastPaid = invoices.find((inv: any) => inv.status === 'paid')
             if (lastPaid) {

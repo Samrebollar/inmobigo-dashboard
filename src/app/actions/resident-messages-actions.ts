@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
 /**
@@ -9,6 +10,26 @@ import { revalidatePath } from 'next/cache'
  * propia que ya restringe cada lado a su propio hilo/organización, así que
  * no hace falta (ni conviene) saltarla aquí.
  */
+
+async function attachSenderAvatars(messages: any[]) {
+    const senderIds = Array.from(new Set(messages.map(m => m.sender_id).filter(Boolean)))
+    if (senderIds.length === 0) return messages
+
+    // Un residente no puede leer el profile de su admin (ni viceversa entre
+    // condominios distintos) con el cliente de sesión — misma limitación de
+    // RLS de profiles resuelta en resolveProfileData. La foto de perfil no
+    // es un dato sensible, así que se resuelve con el admin client.
+    const adminSupabase = createAdminClient()
+    const { data: profiles } = await adminSupabase
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('id', senderIds)
+
+    const avatarById: Record<string, string | null> = {}
+    for (const p of profiles || []) avatarById[p.id] = p.avatar_url || null
+
+    return messages.map(m => ({ ...m, sender_avatar_url: m.sender_id ? avatarById[m.sender_id] || null : null }))
+}
 
 async function getResidentContext(supabase: any, userId: string) {
     const { data: resident } = await supabase
@@ -58,7 +79,9 @@ export async function getResidentMessageThreadAction() {
             .in('id', unreadAdminMessageIds)
     }
 
-    return { success: true, data: messages || [], residentId: ctx.residentId }
+    const withAvatars = await attachSenderAvatars(messages || [])
+
+    return { success: true, data: withAvatars, residentId: ctx.residentId }
 }
 
 export async function sendResidentMessageAction(body: string) {
@@ -90,7 +113,8 @@ export async function sendResidentMessageAction(body: string) {
     if (error) return { success: false, error: error.message }
 
     revalidatePath('/residente/help')
-    return { success: true, data }
+    const [withAvatar] = await attachSenderAvatars([data])
+    return { success: true, data: withAvatar }
 }
 
 /**
@@ -122,12 +146,23 @@ export async function getAdminMessageThreadsAction() {
     const { data: residentsData } = residentIds.length > 0
         ? await supabase
             .from('residents')
-            .select('id, first_name, last_name, units(unit_number)')
+            .select('id, first_name, last_name, user_id, units(unit_number)')
             .in('id', residentIds)
         : { data: [] as any[] }
 
     const residentById: Record<string, any> = {}
     for (const r of residentsData || []) residentById[r.id] = r
+
+    const residentUserIds = (residentsData || []).map(r => r.user_id).filter(Boolean)
+    const avatarByUserId: Record<string, string | null> = {}
+    if (residentUserIds.length > 0) {
+        const adminSupabase = createAdminClient()
+        const { data: residentProfiles } = await adminSupabase
+            .from('profiles')
+            .select('id, avatar_url')
+            .in('id', residentUserIds)
+        for (const p of residentProfiles || []) avatarByUserId[p.id] = p.avatar_url || null
+    }
 
     const threadsByResident = new Map<string, any>()
     for (const m of messages || []) {
@@ -137,6 +172,7 @@ export async function getAdminMessageThreadsAction() {
                 residentId: m.resident_id,
                 residentName: r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : (m.sender_role === 'resident' ? m.sender_name : 'Residente'),
                 unitNumber: r?.units?.unit_number || null,
+                residentAvatarUrl: r?.user_id ? avatarByUserId[r.user_id] || null : null,
                 lastMessage: m.body,
                 lastMessageAt: m.created_at,
                 lastSenderRole: m.sender_role,
@@ -181,7 +217,9 @@ export async function getAdminThreadMessagesAction(residentId: string) {
             .in('id', unreadResidentMessageIds)
     }
 
-    return { success: true, data: messages || [] }
+    const withAvatars = await attachSenderAvatars(messages || [])
+
+    return { success: true, data: withAvatars }
 }
 
 export async function sendAdminMessageAction(residentId: string, body: string) {
@@ -235,5 +273,6 @@ export async function sendAdminMessageAction(residentId: string, body: string) {
     if (error) return { success: false, error: error.message }
 
     revalidatePath('/dashboard/mensajes')
-    return { success: true, data }
+    const [withAvatar] = await attachSenderAvatars([data])
+    return { success: true, data: withAvatar }
 }

@@ -1,6 +1,11 @@
 import { Resident } from '@/types/residents'
 import { ResidentInvoice } from '@/types/finance'
 
+const MESES_ES = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+]
+
 /**
  * Safely parses a date string or Date object to local parts (year, month, day) without timezone shifts.
  */
@@ -330,9 +335,10 @@ export function calculateResidentMonthlyFinancials({
             const virtualFolio = originalMaintenance?.folio 
                 ? `${originalMaintenance.folio}-RESID` 
                 : `INV-VENC-${selectedYear}-${String(m + 1).padStart(2, '0')}`
-            const virtualDescription = originalMaintenance?.description 
+            const virtualMonthLabel = `${MESES_ES[m]} ${selectedYear}`
+            const virtualDescription = originalMaintenance?.description
                 ? `${originalMaintenance.description} (Saldo Restante Vencido)`
-                : `Cuota de Mantenimiento Vencida`
+                : `Cuota de Mantenimiento ${virtualMonthLabel}`
 
             // Create a default date for the unit's payment deadline day of that month
             // (or today if it's the current month and today is before the deadline)

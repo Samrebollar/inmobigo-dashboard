@@ -81,7 +81,16 @@ function mapStatus(status: string) {
     return map[status] || status
 }
 
-async function generateReceiptForResident(payment: any, residentName: string, condoName: string) {
+function formatReceiptPaymentMethod(method?: string | null): string {
+    if (!method) return 'Transferencia / Depósito'
+    const m = method.toLowerCase()
+    if (m.includes('mercado')) return 'Mercado Pago'
+    if (m.includes('efectivo')) return 'Efectivo'
+    if (m.includes('transferencia') || m.includes('depósito') || m.includes('deposito')) return 'Transferencia / Depósito'
+    return method
+}
+
+async function generateReceiptForResident(payment: any, residentName: string, condoName: string, unitNumber?: string) {
     try {
         const folio = payment.folio
         if (!folio) return
@@ -107,23 +116,24 @@ async function generateReceiptForResident(payment: any, residentName: string, co
         doc.setFont('helvetica', 'normal')
         doc.text(`Nombre: ${residentName}`, 14, 60)
         if (condoName) doc.text(`Condominio: ${condoName}`, 14, 66)
+        if (unitNumber) doc.text(`Unidad: ${unitNumber}`, 14, 72)
         doc.setDrawColor(220, 220, 220)
-        doc.line(14, 76, 196, 76)
+        doc.line(14, 82, 196, 82)
         // Payment details
         doc.setFontSize(12)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(40, 40, 40)
-        doc.text('DETALLES DEL PAGO', 14, 88)
+        doc.text('DETALLES DEL PAGO', 14, 94)
         const tableRows = [[
             payment.concept || 'Cuota de Mantenimiento',
             `$${Number(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-            'Transferencia / Depósito',
+            formatReceiptPaymentMethod(payment.payment_method),
             payment.date
         ]]
         autoTable(doc, {
             head: [['Concepto', 'Monto Pagado', 'Forma de Pago', 'Fecha']],
             body: tableRows,
-            startY: 94,
+            startY: 100,
             styles: { fontSize: 10, cellPadding: 5 },
             headStyles: { fillColor: [79, 70, 229] },
             alternateRowStyles: { fillColor: [245, 245, 245] },
@@ -778,9 +788,10 @@ export default function ResidentPaymentsClient({
                                                         whileHover={{ scale: 1.2, rotate: 12 }}
                                                         whileTap={{ scale: 0.9 }}
                                                         onClick={() => generateReceiptForResident(
-                                                            { folio: inv.folio, amount: inv.monto, date: formatDate(inv.paid_at || inv.due_date || inv.created_at) },
+                                                            { folio: inv.folio, amount: inv.monto, payment_method: inv.payment_method, date: formatDate(inv.paid_at || inv.due_date || inv.created_at) },
                                                             resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
-                                                            resident.condominiums?.name || ''
+                                                            resident.condominiums?.name || '',
+                                                            unit?.unit_number
                                                         )}
                                                         className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all shadow-[0_0_20px_rgba(16,185,129,0)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
                                                     >
@@ -878,9 +889,10 @@ export default function ResidentPaymentsClient({
                                                         whileHover={{ scale: 1.15, rotate: 8 }}
                                                         whileTap={{ scale: 0.9 }}
                                                         onClick={() => generateReceiptForResident(
-                                                            { folio: pay.folio, concept: pay.concept, amount: pay.amount, date: formatDate(pay.paid_at || pay.created_at) },
+                                                            { folio: pay.folio, concept: pay.concept, amount: pay.amount, payment_method: pay.payment_method, date: formatDate(pay.paid_at || pay.created_at) },
                                                             resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
-                                                            resident.condominiums?.name || ''
+                                                            resident.condominiums?.name || '',
+                                                            unit?.unit_number
                                                         )}
                                                         className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all"
                                                     >

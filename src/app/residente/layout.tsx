@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload, ClipboardList, HelpCircle } from 'lucide-react'
+import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload, ClipboardList, MessageCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -192,8 +192,8 @@ export default async function ResidenteLayout({
                     href="/residente/help"
                     className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                 >
-                    <HelpCircle size={18} />
-                    <span>Ayuda</span>
+                    <MessageCircle size={18} />
+                    <span>Contacto</span>
                 </Link>
                 <Link
                     href="/residente/perfil"

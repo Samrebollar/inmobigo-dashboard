@@ -87,13 +87,12 @@ export function ResidentMessageThread({ adminName }: { adminName: string }) {
         // respuesta del admin no dependa solo del INSERT en vivo.
         const interval = setInterval(async () => {
             const res = await getResidentMessageThreadAction()
-            if (res.success) {
-                setMessages(prev => {
-                    const fresh = res.data as ThreadMessage[]
-                    if (prev.length === fresh.length && prev.every((m, i) => m.id === fresh[i]?.id)) return prev
-                    return fresh
-                })
-            }
+            // Se reemplaza siempre (no solo cuando cambia el conteo): un
+            // mensaje del admin que llegó por Realtime entra sin foto de
+            // perfil (el payload crudo de Postgres no trae ese campo, se
+            // calcula aparte en el server action), así que este refresco
+            // también sirve para completarla.
+            if (res.success) setMessages(res.data as ThreadMessage[])
         }, 4000)
 
         return () => {

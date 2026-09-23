@@ -83,13 +83,13 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
     const loadMessages = async (residentId: string, { silent = false }: { silent?: boolean } = {}) => {
         if (!silent) setLoadingMessages(true)
         const res = await getAdminThreadMessagesAction(residentId)
+        // Se reemplaza siempre (no solo cuando cambia el conteo): un mensaje
+        // del residente que llegó por Realtime entra sin foto de perfil (el
+        // payload crudo de Postgres no trae ese campo, se calcula aparte en
+        // el server action), así que este refresco también sirve para
+        // completarla.
         if (res.success) {
-            setMessages(prev => {
-                const fresh = res.data as ThreadMessage[]
-                // Evita parpadeos: si no cambió nada, no reemplaza el arreglo.
-                if (prev.length === fresh.length && prev.every((m, i) => m.id === fresh[i]?.id)) return prev
-                return fresh
-            })
+            setMessages(res.data as ThreadMessage[])
             setThreads(prev => prev.map(t => t.residentId === residentId ? { ...t, unreadCount: 0 } : t))
         }
         if (!silent) setLoadingMessages(false)

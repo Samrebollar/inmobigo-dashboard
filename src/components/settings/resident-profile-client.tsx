@@ -99,7 +99,7 @@ export default function ResidentProfileClient({
         }
     })
 
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null)
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || user.user_metadata?.avatar_url || null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const unit = resident?.units

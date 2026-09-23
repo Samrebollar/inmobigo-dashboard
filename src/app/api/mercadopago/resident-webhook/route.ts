@@ -81,14 +81,14 @@ async function handleWebhook(req: Request) {
             return NextResponse.json({ message: 'Ya procesado' }, { status: 200 })
         }
 
-        const { data: resident } = await adminSupabase
+        const { data: resident, error: residentError } = await adminSupabase
             .from('residents')
-            .select('id, condominium_id, organization_id, debt_amount')
+            .select('id, condominium_id, debt_amount')
             .eq('id', residentId)
             .maybeSingle()
 
         if (!resident) {
-            console.error('[MP Resident Webhook] Residente no encontrado:', residentId)
+            console.error('[MP Resident Webhook] Residente no encontrado:', residentId, residentError)
             return NextResponse.json({ error: 'Residente no encontrado' }, { status: 200 })
         }
 

@@ -79,7 +79,14 @@ export async function resolveProfileData(supabase: SupabaseClient, user: any): P
 
     let adminContact: AdminContact | null = null
     if (organizationId && !isAdmin) {
-        const { data: adminProfile } = await supabase
+        // Un residente no tiene organization_id en su propio profile (solo el
+        // staff lo tiene), así que la RLS de profiles ("mi org = organization_id
+        // del profile de quien pregunta") nunca deja leer aquí con el cliente
+        // de sesión. Es una sola fila de datos de contacto no sensibles del
+        // admin de su propia organización, así que se usa el admin client.
+        const { createAdminClient } = await import('@/utils/supabase/admin')
+        const adminSupabase = createAdminClient()
+        const { data: adminProfile } = await adminSupabase
             .from('profiles')
             .select('full_name, email, phone, avatar_url')
             .eq('organization_id', organizationId)

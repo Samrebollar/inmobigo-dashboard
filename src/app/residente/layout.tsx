@@ -184,7 +184,7 @@ export default async function ResidenteLayout({
                     className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
                 >
                     <Sparkles size={18} className="text-indigo-400" />
-                    <span>Servicios Premium</span>
+                    <span>Servicios Hogar</span>
                 </Link>
             </nav>
             <div className="p-4 border-t border-zinc-800 bg-zinc-900/30 space-y-1">

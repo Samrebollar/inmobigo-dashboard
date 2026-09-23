@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import PremiumServicesClient from '@/components/dashboard/premium-services/premium-services-client'
+import HomeServicesClient from '@/components/residente/home-services-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,17 +15,23 @@ export default async function PremiumServicesPage() {
         redirect('/login')
     }
 
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
+    const { data: resident } = await supabase
+        .from('residents')
+        .select('first_name, last_name, units(unit_number), condominiums(name)')
+        .eq('user_id', user.id)
         .maybeSingle()
 
-    const displayName = profile?.full_name || 'Usuario'
+    const residentName = resident
+        ? `${resident.first_name || ''} ${resident.last_name || ''}`.trim()
+        : (user.user_metadata?.full_name || 'Residente')
 
     return (
         <div className="min-h-screen bg-zinc-950">
-            <PremiumServicesClient userName={displayName} />
+            <HomeServicesClient
+                residentName={residentName || 'Residente'}
+                unitNumber={(resident as any)?.units?.unit_number || null}
+                condominiumName={(resident as any)?.condominiums?.name || null}
+            />
         </div>
     )
 }

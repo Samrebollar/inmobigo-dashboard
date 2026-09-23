@@ -39,7 +39,7 @@ const QUICK_ACCESS = [
     { label: 'Amenidades', href: '/mobile/amenidades', icon: Waves },
     { label: 'Incidencias', href: '/mobile/incidencias', icon: AlertTriangle },
     { label: 'Paquetería', href: '/mobile/paqueteria', icon: Package },
-    { label: 'Documentos', href: '/residente', icon: FileText },
+    { label: 'Documentos', href: '/mobile/documentos', icon: FileText },
 ]
 
 function formatNoticeDate(iso: string) {

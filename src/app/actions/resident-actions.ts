@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+import { createClient } from '@/utils/supabase/server'
 import type { DebtLineItem } from '@/types/residents'
 
 const DEBT_CATEGORY_LABEL: Record<string, string> = {
@@ -494,9 +495,59 @@ export async function adminCreateResidentAction(payload: any) {
 
     } catch (err: any) {
         console.error('❌ [adminCreateResidentAction] Error crítico:', err);
-        return { 
-            success: false, 
-            error: 'Ocurrió un fallo inesperado en el servidor durante la creación del residente.' 
+        return {
+            success: false,
+            error: 'Ocurrió un fallo inesperado en el servidor durante la creación del residente.'
         };
     }
+}
+
+/**
+ * Últimos pagos reales del residente autenticado, para la sección
+ * "Actividad Reciente" de su dashboard. Se lee resident_invoices con
+ * status='paid' (no resident_invoice_payments) porque es la única tabla
+ * que TODOS los canales de pago actualizan de forma consistente — Mercado
+ * Pago, "Registrar Pago" del admin, y la validación manual de comprobantes
+ * (esta última no siempre inserta en resident_invoice_payments, pero
+ * siempre deja el invoice en status='paid'). Requiere el admin client
+ * porque resident_invoices también guarda facturas de otros residentes del
+ * mismo condominio y su RLS es a nivel de staff/organización; se acota
+ * estrictamente al resident_id ya verificado por sesión.
+ */
+export async function getResidentRecentMovementsAction() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'No autenticado', data: [] }
+
+    const admin = createAdminClient()
+    const { data: resident } = await admin
+        .from('residents')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+    if (!resident) return { success: false, error: 'Residente no encontrado', data: [] }
+
+    const { data: paidInvoices, error } = await admin
+        .from('resident_invoices')
+        .select('id, amount, description, paid_at, updated_at, created_at')
+        .eq('resident_id', resident.id)
+        .eq('status', 'paid')
+
+    if (error) return { success: false, error: error.message, data: [] }
+    if (!paidInvoices || paidInvoices.length === 0) return { success: true, data: [] }
+
+    const effectiveDate = (inv: any) => inv.paid_at || inv.updated_at || inv.created_at
+
+    const recent = [...paidInvoices]
+        .sort((a, b) => new Date(effectiveDate(b)).getTime() - new Date(effectiveDate(a)).getTime())
+        .slice(0, 5)
+        .map(inv => ({
+            id: inv.id,
+            amount: inv.amount,
+            date: effectiveDate(inv),
+            concept: inv.description || 'Cuota de Mantenimiento',
+        }))
+
+    return { success: true, data: recent }
 }

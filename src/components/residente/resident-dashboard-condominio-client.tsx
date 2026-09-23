@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
 import { getAnnouncementsAction, acknowledgeAnnouncementAction } from '@/app/actions/announcement-actions'
-import { getValidations } from '@/app/actions/payment-validation-actions'
+import { getResidentRecentMovementsAction } from '@/app/actions/resident-actions'
 import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -107,19 +107,13 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
         fetchAnnouncements();
 
         async function fetchMovements() {
-            const res = await getValidations()
+            const res = await getResidentRecentMovementsAction()
             if (res.success && isMounted) {
-                const myApproved = (res.data ?? []).filter((v: any) => 
-                    v.status === 'aprobado' && 
-                    (v.resident_name === `${resident.first_name} ${resident.last_name}`.trim() || 
-                     v.unit === resident.units?.unit_number)
-                )
-                
-                const mappedMovements = myApproved.map((v: any) => ({
-                    title: 'Pago Verificado',
-                    desc: v.nota || 'Cuota de Mantenimiento',
-                    amount: v.amount,
-                    date: v.date,
+                const mappedMovements = (res.data ?? []).map((p: any) => ({
+                    title: 'Pago Registrado',
+                    desc: `${p.concept} · $${Number(p.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+                    amount: p.amount,
+                    date: p.date ? format(new Date(p.date), "d MMM yyyy", { locale: es }) : '',
                     icon: CheckCircle2,
                     color: 'emerald'
                 }))

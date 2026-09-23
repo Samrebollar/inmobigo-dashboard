@@ -204,28 +204,13 @@ export async function getAmenitiesAction(organizationId: string, condominiumId?:
 
         if (error) throw error
 
-        // 2. Si está vacío, sembrar por defecto desde el servidor (más fiable)
-        if (!data || data.length === 0) {
-            const defaultAmenities = [
-                { name: 'Alberca', icon: 'Waves', description: 'Alberca templada con vista al jardín.', capacity: 20, base_price: 0, deposit_amount: 0, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, color: 'from-blue-600 to-sky-500' },
-                { name: 'Área de Asadores', icon: 'Flame', description: 'Espacio parrillero totalmente equipado.', capacity: 12, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, color: 'from-orange-600 to-amber-500' },
-                { name: 'Gimnasio Pro', icon: 'Dumbbell', description: 'Equipamiento de alto rendimiento.', capacity: 15, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, color: 'from-emerald-600 to-teal-500' },
-                { name: 'Salón de Fiestas', icon: 'PartyPopper', description: 'Salón premium para eventos sociales.', capacity: 50, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, color: 'from-indigo-600 to-purple-500' }
-            ]
-
-            const { data: seeded, error: seedError } = await adminClient
-                .from('amenities')
-                .insert(defaultAmenities)
-                .select()
-
-            if (seedError) {
-                console.error('Error seeding amenities:', seedError)
-                // If seeding fails, we just return empty data but log it
-            } else {
-                data = seeded
-            }
-        }
-
+        // No se siembra un catálogo por defecto: si el condominio/organización
+        // todavía no configuró amenidades, se devuelve vacío tal cual — antes
+        // se insertaban 4 amenidades inventadas (con precio/depósito falsos)
+        // directo en la tabla real apenas un residente entraba a la pantalla,
+        // así que un admin que nunca había configurado nada veía "Ningún
+        // Espacio Registrado" en Propiedades > Amenidades mientras el
+        // residente sí veía 4 espacios reservables que no existían.
         return { success: true, data: data || [] }
     } catch (error: any) {
         console.error('Error in getAmenitiesAction:', error)
@@ -236,8 +221,7 @@ export async function getAmenitiesAction(organizationId: string, condominiumId?:
 /**
  * Obtiene las amenidades propias de UN condominio/propiedad (Bypass RLS)
  * Usado por Propiedades → Configuración, donde cada propiedad administra
- * sus propios espacios según su operación. Si el condominio no tiene
- * amenidades propias, siembra 4 por defecto.
+ * sus propios espacios según su operación.
  */
 export async function getAmenitiesByCondominiumAction(condominiumId: string, organizationId: string) {
     if (!condominiumId) return { success: false, error: 'ID de condominio no proporcionado' }
@@ -253,26 +237,8 @@ export async function getAmenitiesByCondominiumAction(condominiumId: string, org
 
         if (error) throw error
 
-        if (!data || data.length === 0) {
-            const defaultAmenities = [
-                { name: 'Alberca', icon: 'Waves', description: 'Alberca templada con vista al jardín.', capacity: 20, base_price: 0, deposit_amount: 0, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-blue-600 to-sky-500' },
-                { name: 'Área de Asadores', icon: 'Flame', description: 'Espacio parrillero totalmente equipado.', capacity: 12, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '09:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-orange-600 to-amber-500' },
-                { name: 'Gimnasio Pro', icon: 'Dumbbell', description: 'Equipamiento de alto rendimiento.', capacity: 15, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-emerald-600 to-teal-500' },
-                { name: 'Salón de Fiestas', icon: 'PartyPopper', description: 'Salón premium para eventos sociales.', capacity: 50, base_price: 0, deposit_amount: 500, status: 'active', use_hours: '08:00 - 22:00', organization_id: organizationId, condominium_id: condominiumId, color: 'from-indigo-600 to-purple-500' }
-            ]
-
-            const { data: seeded, error: seedError } = await adminClient
-                .from('amenities')
-                .insert(defaultAmenities)
-                .select()
-
-            if (seedError) {
-                console.error('Error seeding condominium amenities:', seedError)
-            } else {
-                data = seeded
-            }
-        }
-
+        // No se siembra un catálogo por defecto — ver comentario equivalente
+        // en getAmenitiesAction.
         return { success: true, data: data || [] }
     } catch (error: any) {
         console.error('Error in getAmenitiesByCondominiumAction:', error)

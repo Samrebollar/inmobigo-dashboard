@@ -10,7 +10,7 @@ const NAV_ITEMS = [
     { href: '/mobile/pagos', label: 'Pagos', icon: Wallet },
     { href: '/mobile/pase', label: 'QR', icon: QrCode, isCenter: true },
     { href: '/mobile/avisos', label: 'Avisos', icon: Bell },
-    { href: '/residente/perfil', label: 'Perfil', icon: User },
+    { href: '/mobile/perfil', label: 'Perfil', icon: User },
 ]
 
 export function MobileBottomNav() {

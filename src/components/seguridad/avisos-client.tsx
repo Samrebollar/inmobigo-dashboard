@@ -271,7 +271,17 @@ export function AvisosClient({
                         setPackageAlerts(prev => [newAlert, ...prev])
                         // toast.info(`📦 Nuevo paquete: ${newAlert.carrier} para ${newAlert.resident_name}`)
                     } else if (payload.eventType === 'UPDATE') {
-                        setPackageAlerts(prev => prev.map(a => a.id === (payload.new as any).id ? payload.new : a))
+                        const updated = payload.new as any
+                        // Reemplazar el objeto entero con payload.new perdía
+                        // condominium_id/organization_name (enriquecidos aparte,
+                        // no columnas reales), así que al autorizar/rechazar la
+                        // tarjeta dejaba de coincidir con el filtro de condominio
+                        // activo y desaparecía sin avisar que sí se guardó.
+                        if (updated.status === 'closed' || updated.status === 'rejected') {
+                            setPackageAlerts(prev => prev.filter(a => a.id !== updated.id))
+                        } else {
+                            setPackageAlerts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a))
+                        }
                     } else if (payload.eventType === 'DELETE') {
                         setPackageAlerts(prev => prev.filter(a => a.id !== (payload.old as any).id))
                     }

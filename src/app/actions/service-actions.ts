@@ -34,7 +34,7 @@ export async function deleteVisitorPassAction(passId: string) {
  */
 export async function updatePackageAlertStatusAction(params: {
     id: string,
-    status: 'received' | 'closed',
+    status: 'received' | 'closed' | 'rejected',
     adminUserId: string
 }) {
     const { id, status, adminUserId } = params

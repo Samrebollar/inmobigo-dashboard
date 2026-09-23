@@ -234,7 +234,18 @@ export function AvisosClient({
                                 })
                         }
                     } else if (payload.eventType === 'UPDATE') {
-                        setPackageAlerts(prev => prev.map(a => a.id === (payload.new as any).id ? payload.new : a))
+                        const updated = payload.new as any
+                        // Un UPDATE de Realtime solo trae las columnas reales de la tabla,
+                        // sin condominium_id/organization_name (enriquecidos aparte del
+                        // lado del cliente en el INSERT). Reemplazar el objeto entero con
+                        // payload.new perdía esos campos, así que una vez autorizada la
+                        // alerta dejaba de coincidir con el filtro de condominio activo y
+                        // la tarjeta simplemente desaparecía sin avisar que sí se guardó.
+                        if (updated.status === 'closed' || updated.status === 'rejected') {
+                            setPackageAlerts(prev => prev.filter(a => a.id !== updated.id))
+                        } else {
+                            setPackageAlerts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a))
+                        }
                     } else if (payload.eventType === 'DELETE') {
                         setPackageAlerts(prev => prev.filter(a => a.id !== (payload.old as any).id))
                     }

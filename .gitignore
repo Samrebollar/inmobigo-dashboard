@@ -39,3 +39,23 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capacitor / Android / iOS build outputs (los proyectos android/ e ios/
+# sí se versionan — son el "cascarón" nativo; solo se ignoran sus
+# artefactos de build, que cada quien genera localmente)
+android/.gradle
+android/build
+android/app/build
+android/local.properties
+android/captures
+android/.idea
+ios/App/Pods
+ios/App/build
+ios/App/DerivedData
+ios/App/*.xcworkspace/xcuserdata
+ios/App/*.xcodeproj/xcuserdata
+ios/App/App/public
+android/app/src/main/assets/public
+*.ipa
+*.apk
+*.aab

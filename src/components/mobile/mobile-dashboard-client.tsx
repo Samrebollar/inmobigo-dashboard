@@ -34,7 +34,7 @@ interface Activity {
 }
 
 const QUICK_ACCESS = [
-    { label: 'Mis pagos', href: '/residente/payments', icon: Wallet },
+    { label: 'Mis pagos', href: '/mobile/pagos', icon: Wallet },
     { label: 'Pase visita', href: '/residente/servicios', icon: QrCode },
     { label: 'Amenidades', href: '/residente/amenidades', icon: Waves },
     { label: 'Incidencias', href: '/residente/maintenance', icon: AlertTriangle },
@@ -146,7 +146,7 @@ export default function MobileDashboardClient({
                             </p>
                         </div>
                         <Link
-                            href="/residente/payments"
+                            href="/mobile/pagos"
                             className="rounded-[12px] bg-[#004AC6] px-4 py-2 text-[12px] font-bold text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]"
                         >
                             Ver recibo

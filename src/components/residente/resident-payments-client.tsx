@@ -90,7 +90,7 @@ function formatReceiptPaymentMethod(method?: string | null): string {
     return method
 }
 
-async function generateReceiptForResident(payment: any, residentName: string, condoName: string, unitNumber?: string) {
+export async function generateReceiptForResident(payment: any, residentName: string, condoName: string, unitNumber?: string) {
     try {
         const folio = payment.folio
         if (!folio) return

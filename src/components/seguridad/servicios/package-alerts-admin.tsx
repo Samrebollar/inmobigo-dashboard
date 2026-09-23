@@ -91,7 +91,7 @@ export function PackageAlertsAdmin({
         }
     }
 
-    const handleUpdateStatus = async (id: string, newStatus: 'received' | 'closed') => {
+    const handleUpdateStatus = async (id: string, newStatus: 'received' | 'closed' | 'rejected') => {
         try {
             // Usar user_id del objeto admin (que viene de auth.user)
             const adminUserId = admin.user_id || admin.id
@@ -102,12 +102,13 @@ export function PackageAlertsAdmin({
                 status: newStatus,
                 adminUserId
             })
-            
+
             if (!result.success) throw new Error(result.error)
-            
-            toast.success(`Alerta marcada como ${newStatus === 'received' ? 'recibida' : 'cerrada'}`)
-            
-            if (newStatus === 'closed') {
+
+            const statusLabel = newStatus === 'received' ? 'recibida' : newStatus === 'rejected' ? 'rechazada' : 'cerrada'
+            toast.success(`Alerta marcada como ${statusLabel}`)
+
+            if (newStatus === 'closed' || newStatus === 'rejected') {
                 setAlerts(prev => prev.filter(a => a.id !== id))
             }
         } catch (error: any) {
@@ -284,13 +285,13 @@ export function PackageAlertsAdmin({
                                             )}
                                             
                                             <button
-                                                onClick={() => handleUpdateStatus(alert.id, 'closed')}
+                                                onClick={() => handleUpdateStatus(alert.id, alert.status === 'pending' ? 'rejected' : 'closed')}
                                                 className={`h-12 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-3 ${
-                                                    alert.status === 'received' 
-                                                    ? 'flex-1 bg-zinc-800 hover:bg-emerald-600 text-zinc-400 hover:text-white border border-zinc-700 hover:border-emerald-500 shadow-xl' 
-                                                    : 'w-12 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 hover:text-white border border-zinc-700/30'
+                                                    alert.status === 'received'
+                                                    ? 'flex-1 bg-zinc-800 hover:bg-emerald-600 text-zinc-400 hover:text-white border border-zinc-700 hover:border-emerald-500 shadow-xl'
+                                                    : 'w-12 bg-zinc-800/50 hover:bg-rose-600 text-zinc-500 hover:text-white border border-zinc-700/30 hover:border-rose-500'
                                                 }`}
-                                                title="Cerrar Alerta"
+                                                title={alert.status === 'pending' ? 'Rechazar acceso' : 'Cerrar Alerta'}
                                             >
                                                 {alert.status === 'received' ? <><CheckCircle2 size={18} /> Entregado / Cerrar</> : <XCircle size={18} />}
                                             </button>

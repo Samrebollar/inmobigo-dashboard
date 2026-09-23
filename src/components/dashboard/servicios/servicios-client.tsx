@@ -50,14 +50,19 @@ export default function ServiciosClient({ resident }: { resident: any }) {
                     const newRow = payload.new as any;
                     const oldRow = payload.old as any;
 
-                    if (payload.eventType === 'UPDATE' && newRow.status === 'received' && (!oldRow || oldRow.status !== 'received')) {
-                        // Solo mostramos toast si el ID del residente coincide
-                        if (newRow.resident_id === resident?.user_id) {
-                            const carrier = newRow.carrier || 'Un paquete';
-                            const orgName = resident.condominiums?.name || 'la administración';
-                            
+                    if (payload.eventType === 'UPDATE' && newRow.resident_id === resident?.user_id) {
+                        const carrier = newRow.carrier || 'Un paquete';
+                        const orgName = resident.condominiums?.name || 'la administración';
+
+                        if (newRow.status === 'received' && (!oldRow || oldRow.status !== 'received')) {
                             toast.success(`📦 ¡Tu paquete de ${carrier} ha llegado!`, {
                                 description: `El personal de seguridad dio ingreso a ${orgName}.`,
+                                duration: 20000,
+                                position: 'top-center'
+                            });
+                        } else if (newRow.status === 'rejected' && (!oldRow || oldRow.status !== 'rejected')) {
+                            toast.error(`📦 Tu aviso de ${carrier} fue rechazado`, {
+                                description: `La administración de ${orgName} no autorizó el acceso.`,
                                 duration: 20000,
                                 position: 'top-center'
                             });

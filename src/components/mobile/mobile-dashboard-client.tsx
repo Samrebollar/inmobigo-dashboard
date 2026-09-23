@@ -38,7 +38,7 @@ const QUICK_ACCESS = [
     { label: 'Pase visita', href: '/mobile/pase', icon: QrCode },
     { label: 'Amenidades', href: '/mobile/amenidades', icon: Waves },
     { label: 'Incidencias', href: '/mobile/incidencias', icon: AlertTriangle },
-    { label: 'Paquetería', href: '/residente/servicios', icon: Package },
+    { label: 'Paquetería', href: '/mobile/paqueteria', icon: Package },
     { label: 'Documentos', href: '/residente', icon: FileText },
 ]
 

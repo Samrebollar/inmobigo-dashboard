@@ -841,6 +841,7 @@ export default function ResidentPaymentsClient({
                                         <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Folio / Transacción</th>
                                         <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-right">Monto</th>
                                         <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-center">Estado</th>
+                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-right">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/[0.03]">
@@ -869,6 +870,23 @@ export default function ResidentPaymentsClient({
                                                 <Badge className="px-4 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                                                     Completado
                                                 </Badge>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex justify-end">
+                                                    <motion.button
+                                                        title={`Ver recibo ${pay.folio || ''}`}
+                                                        whileHover={{ scale: 1.15, rotate: 8 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        onClick={() => generateReceiptForResident(
+                                                            { folio: pay.folio, concept: pay.concept, amount: pay.amount, date: formatDate(pay.paid_at || pay.created_at) },
+                                                            resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
+                                                            resident.condominiums?.name || ''
+                                                        )}
+                                                        className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all"
+                                                    >
+                                                        <Receipt size={16} />
+                                                    </motion.button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

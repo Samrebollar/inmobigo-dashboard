@@ -119,7 +119,7 @@ export default function MobilePagosClient({
                     <h1 className="text-[20px] font-semibold leading-[28px] text-[#004AC6]">Pagos</h1>
                 </div>
                 <Link
-                    href="/residente/avisos"
+                    href="/mobile/avisos"
                     className="flex h-10 w-10 items-center justify-center rounded-full"
                 >
                     <Bell size={18} className="text-[#191C1D]" />

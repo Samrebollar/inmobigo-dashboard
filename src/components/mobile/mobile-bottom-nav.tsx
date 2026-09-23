@@ -9,7 +9,7 @@ const NAV_ITEMS = [
     { href: '/mobile', label: 'Inicio', icon: Home, exact: true },
     { href: '/mobile/pagos', label: 'Pagos', icon: Wallet },
     { href: '/mobile/pase', label: 'QR', icon: QrCode, isCenter: true },
-    { href: '/residente/avisos', label: 'Avisos', icon: Bell },
+    { href: '/mobile/avisos', label: 'Avisos', icon: Bell },
     { href: '/residente/perfil', label: 'Perfil', icon: User },
 ]
 

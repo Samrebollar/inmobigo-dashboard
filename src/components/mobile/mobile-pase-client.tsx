@@ -72,7 +72,7 @@ export default function MobilePaseClient({
         <div className="mx-auto max-w-[480px]">
             <header className="sticky top-0 z-30 flex items-center justify-between bg-[rgba(248,249,250,0.9)] px-5 py-4 backdrop-blur-[6px]">
                 <h1 className="text-[20px] font-semibold leading-[28px] text-[#004AC6]">Pase de Visita</h1>
-                <Link href="/residente/avisos" className="flex h-10 w-10 items-center justify-center rounded-full">
+                <Link href="/mobile/avisos" className="flex h-10 w-10 items-center justify-center rounded-full">
                     <Bell size={18} className="text-[#191C1D]" />
                 </Link>
             </header>

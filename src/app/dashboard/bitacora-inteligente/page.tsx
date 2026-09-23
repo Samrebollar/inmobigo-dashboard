@@ -18,6 +18,16 @@ export default async function BitacoraInteligentePage() {
 
     const adminSupabase = createAdminClient()
 
+    const { data: profile } = await adminSupabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+
+    const metaFullName = user.user_metadata?.full_name
+        || [user.user_metadata?.first_name, user.user_metadata?.last_name].filter(Boolean).join(' ')
+    const userName = profile?.full_name || metaFullName || user.email?.split('@')[0] || 'Admin'
+
     // Resolve organization
     const { data: orgUser } = await adminSupabase
         .from('organization_users')
@@ -95,7 +105,7 @@ export default async function BitacoraInteligentePage() {
         <BitacoraInteligenteClient
             orgId={orgId}
             userId={user.id}
-            userName={user.user_metadata?.full_name || user.email || 'Admin'}
+            userName={userName}
             initialEntries={(initialEntries || []) as any[]}
             initialPeopleInside={(peopleInside || []) as any[]}
             initialKPIs={initialKPIs}

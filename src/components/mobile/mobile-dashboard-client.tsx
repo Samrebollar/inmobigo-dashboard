@@ -35,7 +35,7 @@ interface Activity {
 
 const QUICK_ACCESS = [
     { label: 'Mis pagos', href: '/mobile/pagos', icon: Wallet },
-    { label: 'Pase visita', href: '/residente/servicios', icon: QrCode },
+    { label: 'Pase visita', href: '/mobile/pase', icon: QrCode },
     { label: 'Amenidades', href: '/residente/amenidades', icon: Waves },
     { label: 'Incidencias', href: '/residente/maintenance', icon: AlertTriangle },
     { label: 'Paquetería', href: '/residente/servicios', icon: Package },

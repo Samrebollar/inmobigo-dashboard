@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 const NAV_ITEMS = [
     { href: '/mobile', label: 'Inicio', icon: Home, exact: true },
     { href: '/mobile/pagos', label: 'Pagos', icon: Wallet },
-    { href: '/residente/servicios', label: 'QR', icon: QrCode, isCenter: true },
+    { href: '/mobile/pase', label: 'QR', icon: QrCode, isCenter: true },
     { href: '/residente/avisos', label: 'Avisos', icon: Bell },
     { href: '/residente/perfil', label: 'Perfil', icon: User },
 ]

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, MessageCircle, Loader2 } from 'lucide-react'
+import { Send, MessageCircle, Loader2, User } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { getResidentMessageThreadAction, sendResidentMessageAction } from '@/app/actions/resident-messages-actions'
 import { format, isToday, isYesterday } from 'date-fns'
@@ -13,6 +13,7 @@ interface ThreadMessage {
     id: string
     sender_role: 'resident' | 'admin'
     sender_name: string | null
+    sender_avatar_url?: string | null
     body: string
     created_at: string
     read_at: string | null
@@ -23,6 +24,21 @@ function formatMessageTime(iso: string) {
     if (isToday(date)) return format(date, 'HH:mm')
     if (isYesterday(date)) return `Ayer ${format(date, 'HH:mm')}`
     return format(date, "d MMM, HH:mm", { locale: es })
+}
+
+function Avatar({ url, name, size = 26 }: { url?: string | null, name?: string | null, size?: number }) {
+    return (
+        <div
+            className="rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-white/5"
+            style={{ width: size, height: size }}
+        >
+            {url ? (
+                <img src={url} alt={name || 'Avatar'} className="h-full w-full object-cover" />
+            ) : (
+                <User className="text-zinc-500" size={size * 0.55} />
+            )}
+        </div>
+    )
 }
 
 export function ResidentMessageThread({ adminName }: { adminName: string }) {
@@ -66,7 +82,24 @@ export function ResidentMessageThread({ adminName }: { adminName: string }) {
             )
             .subscribe()
 
-        return () => { supabase.removeChannel(channel) }
+        // Respaldo silencioso por si el evento de Realtime no llega: refresca
+        // el hilo cada 4s mientras la pantalla está abierta, para que la
+        // respuesta del admin no dependa solo del INSERT en vivo.
+        const interval = setInterval(async () => {
+            const res = await getResidentMessageThreadAction()
+            if (res.success) {
+                setMessages(prev => {
+                    const fresh = res.data as ThreadMessage[]
+                    if (prev.length === fresh.length && prev.every((m, i) => m.id === fresh[i]?.id)) return prev
+                    return fresh
+                })
+            }
+        }, 4000)
+
+        return () => {
+            supabase.removeChannel(channel)
+            clearInterval(interval)
+        }
     }, [residentId, supabase])
 
     useEffect(() => {
@@ -126,8 +159,11 @@ export function ResidentMessageThread({ adminName }: { adminName: string }) {
                                 key={m.id}
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className={`flex ${m.sender_role === 'resident' ? 'justify-end' : 'justify-start'}`}
+                                className={`flex items-end gap-2 ${m.sender_role === 'resident' ? 'justify-end' : 'justify-start'}`}
                             >
+                                {m.sender_role === 'admin' && (
+                                    <Avatar url={m.sender_avatar_url} name={m.sender_name} />
+                                )}
                                 <div
                                     className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
                                         m.sender_role === 'resident'
@@ -140,6 +176,9 @@ export function ResidentMessageThread({ adminName }: { adminName: string }) {
                                         {formatMessageTime(m.created_at)}
                                     </p>
                                 </div>
+                                {m.sender_role === 'resident' && (
+                                    <Avatar url={m.sender_avatar_url} name={m.sender_name} />
+                                )}
                             </motion.div>
                         ))}
                     </AnimatePresence>

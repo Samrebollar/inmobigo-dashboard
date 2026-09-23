@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift, BookOpen } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift, BookOpen, MessageCircle } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -173,6 +173,17 @@ export default async function DashboardLayout({
     const showReports = isStaff
     const showNotices = isStaff
 
+    let unreadMessagesCount = 0
+    if (isStaff && organizationId) {
+        const { count } = await adminSupabase
+            .from('resident_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('organization_id', organizationId)
+            .eq('sender_role', 'resident')
+            .is('read_at', null)
+        unreadMessagesCount = count || 0
+    }
+
     const sidebarContent = (
         <>
             <div className="hidden lg:flex h-20 items-center border-b border-zinc-800 px-6">
@@ -311,6 +322,18 @@ export default async function DashboardLayout({
                         >
                             <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
                             <span>Avisos</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/mensajes"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                        >
+                            <MessageCircle size={18} className="text-indigo-500/80 group-hover:text-indigo-400" />
+                            <span className="flex-1">Mensajes</span>
+                            {unreadMessagesCount > 0 && (
+                                <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center">
+                                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                                </span>
+                            )}
                         </Link>
                         <Link
                             href="/dashboard/control-operativo"

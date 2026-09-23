@@ -132,7 +132,7 @@ async function handleRequest(request: Request) {
                     billing_day
                 )
             `)
-            .eq('status', 'active')
+            .in('status', ['active', 'delinquent'])
 
         if (filterCondoId) {
             residentsQuery = residentsQuery.eq('condominium_id', filterCondoId)

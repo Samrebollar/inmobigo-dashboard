@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { getUserRoleAction } from '@/app/actions/auth-actions'
 import { Mail, Lock, Fingerprint, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -40,10 +39,16 @@ export default function MobileLoginClient() {
             return
         }
 
-        // Administradores no tienen todavía una versión móvil dedicada:
-        // se les manda al panel web, que ya resuelve a dónde ir según su rol.
-        const roleResult = await getUserRoleAction(authData.user.id)
-        router.push(roleResult.success && roleResult.redirectPath ? roleResult.redirectPath : '/dashboard')
+        // Guardias de seguridad sí tienen su propia versión móvil
+        // (/mobile/seguridad). Administradores todavía no, así que se les
+        // manda al panel web, que ya resuelve a dónde ir según su rol.
+        const [{ data: orgUser }, { data: securityCondo }] = await Promise.all([
+            supabase.from('organization_users').select('role_new').eq('user_id', authData.user.id).maybeSingle(),
+            supabase.from('condominiums').select('id').eq('security_user_id', authData.user.id).limit(1).maybeSingle(),
+        ])
+
+        const isSecurity = orgUser?.role_new === 'security' || !!securityCondo
+        router.push(isSecurity ? '/mobile/seguridad' : '/dashboard')
     }
 
     const isFormValid = email.length > 0 && password.length > 0

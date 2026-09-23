@@ -545,56 +545,60 @@ export default function ResidentProfileClient({
                 </motion.div>
             )}
 
-            {/* Subscription Card */}
-            <motion.div
-                variants={itemVariants}
-                initial="hidden"
-                animate="visible"
-                className="mt-8 rounded-[2.5rem] border border-zinc-800 bg-gradient-to-br from-zinc-900 via-[#1a1c2e] to-indigo-950/20 p-8 md:p-10 shadow-22 hover:border-indigo-500/30 transition-all flex flex-col lg:flex-row items-stretch lg:items-center gap-10"
-            >
-                <div className="flex-1 space-y-6">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-2xl font-black text-white flex items-center gap-3 italic">
-                            <Zap className="h-6 w-6 text-amber-400 not-italic" /> Mi Plan Actual
-                        </h2>
-                        {subscription ? (
-                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 px-3 py-1">Activo</Badge>
-                        ) : (
-                            <Badge variant="outline" className="text-zinc-500 border-zinc-800 px-3 py-1">Modo Demo</Badge>
-                        )}
+            {/* Subscription Card — la suscripción de InmobiGo es del administrador/
+                organización, no del residente/inquilino/guardia, así que solo se
+                muestra en el perfil de un admin. */}
+            {isAdmin && (
+                <motion.div
+                    variants={itemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="mt-8 rounded-[2.5rem] border border-zinc-800 bg-gradient-to-br from-zinc-900 via-[#1a1c2e] to-indigo-950/20 p-8 md:p-10 shadow-22 hover:border-indigo-500/30 transition-all flex flex-col lg:flex-row items-stretch lg:items-center gap-10"
+                >
+                    <div className="flex-1 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-black text-white flex items-center gap-3 italic">
+                                <Zap className="h-6 w-6 text-amber-400 not-italic" /> Mi Plan Actual
+                            </h2>
+                            {subscription ? (
+                                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 px-3 py-1">Activo</Badge>
+                            ) : (
+                                <Badge variant="outline" className="text-zinc-500 border-zinc-800 px-3 py-1">Modo Demo</Badge>
+                            )}
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-[0.2em] font-black">Plan contratado</p>
+                            <h3 className="text-4xl font-black text-white">{subscription?.plan_name || 'InmobiGo Demo'}</h3>
+                        </div>
                     </div>
-                    <div className="space-y-1">
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-[0.2em] font-black">Plan contratado</p>
-                        <h3 className="text-4xl font-black text-white">{subscription?.plan_name || 'InmobiGo Demo'}</h3>
-                    </div>
-                </div>
 
-                <div className="w-px bg-zinc-800 hidden lg:block self-stretch mx-4" />
+                    <div className="w-px bg-zinc-800 hidden lg:block self-stretch mx-4" />
 
-                <div className="flex-1 space-y-6">
-                    <div className="grid grid-cols-2 gap-8">
-                        <div>
-                            <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Unidades</p>
-                            <p className="text-xl font-bold text-zinc-200">{subscription?.unit_limit || '10'}</p>
+                    <div className="flex-1 space-y-6">
+                        <div className="grid grid-cols-2 gap-8">
+                            <div>
+                                <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Unidades</p>
+                                <p className="text-xl font-bold text-zinc-200">{subscription?.unit_limit || '10'}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Ciclo</p>
+                                <p className="text-xl font-bold text-zinc-200 capitalize">{subscription?.billing_cycle === 'yearly' ? 'Anual' : 'Mensual'}</p>
+                            </div>
                         </div>
                         <div>
-                            <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Ciclo</p>
-                            <p className="text-xl font-bold text-zinc-200 capitalize">{subscription?.billing_cycle === 'yearly' ? 'Anual' : 'Mensual'}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-[0.2em] font-black mb-2">Próximo pago</p>
+                            <div className="flex items-center gap-3">
+                                <Calendar className="h-5 w-5 text-indigo-400" />
+                                <p className="text-lg font-bold text-white">
+                                    {subscription?.next_payment_date
+                                        ? format(parseISO(subscription.next_payment_date), 'd MMMM, yyyy', { locale: es })
+                                        : 'No programado'}
+                                </p>
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-[0.2em] font-black mb-2">Próximo pago</p>
-                        <div className="flex items-center gap-3">
-                            <Calendar className="h-5 w-5 text-indigo-400" />
-                            <p className="text-lg font-bold text-white">
-                                {subscription?.next_payment_date
-                                    ? format(parseISO(subscription.next_payment_date), 'd MMMM, yyyy', { locale: es })
-                                    : 'No programado'}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </motion.div>
+                </motion.div>
+            )}
         </div>
     )
 }

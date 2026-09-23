@@ -44,7 +44,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
         <div className="mx-auto max-w-7xl space-y-10 p-6 md:p-10 animate-in fade-in duration-500">
             {/* Page Title */}
             <div>
-                <h1 className="text-3xl font-bold text-zinc-400 tracking-tight">Ayuda</h1>
+                <h1 className="text-3xl font-bold text-zinc-400 tracking-tight">Contacto</h1>
             </div>
 
             {/* Hero Section */}
@@ -62,7 +62,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
                             animate={{ opacity: 1, x: 0 }}
                             className="text-6xl font-black text-white tracking-tighter"
                         >
-                            Ayuda
+                            Contacto
                         </motion.h2>
                         <motion.p
                             initial={{ opacity: 0, x: -20 }}
@@ -70,7 +70,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
                             transition={{ delay: 0.1 }}
                             className="text-2xl font-medium text-zinc-400"
                         >
-                            ¿Necesitas ayuda? Estamos aquí para asistirte.
+                            Escríbele directo a tu administrador, cuando lo necesites.
                         </motion.p>
                     </div>
 

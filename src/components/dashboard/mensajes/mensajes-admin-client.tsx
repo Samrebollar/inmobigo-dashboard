@@ -172,7 +172,7 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
 
             <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-5 h-[calc(100vh-220px)] min-h-[500px]">
                 {/* Lista de hilos */}
-                <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl flex flex-col overflow-hidden">
+                <div className="bg-zinc-900/40 border-2 border-indigo-500/30 rounded-2xl flex flex-col overflow-hidden">
                     <div className="p-3 border-b border-zinc-800">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-600" />
@@ -228,7 +228,7 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
                 </div>
 
                 {/* Hilo activo */}
-                <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl flex flex-col overflow-hidden">
+                <div className="bg-zinc-900/40 border-2 border-emerald-500/30 rounded-2xl flex flex-col overflow-hidden">
                     {!selectedResidentId ? (
                         <div className="flex-1 flex flex-col items-center justify-center gap-2 text-zinc-600">
                             <MessageCircle className="h-10 w-10 opacity-30" />

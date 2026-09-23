@@ -141,7 +141,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
                     <motion.div
                         initial={{ opacity: 0, scale: 0.98 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/50 rounded-[3rem] p-10 md:p-14 shadow-2xl relative overflow-hidden group/bottom"
+                        className="bg-zinc-900/40 backdrop-blur-md border-2 border-indigo-500/30 rounded-[3rem] p-10 md:p-14 shadow-2xl relative overflow-hidden group/bottom"
                     >
                         <div className="absolute -bottom-20 -right-20 h-96 w-96 bg-indigo-600/5 rounded-full blur-[100px]" />
 
@@ -196,7 +196,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
                             {/* Chat directo con el administrador */}
                             <motion.div
                                 whileHover={{ y: -3 }}
-                                className="bg-zinc-950/40 backdrop-blur-xl border border-zinc-800/50 rounded-[2.5rem] p-8 w-full lg:w-[480px] shadow-2xl relative overflow-hidden flex flex-col"
+                                className="bg-zinc-950/40 backdrop-blur-xl border-2 border-emerald-500/30 rounded-[2.5rem] p-8 w-full lg:w-[480px] shadow-2xl relative overflow-hidden flex flex-col"
                             >
                                 <ResidentMessageThread adminName={adminContact.name} />
 

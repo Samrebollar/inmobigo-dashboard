@@ -103,7 +103,7 @@ export default function MobileDashboardClient({
                         </div>
                     </div>
                     <Link
-                        href="/residente/avisos"
+                        href="/mobile/avisos"
                         className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)]"
                     >
                         <Bell size={16} className="text-[#434655]" />
@@ -179,7 +179,7 @@ export default function MobileDashboardClient({
                 <section className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-[14px] font-bold uppercase tracking-[1.4px] text-[#434655]">Avisos</h2>
-                        <Link href="/residente/avisos" className="text-[12px] font-bold text-[#004AC6]">Ver todos</Link>
+                        <Link href="/mobile/avisos" className="text-[12px] font-bold text-[#004AC6]">Ver todos</Link>
                     </div>
 
                     {announcements.length === 0 ? (

@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FileText, Download, FileSpreadsheet, History, Calendar, CheckCircle2, BookOpen } from 'lucide-react'
+import { FileText, Download, FileSpreadsheet, History, Calendar, CheckCircle2, BookOpen, Handshake, Eye } from 'lucide-react'
 import { ReportsGeneratorModal } from '@/components/finance/reports-generator'
 import { motion } from 'framer-motion'
 
 export default function ReportsPage() {
     const [isGeneratorOpen, setIsGeneratorOpen] = useState(false)
-    const [generatorType, setGeneratorType] = useState<'executive' | 'delinquency' | 'bitacora'>('executive')
+    const [generatorType, setGeneratorType] = useState<'executive' | 'delinquency' | 'bitacora' | 'convenios' | 'lectura'>('executive')
     const [history, setHistory] = useState<any[]>([])
 
     // Cargar historial del LocalStorage al montar
@@ -87,6 +87,36 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 </motion.div>
+
+                {/* Card 4: Convenios */}
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Card className="h-full bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer group" onClick={() => { setGeneratorType('convenios'); setIsGeneratorOpen(true) }}>
+                        <CardContent className="h-full p-6 flex flex-col items-center justify-center text-center space-y-4">
+                            <div className="p-4 rounded-full bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20 transition-colors">
+                                <Handshake size={32} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-white text-lg">Convenios</h3>
+                                <p className="text-sm text-zinc-500 mt-1">Convenios de pago acordados con residentes y su estatus.</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Card 5: Control de Lectura */}
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Card className="h-full bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer group" onClick={() => { setGeneratorType('lectura'); setIsGeneratorOpen(true) }}>
+                        <CardContent className="h-full p-6 flex flex-col items-center justify-center text-center space-y-4">
+                            <div className="p-4 rounded-full bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/20 transition-colors">
+                                <Eye size={32} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-white text-lg">Reporte de Control de Lectura</h3>
+                                <p className="text-sm text-zinc-500 mt-1">Quién confirmó haber leído cada aviso, y quién falta.</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             </motion.div>
 
             <Card className="bg-zinc-900 border-zinc-800">
@@ -109,6 +139,8 @@ export default function ReportsPage() {
                                             className={`p-2 rounded-lg ${
                                                 item.type.includes('Morosidad') ? 'bg-rose-500/10 text-rose-400'
                                                 : item.type.includes('Bitácora') ? 'bg-emerald-500/10 text-emerald-400'
+                                                : item.type.includes('Convenios') ? 'bg-amber-500/10 text-amber-400'
+                                                : item.type.includes('Control de Lectura') ? 'bg-cyan-500/10 text-cyan-400'
                                                 : 'bg-indigo-500/10 text-indigo-400'
                                             }`}
                                         >

@@ -14,12 +14,22 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { getBitacoraEntriesAction } from '@/app/actions/bitacora-actions'
 import { EVENT_TYPE_CONFIG, STATUS_CONFIG } from '@/types/bitacora'
+import { getPaymentAgreementsAction } from '@/app/actions/payment-agreement-actions'
+import { getAllAnnouncementViewsAction } from '@/app/actions/announcement-actions'
 
 interface ReportsGeneratorModalProps {
     isOpen: boolean
-    reportType?: 'executive' | 'delinquency' | 'bitacora'
+    reportType?: 'executive' | 'delinquency' | 'bitacora' | 'convenios' | 'lectura'
     onClose: () => void
     onSuccess?: (report: any) => void
+}
+
+const AGREEMENT_STATUS_LABEL: Record<string, string> = {
+    pending: 'Pendiente',
+    awaiting_signature: 'Esperando Firma',
+    pending_final_approval: 'En Revisión',
+    approved: 'Aprobado',
+    rejected: 'Rechazado',
 }
 
 export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClose, onSuccess }: ReportsGeneratorModalProps) {
@@ -435,6 +445,230 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
     }
 
     // ------------------------------------------------------------------------------------------------ //
+    // ------------------------------------- REPORTE DE CONVENIOS ------------------------------------- //
+    // ------------------------------------------------------------------------------------------------ //
+
+    const generateConveniosPDF = async (agreements: any[], summary: any) => {
+        const doc = new jsPDF()
+
+        try {
+            const logo = await loadImage('/logo-inmobigo.png')
+            const targetHeight = 16
+            const targetWidth = targetHeight * (logo.width / logo.height)
+            doc.addImage(logo, 'PNG', 14, 15, targetWidth, targetHeight)
+        } catch (e) {
+            console.warn("Could not load logo", e)
+        }
+
+        doc.setFontSize(24)
+        doc.setTextColor(15, 23, 42)
+        doc.text('Reporte de Convenios', 14, 45)
+
+        doc.setFontSize(10)
+        doc.setTextColor(100, 113, 129)
+        doc.text(`Condominio: ${summary.condoName}`, 14, 52)
+        doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 57)
+
+        doc.setDrawColor(226, 232, 240)
+        doc.setFillColor(255, 251, 235) // Amber 50
+        doc.roundedRect(14, 65, 182, 28, 4, 4, 'FD')
+
+        doc.setFontSize(9)
+        doc.setTextColor(100, 113, 129)
+        doc.text('CONVENIOS TOTALES', 20, 74)
+        doc.text('APROBADOS', 65, 74)
+        doc.text('EN PROCESO', 105, 74)
+        doc.text('ADEUDO CUBIERTO (MXN)', 150, 74)
+
+        doc.setFontSize(16)
+        doc.setTextColor(15, 23, 42)
+        doc.text(String(summary.total), 20, 84)
+        doc.setTextColor(16, 185, 129)
+        doc.text(String(summary.approved), 65, 84)
+        doc.setTextColor(217, 119, 6) // Amber 600
+        doc.text(String(summary.inProgress), 105, 84)
+        doc.setFontSize(13)
+        doc.setTextColor(15, 23, 42)
+        doc.text(formatCurrency(summary.totalDebt), 150, 84)
+
+        const tableData = agreements.map(a => [
+            a.resident_name || '-',
+            a.condominium_name || '-',
+            a.unit_number || '-',
+            formatCurrency(Number(a.total_debt || 0)),
+            String(a.num_installments ?? '-'),
+            AGREEMENT_STATUS_LABEL[a.status] || a.status,
+            format(new Date(a.created_at), 'dd/MM/yyyy'),
+            a.approved_at ? format(new Date(a.approved_at), 'dd/MM/yyyy') : '-',
+        ])
+
+        autoTable(doc, {
+            startY: 105,
+            head: [['Residente', 'Condominio', 'Unidad', 'Adeudo', 'Cuotas', 'Estatus', 'Creado', 'Aprobado']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [217, 119, 6], // Amber 600
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+            },
+            styles: {
+                fontSize: 7.5,
+                cellPadding: 3,
+                lineColor: [226, 232, 240],
+                lineWidth: 0.1,
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: {
+                3: { halign: 'right', fontStyle: 'bold' },
+            }
+        })
+
+        doc.save(`Reporte_Convenios_${format(new Date(), 'yyyyMMdd')}.pdf`)
+    }
+
+    const generateConveniosExcel = async (agreements: any[], summary: any) => {
+        const wb = XLSX.utils.book_new()
+        const summaryData = [
+            ["InmobiGo - Plataforma de Administración"],
+            ["REPORTE DE CONVENIOS"],
+            [],
+            ["Fecha de Generación:", format(new Date(), 'dd/MM/yyyy HH:mm')],
+            ["Condominio:", summary.condoName],
+            [],
+            ["MÉTRICA", "VALOR"],
+            ["Convenios Totales", summary.total],
+            ["Aprobados", summary.approved],
+            ["En Proceso", summary.inProgress],
+            ["Rechazados", summary.rejected],
+            ["Adeudo Cubierto por Convenios (MXN)", formatCurrency(summary.totalDebt)],
+        ]
+        const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
+        XLSX.utils.book_append_sheet(wb, ws1, "Resumen")
+
+        const detailsData = agreements.map(a => ({
+            "Residente": a.resident_name || '-',
+            "Condominio": a.condominium_name || '-',
+            "Unidad": a.unit_number || '-',
+            "Adeudo Total": Number(a.total_debt || 0),
+            "Número de Cuotas": a.num_installments ?? '-',
+            "Estatus": AGREEMENT_STATUS_LABEL[a.status] || a.status,
+            "Detalles": a.agreement_details || '-',
+            "Fecha de Creación": format(new Date(a.created_at), 'dd/MM/yyyy'),
+            "Aprobado por": a.approved_by || '-',
+            "Fecha de Aprobación": a.approved_at ? format(new Date(a.approved_at), 'dd/MM/yyyy') : '-',
+        }))
+        const ws2 = XLSX.utils.json_to_sheet(detailsData)
+        XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Convenios")
+        XLSX.writeFile(wb, `Reporte_Convenios_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+    }
+
+    // ------------------------------------------------------------------------------------------------ //
+    // ------------------------------------- REPORTE DE CONTROL DE LECTURA ---------------------------- //
+    // ------------------------------------------------------------------------------------------------ //
+
+    const generateLecturaPDF = async (views: any[], summary: any) => {
+        const doc = new jsPDF()
+
+        try {
+            const logo = await loadImage('/logo-inmobigo.png')
+            const targetHeight = 16
+            const targetWidth = targetHeight * (logo.width / logo.height)
+            doc.addImage(logo, 'PNG', 14, 15, targetWidth, targetHeight)
+        } catch (e) {
+            console.warn("Could not load logo", e)
+        }
+
+        doc.setFontSize(24)
+        doc.setTextColor(15, 23, 42)
+        doc.text('Reporte de Control de Lectura', 14, 45)
+
+        doc.setFontSize(10)
+        doc.setTextColor(100, 113, 129)
+        doc.text(`Periodo: ${summary.periodName}`, 14, 52)
+        doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 57)
+
+        doc.setDrawColor(226, 232, 240)
+        doc.setFillColor(236, 254, 255) // Cyan 50
+        doc.roundedRect(14, 65, 182, 28, 4, 4, 'FD')
+
+        doc.setFontSize(9)
+        doc.setTextColor(100, 113, 129)
+        doc.text('CONFIRMACIONES', 20, 74)
+        doc.text('AVISOS CON LECTURA', 70, 74)
+        doc.text('RESIDENTES QUE LEYERON', 125, 74)
+        doc.text('COBERTURA', 170, 74)
+
+        doc.setFontSize(16)
+        doc.setTextColor(8, 145, 178) // Cyan 600
+        doc.text(String(summary.total), 20, 84)
+        doc.setTextColor(15, 23, 42)
+        doc.text(String(summary.uniqueAnnouncements), 70, 84)
+        doc.text(String(summary.uniqueResidents), 125, 84)
+        doc.text(summary.totalResidents > 0 ? `${Math.round((summary.uniqueResidents / summary.totalResidents) * 100)}%` : 'N/A', 170, 84)
+
+        const tableData = views.map(v => [
+            v.announcement_title || '-',
+            v.resident_name || 'Desconocido',
+            v.property_name || '-',
+            v.unit_name || '-',
+            v.acknowledged_at ? format(new Date(v.acknowledged_at), 'dd/MM/yyyy HH:mm') : '-',
+        ])
+
+        autoTable(doc, {
+            startY: 105,
+            head: [['Aviso', 'Residente', 'Condominio', 'Unidad', 'Confirmado el']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [8, 145, 178], // Cyan 600
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+            },
+            styles: {
+                fontSize: 8,
+                cellPadding: 3,
+                lineColor: [226, 232, 240],
+                lineWidth: 0.1,
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+        })
+
+        doc.save(`Reporte_Control_Lectura_${format(new Date(), 'yyyyMMdd')}.pdf`)
+    }
+
+    const generateLecturaExcel = async (views: any[], summary: any) => {
+        const wb = XLSX.utils.book_new()
+        const summaryData = [
+            ["InmobiGo - Plataforma de Administración"],
+            ["REPORTE DE CONTROL DE LECTURA"],
+            [],
+            ["Fecha de Generación:", format(new Date(), 'dd/MM/yyyy HH:mm')],
+            ["Periodo:", summary.periodName],
+            [],
+            ["MÉTRICA", "VALOR"],
+            ["Confirmaciones de Lectura", summary.total],
+            ["Avisos con al menos una Lectura", summary.uniqueAnnouncements],
+            ["Residentes que Confirmaron", summary.uniqueResidents],
+            ["Total de Residentes Registrados", summary.totalResidents],
+            ["% de Cobertura", summary.totalResidents > 0 ? `${Math.round((summary.uniqueResidents / summary.totalResidents) * 100)}%` : 'N/A'],
+        ]
+        const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
+        XLSX.utils.book_append_sheet(wb, ws1, "Resumen")
+
+        const detailsData = views.map(v => ({
+            "Aviso": v.announcement_title || '-',
+            "Residente": v.resident_name || 'Desconocido',
+            "Condominio": v.property_name || '-',
+            "Unidad": v.unit_name || '-',
+            "Confirmado el": v.acknowledged_at ? format(new Date(v.acknowledged_at), 'dd/MM/yyyy HH:mm') : '-',
+        }))
+        const ws2 = XLSX.utils.json_to_sheet(detailsData)
+        XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Confirmaciones")
+        XLSX.writeFile(wb, `Reporte_Control_Lectura_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+    }
+
+    // ------------------------------------------------------------------------------------------------ //
 
     const handleGenerate = async () => {
         if (!organizationId) {
@@ -562,6 +796,133 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
                 if (formatOption === 'excel') await generateBitacoraExcel(entries, fileSummary)
                 else await generateBitacoraPDF(entries, fileSummary)
+            } else if (reportType === 'convenios') {
+                const result = await getPaymentAgreementsAction()
+                if (!result.success) {
+                    setErrorMsg(result.error || 'Error al obtener los convenios')
+                    setIsGenerating(false)
+                    return
+                }
+
+                const supabase = createClient()
+                const { data: residentsData } = await supabase
+                    .from('residents')
+                    .select('id, condominium_id, unit_id')
+                const residentToCondo: Record<string, string> = {}
+                const residentToUnit: Record<string, string> = {}
+                ;(residentsData || []).forEach((r: any) => {
+                    if (r.condominium_id) residentToCondo[r.id] = r.condominium_id
+                    if (r.unit_id) residentToUnit[r.id] = r.unit_id
+                })
+
+                const condoNameById: Record<string, string> = {}
+                condominiums.forEach(c => { condoNameById[c.id] = c.name })
+
+                const unitIds = Array.from(new Set(Object.values(residentToUnit)))
+                let unitNumberById: Record<string, string> = {}
+                if (unitIds.length > 0) {
+                    const { data: unitsData } = await supabase.from('units').select('id, unit_number').in('id', unitIds)
+                    ;(unitsData || []).forEach((u: any) => { unitNumberById[u.id] = u.unit_number })
+                }
+
+                let agreements = (result.data || []).map((a: any) => ({
+                    ...a,
+                    condominium_id: residentToCondo[a.resident_id],
+                    condominium_name: condoNameById[residentToCondo[a.resident_id]] || '-',
+                    unit_number: unitNumberById[residentToUnit[a.resident_id]] || '-',
+                }))
+
+                if (selectedCondo !== 'all') {
+                    agreements = agreements.filter((a: any) => a.condominium_id === selectedCondo)
+                }
+
+                if (agreements.length === 0) {
+                    setErrorMsg('No hay convenios registrados para este condominio.')
+                    setIsGenerating(false)
+                    return
+                }
+
+                const approved = agreements.filter((a: any) => a.status === 'approved').length
+                const rejected = agreements.filter((a: any) => a.status === 'rejected').length
+                const inProgress = agreements.length - approved - rejected
+                const totalDebt = agreements
+                    .filter((a: any) => a.status === 'approved')
+                    .reduce((acc: number, a: any) => acc + Number(a.total_debt || 0), 0)
+
+                fileSummary = {
+                    condoName: selectedCondo === 'all' ? 'Todos los condominios' : (condoNameById[selectedCondo] || 'Desconocido'),
+                    total: agreements.length,
+                    approved,
+                    rejected,
+                    inProgress,
+                    totalDebt,
+                }
+                finalTypeLabel = 'Reporte de Convenios'
+
+                if (formatOption === 'excel') await generateConveniosExcel(agreements, fileSummary)
+                else await generateConveniosPDF(agreements, fileSummary)
+            } else if (reportType === 'lectura') {
+                const supabase = createClient()
+                const { start, end } = getDates()
+
+                const { data: announcementsData } = await supabase
+                    .from('announcements')
+                    .select('id, title')
+                    .eq('organization_id', organizationId)
+                const announcementTitleById: Record<string, string> = {}
+                ;(announcementsData || []).forEach((a: any) => { announcementTitleById[a.id] = a.title })
+
+                const viewsResult = await getAllAnnouncementViewsAction(organizationId)
+                if (!viewsResult.success) {
+                    setErrorMsg(viewsResult.error || 'Error al obtener las confirmaciones de lectura')
+                    setIsGenerating(false)
+                    return
+                }
+
+                const selectedCondoName = selectedCondo !== 'all' ? condominiums.find(c => c.id === selectedCondo)?.name : null
+
+                let views = (viewsResult.data || [])
+                    .filter((v: any) => {
+                        if (!v.acknowledged_at) return false
+                        const ackDate = new Date(v.acknowledged_at)
+                        return ackDate >= start && ackDate <= end
+                    })
+                    .filter((v: any) => !selectedCondoName || v.property_name === selectedCondoName)
+                    .map((v: any) => ({ ...v, announcement_title: announcementTitleById[v.announcement_id] }))
+                    .sort((a: any, b: any) => new Date(b.acknowledged_at).getTime() - new Date(a.acknowledged_at).getTime())
+
+                if (views.length === 0) {
+                    setErrorMsg('No hay confirmaciones de lectura registradas en este periodo.')
+                    setIsGenerating(false)
+                    return
+                }
+
+                let totalResidentsQuery = supabase
+                    .from('residents')
+                    .select('*, condominiums!inner(organization_id)', { count: 'exact', head: true })
+                    .eq('condominiums.organization_id', organizationId)
+                if (selectedCondo !== 'all') totalResidentsQuery = totalResidentsQuery.eq('condominium_id', selectedCondo)
+                const { count: totalResidentsCount } = await totalResidentsQuery
+
+                const uniqueAnnouncements = new Set(views.map(v => v.announcement_id)).size
+                const uniqueResidents = new Set(views.map(v => v.resident_name)).size
+
+                const periodName = dateRange === 'this-month' ? `Mes Actual (${format(start, 'MMMM yyyy', { locale: es })})`
+                            : dateRange === 'last-month' ? `Mes Anterior (${format(start, 'MMMM yyyy', { locale: es })})`
+                            : dateRange === 'quarter' ? `Trimestre (Q${Math.floor(start.getMonth()/3)+1} ${start.getFullYear()})`
+                            : `Año ${start.getFullYear()}`
+
+                fileSummary = {
+                    periodName: periodName.toUpperCase(),
+                    total: views.length,
+                    uniqueAnnouncements,
+                    uniqueResidents,
+                    totalResidents: totalResidentsCount || 0,
+                }
+                finalTypeLabel = 'Reporte de Control de Lectura'
+
+                if (formatOption === 'excel') await generateLecturaExcel(views, fileSummary)
+                else await generateLecturaPDF(views, fileSummary)
             }
 
             if (onSuccess) {
@@ -589,7 +950,11 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         }
     }
 
-    const titlePrefix = reportType === 'executive' ? 'Reporte Financiero' : reportType === 'delinquency' ? 'Reporte de Morosidad' : 'Reporte de Bitácora'
+    const titlePrefix = reportType === 'executive' ? 'Reporte Financiero'
+        : reportType === 'delinquency' ? 'Reporte de Morosidad'
+        : reportType === 'bitacora' ? 'Reporte de Bitácora'
+        : reportType === 'convenios' ? 'Reporte de Convenios'
+        : 'Reporte de Control de Lectura'
 
     return (
         <AnimatePresence>
@@ -656,7 +1021,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                                 </div>
                             </div>
 
-                            {(reportType === 'executive' || reportType === 'bitacora') && (
+                            {(reportType === 'executive' || reportType === 'bitacora' || reportType === 'lectura') && (
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                         Periodo

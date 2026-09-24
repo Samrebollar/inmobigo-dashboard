@@ -38,6 +38,15 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.next()
     }
 
+    // La app móvil (/mobile/*) es una superficie aparte que ya hace su propio
+    // control de sesión y de rol en cada layout/page (login público, el resto
+    // exige sesión, y /mobile/seguridad exige además rol de seguridad). Este
+    // middleware es anterior a /mobile y no lo conocía, así que sus reglas de
+    // "todo residente debe estar bajo /residente", etc. rebotaban a
+    // residentes, guardias y visitantes sin sesión fuera de /mobile por
+    // completo. Se excluye aquí en vez de intentar listar cada caso abajo.
+    const isMobileApp = pathname.startsWith('/mobile')
+
     const {
         data: { user },
     } = await supabase.auth.getUser()
@@ -69,7 +78,7 @@ export async function updateSession(request: NextRequest) {
         pathname.startsWith('/api') ||
         pathname.includes('.')
 
-    if (!user && !isVisitRoute && !isPublicStaticOrAuth) {
+    if (!user && !isVisitRoute && !isPublicStaticOrAuth && !isMobileApp) {
         // Redirección obligatoria al login si no tiene sesión y NO es un acceso de visita pública
         const url = request.nextUrl.clone()
         url.pathname = '/login'
@@ -84,6 +93,11 @@ export async function updateSession(request: NextRequest) {
     }
 
     // RBAC Check
+    if (user && isMobileApp) {
+        // /mobile/* ya resuelve su propia sesión y rol (ver comentario arriba).
+        return supabaseResponse
+    }
+
     if (user) {
         const path = request.nextUrl.pathname
 

@@ -391,7 +391,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                                 <div className="flex flex-col md:flex-row h-full">
                                     <div className={`w-full md:w-2 whitespace-nowrap bg-gradient-to-b ${selectedAmenity.color}`} />
                                     
-                                    <div className="p-10 flex-1 space-y-8">
+                                    <div className="p-5 sm:p-10 flex-1 space-y-8">
                                         <div className="flex justify-between items-start">
                                             <div className="space-y-1">
                                                 <Badge className="bg-white/10 text-white border-white/20 uppercase tracking-widest text-[10px] font-black">Solicitud de Reserva</Badge>
@@ -407,7 +407,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
                                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
                                             <div className="lg:col-span-3 space-y-6">
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                                     <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest italic">1. Selecciona Fecha</p>
                                                     <div className="flex items-center gap-4">
                                                         <button onClick={prevMonth} className="h-8 w-8 rounded-full border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-all">

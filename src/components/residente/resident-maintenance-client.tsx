@@ -246,8 +246,8 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                             </Button>
                         </div>
                     ) : (
-                        <div className="w-full">
-                            <div className="grid grid-cols-7 border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
+                        <div className="w-full overflow-x-auto">
+                            <div className="grid grid-cols-7 min-w-[900px] border-b border-zinc-800/50 bg-zinc-900/50 px-8 py-6">
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Categoría</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Reporte</div>
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Prioridad</div>
@@ -257,7 +257,7 @@ export default function ResidentMaintenanceClient({ resident }: ResidentMaintena
                                 <div className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center text-center">Acciones</div>
                             </div>
                             
-                            <div className="divide-y divide-zinc-800/30">
+                            <div className="divide-y divide-zinc-800/30 min-w-[900px]">
                                 {tickets.map((ticket, i) => {
                                     const statusInfo = getStatusInfo(ticket.status)
                                     const priorityInfo = getPriorityInfo(ticket.priority)

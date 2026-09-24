@@ -51,7 +51,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-[#1a1c2e] to-indigo-950/40 border border-zinc-800 rounded-[2.5rem] p-10 md:p-16 shadow-2xl group"
+                className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-[#1a1c2e] to-indigo-950/40 border border-zinc-800 rounded-[2.5rem] p-6 sm:p-10 md:p-16 shadow-2xl group"
             >
                 <div className="absolute top-0 right-0 -m-20 h-96 w-96 bg-blue-600/10 rounded-full blur-[100px] group-hover:bg-blue-600/20 transition-colors duration-700" />
 
@@ -60,7 +60,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
                         <motion.h2
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className="text-6xl font-black text-white tracking-tighter"
+                            className="text-4xl sm:text-6xl font-black text-white tracking-tighter"
                         >
                             Contacto
                         </motion.h2>
@@ -68,7 +68,7 @@ export default function ResidentHelpClient({ user, isAdmin, organizationName, ad
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.1 }}
-                            className="text-2xl font-medium text-zinc-400"
+                            className="text-lg sm:text-2xl font-medium text-zinc-400"
                         >
                             Escríbele directo a tu administrador, cuando lo necesites.
                         </motion.p>

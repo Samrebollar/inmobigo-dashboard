@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { getTicketsByResidentServer } from '@/app/actions/maintenance-actions'
+import { findResidentForUser } from '@/services/mobile-resident-lookup'
 import MobileIncidenciasClient from '@/components/mobile/mobile-incidencias-client'
 
 export const dynamic = 'force-dynamic'
@@ -14,11 +15,7 @@ export default async function MobileIncidenciasPage() {
         redirect('/mobile/login')
     }
 
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const resident = await findResidentForUser(user)
 
     if (!resident) {
         redirect('/residente/maintenance')

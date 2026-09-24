@@ -1,6 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getAmenitiesAction } from '@/app/actions/service-actions'
+import { findResidentForUser } from '@/services/mobile-resident-lookup'
 import MobileAmenidadesClient from '@/components/mobile/mobile-amenidades-client'
 
 export const dynamic = 'force-dynamic'
@@ -14,18 +16,19 @@ export default async function MobileAmenidadesPage() {
         redirect('/mobile/login')
     }
 
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('*, condominiums(organization_id)')
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const resident = await findResidentForUser(user)
 
     if (!resident) {
         redirect('/residente/amenidades')
     }
 
-    const organizationId = (resident.condominiums as any)?.organization_id || (resident as any).organization_id
-    const condominiumId = (resident as any).condominium_id
+    const condominiumId = resident.condominium_id
+    let organizationId = (resident as any).organization_id || null
+    if (!organizationId && condominiumId) {
+        const adminSupabase = createAdminClient()
+        const { data: condo } = await adminSupabase.from('condominiums').select('organization_id').eq('id', condominiumId).maybeSingle()
+        organizationId = condo?.organization_id || null
+    }
 
     let amenities: any[] = []
     if (organizationId) {

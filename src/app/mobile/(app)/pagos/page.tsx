@@ -1,6 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-service'
+import { findResidentForUser } from '@/services/mobile-resident-lookup'
 import MobilePagosClient from '@/components/mobile/mobile-pagos-client'
 
 export const dynamic = 'force-dynamic'
@@ -14,15 +16,23 @@ export default async function MobilePagosPage() {
         redirect('/mobile/login')
     }
 
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('*, condominiums(name), units(unit_number, monto_mensual, payment_deadline)')
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const resident = await findResidentForUser(user)
 
     if (!resident) {
         redirect('/residente/payments')
     }
+
+    const adminSupabase = createAdminClient()
+    const [{ data: condo }, { data: unit }] = await Promise.all([
+        resident.condominium_id
+            ? adminSupabase.from('condominiums').select('name').eq('id', resident.condominium_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+        resident.unit_id
+            ? adminSupabase.from('units').select('unit_number, monto_mensual, payment_deadline').eq('id', resident.unit_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+    ])
+    ;(resident as any).condominiums = condo
+    ;(resident as any).units = unit
 
     const { data: profile } = await supabase
         .from('profiles')

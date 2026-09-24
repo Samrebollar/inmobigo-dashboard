@@ -32,8 +32,11 @@ const AGREEMENT_STATUS_LABEL: Record<string, string> = {
     rejected: 'Rechazado',
 }
 
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
 export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClose, onSuccess }: ReportsGeneratorModalProps) {
     const [dateRange, setDateRange] = useState<'this-month' | 'last-month' | 'quarter' | 'year'>('this-month')
+    const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
     const [formatOption, setFormatOption] = useState<'pdf' | 'excel'>('pdf')
     const [selectedCondo, setSelectedCondo] = useState<string>('all')
     const [isGenerating, setIsGenerating] = useState(false)
@@ -466,7 +469,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
         doc.setFontSize(10)
         doc.setTextColor(100, 113, 129)
-        doc.text(`Condominio: ${summary.condoName}`, 14, 52)
+        doc.text(`Año: ${summary.year}  •  Condominio: ${summary.condoName}`, 14, 52)
         doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 57)
 
         doc.setDrawColor(226, 232, 240)
@@ -491,6 +494,52 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         doc.setTextColor(15, 23, 42)
         doc.text(formatCurrency(summary.totalDebt), 150, 84)
 
+        doc.setFontSize(11)
+        doc.setTextColor(15, 23, 42)
+        doc.text('Desglose Mensual', 14, 102)
+
+        const monthlyTableData = summary.monthlyBreakdown.map((m: any) => [
+            m.month,
+            String(m.total),
+            String(m.approved),
+            String(m.rejected),
+            String(m.inProgress),
+            formatCurrency(m.totalDebt),
+        ])
+
+        autoTable(doc, {
+            startY: 107,
+            head: [['Mes', 'Convenios', 'Aprobados', 'Rechazados', 'En Proceso', 'Adeudo Cubierto']],
+            body: monthlyTableData,
+            foot: [['TOTAL', String(summary.total), String(summary.approved), String(summary.rejected), String(summary.inProgress), formatCurrency(summary.totalDebt)]],
+            theme: 'grid',
+            headStyles: {
+                fillColor: [217, 119, 6], // Amber 600
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+            },
+            footStyles: {
+                fillColor: [255, 251, 235], // Amber 50
+                textColor: [15, 23, 42],
+                fontStyle: 'bold',
+            },
+            styles: {
+                fontSize: 8,
+                cellPadding: 3,
+                lineColor: [226, 232, 240],
+                lineWidth: 0.1,
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: {
+                5: { halign: 'right', fontStyle: 'bold' },
+            }
+        })
+
+        const detailStartY = (doc as any).lastAutoTable.finalY + 15
+        doc.setFontSize(11)
+        doc.setTextColor(15, 23, 42)
+        doc.text('Detalle de Convenios', 14, detailStartY)
+
         const tableData = agreements.map(a => [
             a.resident_name || '-',
             a.condominium_name || '-',
@@ -503,7 +552,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         ])
 
         autoTable(doc, {
-            startY: 105,
+            startY: detailStartY + 5,
             head: [['Residente', 'Condominio', 'Unidad', 'Adeudo', 'Cuotas', 'Estatus', 'Creado', 'Aprobado']],
             body: tableData,
             theme: 'grid',
@@ -524,7 +573,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             }
         })
 
-        doc.save(`Reporte_Convenios_${format(new Date(), 'yyyyMMdd')}.pdf`)
+        doc.save(`Reporte_Convenios_${summary.year}_${format(new Date(), 'yyyyMMdd')}.pdf`)
     }
 
     const generateConveniosExcel = async (agreements: any[], summary: any) => {
@@ -534,6 +583,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             ["REPORTE DE CONVENIOS"],
             [],
             ["Fecha de Generación:", format(new Date(), 'dd/MM/yyyy HH:mm')],
+            ["Año:", summary.year],
             ["Condominio:", summary.condoName],
             [],
             ["MÉTRICA", "VALOR"],
@@ -545,6 +595,17 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         ]
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
         XLSX.utils.book_append_sheet(wb, ws1, "Resumen")
+
+        const monthlyData = summary.monthlyBreakdown.map((m: any) => ({
+            "Mes": m.month,
+            "Convenios": m.total,
+            "Aprobados": m.approved,
+            "Rechazados": m.rejected,
+            "En Proceso": m.inProgress,
+            "Adeudo Cubierto (MXN)": m.totalDebt,
+        }))
+        const wsMonthly = XLSX.utils.json_to_sheet(monthlyData)
+        XLSX.utils.book_append_sheet(wb, wsMonthly, "Desglose Mensual")
 
         const detailsData = agreements.map(a => ({
             "Residente": a.resident_name || '-',
@@ -560,7 +621,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         }))
         const ws2 = XLSX.utils.json_to_sheet(detailsData)
         XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Convenios")
-        XLSX.writeFile(wb, `Reporte_Convenios_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+        XLSX.writeFile(wb, `Reporte_Convenios_${summary.year}_${format(new Date(), 'yyyyMMdd')}.xlsx`)
     }
 
     // ------------------------------------------------------------------------------------------------ //
@@ -607,6 +668,47 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         doc.text(String(summary.uniqueResidents), 125, 84)
         doc.text(summary.totalResidents > 0 ? `${Math.round((summary.uniqueResidents / summary.totalResidents) * 100)}%` : 'N/A', 170, 84)
 
+        doc.setFontSize(11)
+        doc.setTextColor(15, 23, 42)
+        doc.text('Desglose Mensual', 14, 102)
+
+        const monthlyTableData = summary.monthlyBreakdown.map((m: any) => [
+            m.month,
+            String(m.total),
+            String(m.uniqueAnnouncements),
+            String(m.uniqueResidents),
+        ])
+
+        autoTable(doc, {
+            startY: 107,
+            head: [['Mes', 'Confirmaciones', 'Avisos con Lectura', 'Residentes que Leyeron']],
+            body: monthlyTableData,
+            foot: [['TOTAL', String(summary.total), String(summary.uniqueAnnouncements), String(summary.uniqueResidents)]],
+            theme: 'grid',
+            headStyles: {
+                fillColor: [8, 145, 178], // Cyan 600
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+            },
+            footStyles: {
+                fillColor: [236, 254, 255], // Cyan 50
+                textColor: [15, 23, 42],
+                fontStyle: 'bold',
+            },
+            styles: {
+                fontSize: 8,
+                cellPadding: 3,
+                lineColor: [226, 232, 240],
+                lineWidth: 0.1,
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+        })
+
+        const detailStartY = (doc as any).lastAutoTable.finalY + 15
+        doc.setFontSize(11)
+        doc.setTextColor(15, 23, 42)
+        doc.text('Detalle de Confirmaciones', 14, detailStartY)
+
         const tableData = views.map(v => [
             v.announcement_title || '-',
             v.resident_name || 'Desconocido',
@@ -616,7 +718,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         ])
 
         autoTable(doc, {
-            startY: 105,
+            startY: detailStartY + 5,
             head: [['Aviso', 'Residente', 'Condominio', 'Unidad', 'Confirmado el']],
             body: tableData,
             theme: 'grid',
@@ -634,7 +736,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             alternateRowStyles: { fillColor: [248, 250, 252] },
         })
 
-        doc.save(`Reporte_Control_Lectura_${format(new Date(), 'yyyyMMdd')}.pdf`)
+        doc.save(`Reporte_Control_Lectura_${summary.year}_${format(new Date(), 'yyyyMMdd')}.pdf`)
     }
 
     const generateLecturaExcel = async (views: any[], summary: any) => {
@@ -656,6 +758,15 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
         XLSX.utils.book_append_sheet(wb, ws1, "Resumen")
 
+        const monthlyData = summary.monthlyBreakdown.map((m: any) => ({
+            "Mes": m.month,
+            "Confirmaciones": m.total,
+            "Avisos con Lectura": m.uniqueAnnouncements,
+            "Residentes que Leyeron": m.uniqueResidents,
+        }))
+        const wsMonthly = XLSX.utils.json_to_sheet(monthlyData)
+        XLSX.utils.book_append_sheet(wb, wsMonthly, "Desglose Mensual")
+
         const detailsData = views.map(v => ({
             "Aviso": v.announcement_title || '-',
             "Residente": v.resident_name || 'Desconocido',
@@ -665,7 +776,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
         }))
         const ws2 = XLSX.utils.json_to_sheet(detailsData)
         XLSX.utils.book_append_sheet(wb, ws2, "Detalle de Confirmaciones")
-        XLSX.writeFile(wb, `Reporte_Control_Lectura_${format(new Date(), 'yyyyMMdd')}.xlsx`)
+        XLSX.writeFile(wb, `Reporte_Control_Lectura_${summary.year}_${format(new Date(), 'yyyyMMdd')}.xlsx`)
     }
 
     // ------------------------------------------------------------------------------------------------ //
@@ -836,8 +947,10 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     agreements = agreements.filter((a: any) => a.condominium_id === selectedCondo)
                 }
 
+                agreements = agreements.filter((a: any) => new Date(a.created_at).getFullYear() === selectedYear)
+
                 if (agreements.length === 0) {
-                    setErrorMsg('No hay convenios registrados para este condominio.')
+                    setErrorMsg(`No hay convenios registrados en ${selectedYear} para este condominio.`)
                     setIsGenerating(false)
                     return
                 }
@@ -849,13 +962,25 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     .filter((a: any) => a.status === 'approved')
                     .reduce((acc: number, a: any) => acc + Number(a.total_debt || 0), 0)
 
+                const monthlyBreakdown = MONTH_NAMES.map((name, idx) => {
+                    const monthAgreements = agreements.filter((a: any) => new Date(a.created_at).getMonth() === idx)
+                    const monthApproved = monthAgreements.filter((a: any) => a.status === 'approved')
+                    const monthRejected = monthAgreements.filter((a: any) => a.status === 'rejected').length
+                    const monthInProgress = monthAgreements.length - monthApproved.length - monthRejected
+                    const monthDebt = monthApproved.reduce((acc: number, a: any) => acc + Number(a.total_debt || 0), 0)
+                    return { month: name, total: monthAgreements.length, approved: monthApproved.length, rejected: monthRejected, inProgress: monthInProgress, totalDebt: monthDebt }
+                })
+
                 fileSummary = {
                     condoName: selectedCondo === 'all' ? 'Todos los condominios' : (condoNameById[selectedCondo] || 'Desconocido'),
+                    periodName: `AÑO ${selectedYear}`,
+                    year: selectedYear,
                     total: agreements.length,
                     approved,
                     rejected,
                     inProgress,
                     totalDebt,
+                    monthlyBreakdown,
                 }
                 finalTypeLabel = 'Reporte de Convenios'
 
@@ -863,7 +988,6 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 else await generateConveniosPDF(agreements, fileSummary)
             } else if (reportType === 'lectura') {
                 const supabase = createClient()
-                const { start, end } = getDates()
 
                 const { data: announcementsData } = await supabase
                     .from('announcements')
@@ -884,15 +1008,14 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 let views = (viewsResult.data || [])
                     .filter((v: any) => {
                         if (!v.acknowledged_at) return false
-                        const ackDate = new Date(v.acknowledged_at)
-                        return ackDate >= start && ackDate <= end
+                        return new Date(v.acknowledged_at).getFullYear() === selectedYear
                     })
                     .filter((v: any) => !selectedCondoName || v.property_name === selectedCondoName)
                     .map((v: any) => ({ ...v, announcement_title: announcementTitleById[v.announcement_id] }))
                     .sort((a: any, b: any) => new Date(b.acknowledged_at).getTime() - new Date(a.acknowledged_at).getTime())
 
                 if (views.length === 0) {
-                    setErrorMsg('No hay confirmaciones de lectura registradas en este periodo.')
+                    setErrorMsg(`No hay confirmaciones de lectura registradas en ${selectedYear}.`)
                     setIsGenerating(false)
                     return
                 }
@@ -907,17 +1030,21 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 const uniqueAnnouncements = new Set(views.map(v => v.announcement_id)).size
                 const uniqueResidents = new Set(views.map(v => v.resident_name)).size
 
-                const periodName = dateRange === 'this-month' ? `Mes Actual (${format(start, 'MMMM yyyy', { locale: es })})`
-                            : dateRange === 'last-month' ? `Mes Anterior (${format(start, 'MMMM yyyy', { locale: es })})`
-                            : dateRange === 'quarter' ? `Trimestre (Q${Math.floor(start.getMonth()/3)+1} ${start.getFullYear()})`
-                            : `Año ${start.getFullYear()}`
+                const monthlyBreakdown = MONTH_NAMES.map((name, idx) => {
+                    const monthViews = views.filter((v: any) => new Date(v.acknowledged_at).getMonth() === idx)
+                    const monthAnnouncements = new Set(monthViews.map((v: any) => v.announcement_id)).size
+                    const monthResidents = new Set(monthViews.map((v: any) => v.resident_name)).size
+                    return { month: name, total: monthViews.length, uniqueAnnouncements: monthAnnouncements, uniqueResidents: monthResidents }
+                })
 
                 fileSummary = {
-                    periodName: periodName.toUpperCase(),
+                    periodName: `AÑO ${selectedYear}`,
+                    year: selectedYear,
                     total: views.length,
                     uniqueAnnouncements,
                     uniqueResidents,
                     totalResidents: totalResidentsCount || 0,
+                    monthlyBreakdown,
                 }
                 finalTypeLabel = 'Reporte de Control de Lectura'
 
@@ -1021,7 +1148,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                                 </div>
                             </div>
 
-                            {(reportType === 'executive' || reportType === 'bitacora' || reportType === 'lectura') && (
+                            {(reportType === 'executive' || reportType === 'bitacora') && (
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                         Periodo
@@ -1036,6 +1163,28 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                                             <option value="last-month" className="bg-zinc-900">Mes Anterior</option>
                                             <option value="quarter" className="bg-zinc-900">Este Trimestre</option>
                                             <option value="year" className="bg-zinc-900">Año Actual</option>
+                                        </select>
+                                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-zinc-500">
+                                            <ChevronDown size={16} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {(reportType === 'convenios' || reportType === 'lectura') && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                        Año (desglose mes por mes)
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedYear}
+                                            onChange={(e) => setSelectedYear(Number(e.target.value))}
+                                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                        >
+                                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                                <option key={y} value={y} className="bg-zinc-900">{y}</option>
+                                            ))}
                                         </select>
                                         <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-zinc-500">
                                             <ChevronDown size={16} />

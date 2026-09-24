@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { 
-    DollarSign, 
-    CheckCircle2, 
-    Wrench, 
-    Receipt, 
+import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+    DollarSign,
+    CheckCircle2,
+    Wrench,
+    Receipt,
     ChevronRight,
+    ChevronLeft,
     Bell,
     MessageSquare,
     Calendar,
@@ -20,7 +22,12 @@ import {
     MapPin,
     File,
     BookOpenText,
-    DownloadCloud
+    DownloadCloud,
+    Lock,
+    Landmark,
+    ArrowRightLeft,
+    X,
+    Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +35,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
 import { getAnnouncementsAction, acknowledgeAnnouncementAction } from '@/app/actions/announcement-actions'
 import { getResidentRecentMovementsAction } from '@/app/actions/resident-actions'
+import { createResidentPaymentCheckout } from '@/app/actions/mercadopago-payment-actions'
 import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -45,9 +53,11 @@ interface ResidentDashboardClientProps {
         cuotasPagadasEsteAnio?: number
         incidenciasActivas?: number
     }
+    mpConnected?: boolean
 }
 
-export default function ResidentDashboardCondominioClient({ resident, userName, financialData }: ResidentDashboardClientProps) {
+export default function ResidentDashboardCondominioClient({ resident, userName, financialData, mpConnected = false }: ResidentDashboardClientProps) {
+    const router = useRouter()
     const supabase = createClient()
     const isPropiedades = false
     const [announcements, setAnnouncements] = useState<any[]>([])
@@ -56,6 +66,47 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
     const [acknowledgingIds, setAcknowledgingIds] = useState<Set<string>>(new Set())
     const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set())
     const [movements, setMovements] = useState<any[]>([])
+    const [isCheckingOut, setIsCheckingOut] = useState(false)
+    const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false)
+    const [paymentModalStep, setPaymentModalStep] = useState<'choose' | 'mp-methods'>('choose')
+
+    // Igual que en /residente/payments: con Mercado Pago conectado, el
+    // residente elige entre MP (recibo automático) o transferencia bancaria
+    // (queda pendiente hasta que el admin la valide). Sin MP conectado no hay
+    // elección: va directo a subir comprobante.
+    const handleRegularizarClick = () => {
+        setPaymentModalStep('choose')
+        if (!mpConnected) {
+            router.push('/residente/subir-comprobante')
+            return
+        }
+        setShowPaymentMethodModal(true)
+    }
+
+    const handlePayWithMercadoPago = async (defaultPaymentMethodId?: string) => {
+        setShowPaymentMethodModal(false)
+        setIsCheckingOut(true)
+        try {
+            const result = await createResidentPaymentCheckout({
+                ...(defaultPaymentMethodId ? { defaultPaymentMethodId } : {}),
+            })
+            if (result.success && result.checkoutUrl) {
+                window.location.href = result.checkoutUrl
+            } else {
+                toast.error(result.message || 'No se pudo iniciar el pago.')
+                setIsCheckingOut(false)
+            }
+        } catch (error) {
+            console.error('[Residente] Error al iniciar checkout:', error)
+            toast.error('No se pudo iniciar el pago.')
+            setIsCheckingOut(false)
+        }
+    }
+
+    const handlePayWithBankTransfer = () => {
+        setShowPaymentMethodModal(false)
+        router.push('/residente/subir-comprobante')
+    }
 
     const toggleExpand = (id: string) => {
         setExpandedIds(prev => {
@@ -401,12 +452,18 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                                 </p>
                             </div>
                             
-                            <Link href="/residente/payments">
-                                <Button className="h-14 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 border border-white/10 font-bold tracking-wide transition-all active:scale-95">
+                            <Button
+                                onClick={handleRegularizarClick}
+                                disabled={isCheckingOut}
+                                className="h-14 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 border border-white/10 font-bold tracking-wide transition-all active:scale-95 disabled:opacity-70"
+                            >
+                                {isCheckingOut ? (
+                                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                                ) : (
                                     <DollarSign className="h-5 w-5 mr-2" />
-                                    PAGAR AHORA
-                                </Button>
-                            </Link>
+                                )}
+                                PAGAR AHORA
+                            </Button>
                         </motion.div>
 
                         {/* Reglamento Interno */}
@@ -711,6 +768,182 @@ export default function ResidentDashboardCondominioClient({ resident, userName, 
                     </div>
                 </div>
             </div>
+
+            {/* Modal: elegir método de pago (Mercado Pago vs. transferencia bancaria) */}
+            <AnimatePresence>
+                {showPaymentMethodModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowPaymentMethodModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-[2rem] p-5 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
+                        >
+                            <button
+                                onClick={() => setShowPaymentMethodModal(false)}
+                                className="absolute top-6 right-6 p-2 rounded-full text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+
+                            {paymentModalStep === 'mp-methods' && (
+                                <button
+                                    onClick={() => setPaymentModalStep('choose')}
+                                    className="flex items-center gap-1.5 text-zinc-500 hover:text-white text-xs font-bold mb-4 transition-colors"
+                                >
+                                    <ChevronLeft className="h-3.5 w-3.5" /> Volver
+                                </button>
+                            )}
+
+                            <h3 className="text-2xl font-black text-white mb-1">
+                                {paymentModalStep === 'choose' ? '¿Cómo quieres pagar?' : 'Elige tu forma de pago'}
+                            </h3>
+                            <p className="text-zinc-400 text-sm mb-8">
+                                {paymentModalStep === 'choose' ? 'Elige' : 'Con Mercado Pago, elige'} la forma en la que quieres pagar tu saldo de ${saldoPendiente.toLocaleString('es-MX')} MXN.
+                            </p>
+
+                            <AnimatePresence mode="wait">
+                                {paymentModalStep === 'choose' ? (
+                                    <motion.div
+                                        key="choose"
+                                        initial={{ opacity: 0, x: -12 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -12 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="space-y-4"
+                                    >
+                                        <button
+                                            onClick={() => setPaymentModalStep('mp-methods')}
+                                            className="w-full text-left p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-[#00203d] via-[#003d7a] to-[#0a3d91] hover:border-blue-400/40 transition-all group relative overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-out pointer-events-none" />
+
+                                            <div className="relative z-10 flex items-start gap-4 mb-5">
+                                                <div className="h-12 w-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+                                                    <Lock className="h-5 w-5 text-sky-300" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="text-white font-black">Mercado Pago</p>
+                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase tracking-wider border border-emerald-400/30">
+                                                            Recomendado
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sky-300/80 text-xs font-bold mt-0.5">Saldo, tarjeta, OXXO o transferencia. Tu recibo se genera automáticamente.</p>
+                                                </div>
+                                                <ChevronRight className="h-5 w-5 text-sky-300 group-hover:translate-x-1 transition-transform shrink-0" />
+                                            </div>
+
+                                            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-1.5 pt-4 border-t border-white/10">
+                                                {['Confirmación al instante', 'Recibo automático', 'Sin subir comprobante'].map(b => (
+                                                    <div key={b} className="flex items-center gap-1.5 text-[10px] font-bold text-sky-100/80">
+                                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                                                        {b}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={handlePayWithBankTransfer}
+                                            className="w-full text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-indigo-500/40 transition-all flex items-center gap-4 group"
+                                        >
+                                            <div className="h-12 w-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                                                <Landmark className="h-5 w-5 text-indigo-400" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="text-white font-black">Transferencia bancaria</p>
+                                                <p className="text-zinc-500 text-xs font-bold">Deposita a la cuenta del condominio y sube tu comprobante. Queda pendiente hasta que el administrador lo valide.</p>
+                                            </div>
+                                            <ChevronRight className="h-5 w-5 text-zinc-500 group-hover:translate-x-1 transition-transform" />
+                                        </button>
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="methods"
+                                        initial={{ opacity: 0, x: 12 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 12 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                                    >
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago('account_money')}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-blue-500/40 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-16 w-16 rounded-xl bg-white flex items-center justify-center p-2 shadow-lg shadow-blue-500/20">
+                                                <img src="/logos/mercadopago-logo.png" alt="Mercado Pago" className="h-full w-full object-contain" />
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">Saldo Mercado Pago</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Paga al instante con tu cuenta</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago('oxxo')}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-rose-500/40 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-16 w-28 rounded-xl overflow-hidden shadow-lg shadow-rose-500/20">
+                                                <img src="/logos/oxxo-logo.webp" alt="OXXO" className="h-full w-full object-contain" />
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">OXXO</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Paga en efectivo en tienda</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-rose-400 group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago()}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-zinc-600 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center">
+                                                <CreditCard className="h-5 w-5 text-zinc-300" />
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">Tarjeta</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Crédito, débito o prepagada</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handlePayWithMercadoPago()}
+                                            className="text-left p-5 rounded-2xl border border-zinc-800 bg-zinc-950 hover:border-zinc-600 transition-all flex flex-col gap-3 group"
+                                        >
+                                            <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center">
+                                                <ArrowRightLeft className="h-5 w-5 text-zinc-300" />
+                                            </div>
+                                            <div className="flex items-end justify-between gap-2">
+                                                <div>
+                                                    <p className="text-white font-black text-sm">Transferencia SPEI</p>
+                                                    <p className="text-zinc-500 text-[11px] font-bold">Desde tu banca en línea</p>
+                                                </div>
+                                                <ChevronRight className="h-4 w-4 text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
+                                            </div>
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

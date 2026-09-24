@@ -125,7 +125,14 @@ function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, on
 
             {/* 7. Confirmacion */}
             <td className="px-4 py-6">
-                {getStatusBadge(reserva.status)}
+                <div className="flex flex-col items-center gap-1.5">
+                    {getStatusBadge(reserva.status)}
+                    {reserva.status === 'cancelled' && reserva.rejection_reason && (
+                        <p className="text-[11px] text-rose-400/80 font-medium max-w-[180px] text-center leading-snug" title={reserva.rejection_reason}>
+                            {reserva.rejection_reason}
+                        </p>
+                    )}
+                </div>
             </td>
 
             {/* 8. Acciones inline */}

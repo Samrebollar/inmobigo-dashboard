@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Modal } from '@/components/ui/modal'
-import { FileText, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, X, ChevronDown } from 'lucide-react'
+import { FileText, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, X, ChevronDown, Check } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/utils/supabase/client'
@@ -37,6 +37,8 @@ const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClose, onSuccess }: ReportsGeneratorModalProps) {
     const [dateRange, setDateRange] = useState<'this-month' | 'last-month' | 'quarter' | 'year'>('this-month')
     const [selectedMonths, setSelectedMonths] = useState<number[]>(Array.from({ length: 12 }, (_, i) => i))
+    const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false)
+    const monthDropdownRef = useRef<HTMLDivElement>(null)
     const [formatOption, setFormatOption] = useState<'pdf' | 'excel'>('pdf')
     const [selectedCondo, setSelectedCondo] = useState<string>('all')
     const [isGenerating, setIsGenerating] = useState(false)
@@ -49,6 +51,24 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
     const toggleMonth = (idx: number) => {
         setSelectedMonths(prev => prev.includes(idx) ? prev.filter(m => m !== idx) : [...prev, idx].sort((a, b) => a - b))
     }
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (monthDropdownRef.current && !monthDropdownRef.current.contains(e.target as Node)) {
+                setIsMonthDropdownOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    const monthsSummaryLabel = selectedMonths.length === 0
+        ? 'Selecciona meses...'
+        : selectedMonths.length === 12
+            ? 'Todos los meses'
+            : selectedMonths.length <= 3
+                ? selectedMonths.map(idx => MONTH_NAMES[idx]).join(', ')
+                : `${selectedMonths.length} meses seleccionados`
 
     useEffect(() => {
         const fetchContext = async () => {
@@ -1192,30 +1212,46 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                             )}
 
                             {(reportType === 'convenios' || reportType === 'lectura') && (
-                                <div className="space-y-1.5">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">
-                                            Meses a incluir ({new Date().getFullYear()})
-                                        </label>
+                                <div className="space-y-1.5" ref={monthDropdownRef}>
+                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">
+                                        Meses a incluir ({new Date().getFullYear()})
+                                    </label>
+                                    <div className="relative">
                                         <button
                                             type="button"
-                                            onClick={() => setSelectedMonths(selectedMonths.length === 12 ? [] : Array.from({ length: 12 }, (_, i) => i))}
-                                            className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                                            onClick={() => setIsMonthDropdownOpen(o => !o)}
+                                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-indigo-500 transition-all flex items-center justify-between cursor-pointer"
                                         >
-                                            {selectedMonths.length === 12 ? 'Quitar todos' : 'Seleccionar todos'}
+                                            <span className="truncate text-left">{monthsSummaryLabel}</span>
+                                            <ChevronDown size={16} className={`text-zinc-500 shrink-0 transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
                                         </button>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {MONTH_NAMES.map((name, idx) => (
-                                            <button
-                                                key={name}
-                                                type="button"
-                                                onClick={() => toggleMonth(idx)}
-                                                className={`px-2 py-2 rounded-lg border text-[11px] font-bold transition-all ${selectedMonths.includes(idx) ? 'bg-indigo-500/10 border-indigo-500/50 text-indigo-300' : 'bg-white/[0.03] border-white/5 text-zinc-500 hover:border-white/10'}`}
-                                            >
-                                                {name.slice(0, 3)}
-                                            </button>
-                                        ))}
+
+                                        {isMonthDropdownOpen && (
+                                            <div className="absolute z-20 mt-2 w-full bg-zinc-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedMonths(selectedMonths.length === 12 ? [] : Array.from({ length: 12 }, (_, i) => i))}
+                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-indigo-400 hover:bg-white/5 border-b border-white/10 transition-colors"
+                                                >
+                                                    {selectedMonths.length === 12 ? 'Quitar todos' : 'Seleccionar todos'}
+                                                </button>
+                                                <div className="max-h-56 overflow-y-auto">
+                                                    {MONTH_NAMES.map((name, idx) => (
+                                                        <button
+                                                            type="button"
+                                                            key={name}
+                                                            onClick={() => toggleMonth(idx)}
+                                                            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-white hover:bg-white/5 transition-colors"
+                                                        >
+                                                            <span>{name}</span>
+                                                            <span className={`flex h-4 w-4 items-center justify-center rounded border ${selectedMonths.includes(idx) ? 'bg-indigo-500 border-indigo-500' : 'border-white/20'}`}>
+                                                                {selectedMonths.includes(idx) && <Check size={12} className="text-white" />}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

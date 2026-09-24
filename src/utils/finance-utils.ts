@@ -835,6 +835,22 @@ export function calculateResidentDebtSummary({
             firstBillingMonth = startDate.getMonth()
             if (startDate.getFullYear() < today.getFullYear()) firstBillingMonth = 0
         }
+        // Si ya existe una factura real de mantenimiento con vencimiento anterior
+        // al mes calculado arriba (p.ej. se le cargó un mes previo aunque su
+        // fecha_ingreso/created_at diga que "empezó" después), ese mes real
+        // manda: de lo contrario el pago ya aplicado a esa factura anterior se
+        // contaría como si cubriera el mes actual, ocultando saldo pendiente real.
+        const earliestMaintenanceDue = invoices
+            .filter(inv => inv.invoice_type === 'maintenance' && inv.due_date)
+            .reduce((earliest: Date | null, inv) => {
+                const d = new Date(inv.due_date)
+                return !earliest || d < earliest ? d : earliest
+            }, null as Date | null)
+        if (earliestMaintenanceDue) {
+            firstBillingMonth = earliestMaintenanceDue.getFullYear() < today.getFullYear()
+                ? 0
+                : Math.min(firstBillingMonth, earliestMaintenanceDue.getMonth())
+        }
         const lastBilledMonth = today.getDate() > paymentDeadlineDay ? currentMonthIndex : currentMonthIndex - 1
         const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
         const annualTarget = monthlyFee * activeMonths

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, HandCoins } from 'lucide-react'
+import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, HandCoins, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -505,7 +505,7 @@ export default function ResidentMovementsPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -663,6 +663,39 @@ export default function ResidentMovementsPage() {
                                 {dynamicStats.creditBalance > 0
                                     ? '● Excedente del periodo'
                                     : '● Sin saldo a favor'}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Saldo atrasado (arrastrado desde el registro del residente) */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                >
+                    <Card className="bg-zinc-900/50 border-zinc-800 hover:border-orange-500/50 transition-all hover:bg-zinc-900/80 group relative overflow-hidden h-full">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-orange-500/50"></div>
+                        <CardContent className="p-6 pt-10 flex flex-col justify-between h-full relative">
+                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <History size={64} className="text-orange-500" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 text-orange-400 mb-2">
+                                    <div className="p-1.5 rounded-md bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                                        <History size={16} />
+                                    </div>
+                                    <span className="text-sm font-bold">Saldo atrasado</span>
+                                </div>
+                                <div className="text-3xl font-bold text-orange-400 tracking-tight mt-2">
+                                    {formatMoney(carriedOverDebt)}
+                                </div>
+                            </div>
+                            <div className="text-xs text-orange-400/80 mt-4 flex items-center gap-1 font-medium">
+                                {carriedOverDebt > 0
+                                    ? '● Saldo previo al registro'
+                                    : '● Sin saldo atrasado'}
                             </div>
                         </CardContent>
                     </Card>

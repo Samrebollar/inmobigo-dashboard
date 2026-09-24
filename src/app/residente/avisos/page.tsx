@@ -20,7 +20,7 @@ export default async function AvisosPage() {
 
     const { data: resident } = await adminSupabase
         .from('residents')
-        .select('*, condominiums(organization_id)')
+        .select('*, condominiums(organization_id, name)')
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -33,11 +33,24 @@ export default async function AvisosPage() {
             </div>
         )
     }
-    
-    const { data: initialAnnouncements } = await adminSupabase
+
+    const propertyName = resident?.condominiums?.name
+
+    // Los avisos son por organización, pero un administrador puede tener
+    // varios condominios — sin filtrar por el propio (o los marcados como
+    // "Todos"), el residente veía también los avisos de otros condominios
+    // de la misma organización.
+    let query = adminSupabase
         .from('announcements')
         .select('*')
         .eq('organization_id', finalOrganizationId)
+        .eq('is_active', true)
+
+    if (propertyName) {
+        query = query.or(`visibility.eq.Todos,visibility.eq."${propertyName}"`)
+    }
+
+    const { data: initialAnnouncements } = await query
         .order('created_at', { ascending: false })
         .limit(50)
 

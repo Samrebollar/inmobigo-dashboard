@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Modal } from '@/components/ui/modal'
-import { FileText, Calendar, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, X, ChevronDown } from 'lucide-react'
+import { FileText, Download, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, X, ChevronDown } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/utils/supabase/client'
@@ -36,6 +36,7 @@ const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 
 export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClose, onSuccess }: ReportsGeneratorModalProps) {
     const [dateRange, setDateRange] = useState<'this-month' | 'last-month' | 'quarter' | 'year'>('this-month')
+    const [selectedMonths, setSelectedMonths] = useState<number[]>(Array.from({ length: 12 }, (_, i) => i))
     const [formatOption, setFormatOption] = useState<'pdf' | 'excel'>('pdf')
     const [selectedCondo, setSelectedCondo] = useState<string>('all')
     const [isGenerating, setIsGenerating] = useState(false)
@@ -44,6 +45,10 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
     const [organizationId, setOrganizationId] = useState<string | null>(null)
     const [condominiums, setCondominiums] = useState<{ id: string, name: string }[]>([])
+
+    const toggleMonth = (idx: number) => {
+        setSelectedMonths(prev => prev.includes(idx) ? prev.filter(m => m !== idx) : [...prev, idx].sort((a, b) => a - b))
+    }
 
     useEffect(() => {
         const fetchContext = async () => {
@@ -468,7 +473,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
         doc.setFontSize(10)
         doc.setTextColor(100, 113, 129)
-        doc.text(`Año: ${summary.year}  •  Condominio: ${summary.condoName}`, 14, 52)
+        doc.text(`Periodo: ${summary.periodName}  •  Condominio: ${summary.condoName}`, 14, 52)
         doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 57)
 
         doc.setDrawColor(226, 232, 240)
@@ -582,7 +587,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             ["REPORTE DE CONVENIOS"],
             [],
             ["Fecha de Generación:", format(new Date(), 'dd/MM/yyyy HH:mm')],
-            ["Año:", summary.year],
+            ["Periodo:", summary.periodName],
             ["Condominio:", summary.condoName],
             [],
             ["MÉTRICA", "VALOR"],
@@ -785,6 +790,10 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
             setErrorMsg('Cargando contexto, por favor espera...')
             return
         }
+        if ((reportType === 'convenios' || reportType === 'lectura') && selectedMonths.length === 0) {
+            setErrorMsg('Selecciona al menos un mes.')
+            return
+        }
         setIsGenerating(true)
         setErrorMsg('')
 
@@ -947,10 +956,13 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     agreements = agreements.filter((a: any) => a.condominium_id === selectedCondo)
                 }
 
-                agreements = agreements.filter((a: any) => new Date(a.created_at).getFullYear() === currentYear)
+                agreements = agreements.filter((a: any) => {
+                    const created = new Date(a.created_at)
+                    return created.getFullYear() === currentYear && selectedMonths.includes(created.getMonth())
+                })
 
                 if (agreements.length === 0) {
-                    setErrorMsg(`No hay convenios registrados este año (${currentYear}) para este condominio.`)
+                    setErrorMsg(`No hay convenios registrados en los meses seleccionados de ${currentYear} para este condominio.`)
                     setIsGenerating(false)
                     return
                 }
@@ -962,7 +974,8 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     .filter((a: any) => a.status === 'approved')
                     .reduce((acc: number, a: any) => acc + Number(a.total_debt || 0), 0)
 
-                const monthlyBreakdown = MONTH_NAMES.map((name, idx) => {
+                const monthlyBreakdown = selectedMonths.map((idx) => {
+                    const name = MONTH_NAMES[idx]
                     const monthAgreements = agreements.filter((a: any) => new Date(a.created_at).getMonth() === idx)
                     const monthApproved = monthAgreements.filter((a: any) => a.status === 'approved')
                     const monthRejected = monthAgreements.filter((a: any) => a.status === 'rejected').length
@@ -971,9 +984,11 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     return { month: name, total: monthAgreements.length, approved: monthApproved.length, rejected: monthRejected, inProgress: monthInProgress, totalDebt: monthDebt }
                 })
 
+                const monthsLabel = selectedMonths.length === 12 ? `Enero - Diciembre ${currentYear}` : `${selectedMonths.map(idx => MONTH_NAMES[idx]).join(', ')} ${currentYear}`
+
                 fileSummary = {
                     condoName: selectedCondo === 'all' ? 'Todos los condominios' : (condoNameById[selectedCondo] || 'Desconocido'),
-                    periodName: `ENERO - DICIEMBRE ${currentYear}`,
+                    periodName: monthsLabel.toUpperCase(),
                     year: currentYear,
                     total: agreements.length,
                     approved,
@@ -1009,14 +1024,15 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 let views = (viewsResult.data || [])
                     .filter((v: any) => {
                         if (!v.acknowledged_at) return false
-                        return new Date(v.acknowledged_at).getFullYear() === currentYear
+                        const ackDate = new Date(v.acknowledged_at)
+                        return ackDate.getFullYear() === currentYear && selectedMonths.includes(ackDate.getMonth())
                     })
                     .filter((v: any) => !selectedCondoName || v.property_name === selectedCondoName)
                     .map((v: any) => ({ ...v, announcement_title: announcementTitleById[v.announcement_id] }))
                     .sort((a: any, b: any) => new Date(b.acknowledged_at).getTime() - new Date(a.acknowledged_at).getTime())
 
                 if (views.length === 0) {
-                    setErrorMsg(`No hay confirmaciones de lectura registradas este año (${currentYear}).`)
+                    setErrorMsg(`No hay confirmaciones de lectura registradas en los meses seleccionados de ${currentYear}.`)
                     setIsGenerating(false)
                     return
                 }
@@ -1031,15 +1047,18 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 const uniqueAnnouncements = new Set(views.map(v => v.announcement_id)).size
                 const uniqueResidents = new Set(views.map(v => v.resident_name)).size
 
-                const monthlyBreakdown = MONTH_NAMES.map((name, idx) => {
+                const monthlyBreakdown = selectedMonths.map((idx) => {
+                    const name = MONTH_NAMES[idx]
                     const monthViews = views.filter((v: any) => new Date(v.acknowledged_at).getMonth() === idx)
                     const monthAnnouncements = new Set(monthViews.map((v: any) => v.announcement_id)).size
                     const monthResidents = new Set(monthViews.map((v: any) => v.resident_name)).size
                     return { month: name, total: monthViews.length, uniqueAnnouncements: monthAnnouncements, uniqueResidents: monthResidents }
                 })
 
+                const monthsLabel = selectedMonths.length === 12 ? `Enero - Diciembre ${currentYear}` : `${selectedMonths.map(idx => MONTH_NAMES[idx]).join(', ')} ${currentYear}`
+
                 fileSummary = {
-                    periodName: `ENERO - DICIEMBRE ${currentYear}`,
+                    periodName: monthsLabel.toUpperCase(),
                     year: currentYear,
                     total: views.length,
                     uniqueAnnouncements,
@@ -1173,9 +1192,31 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                             )}
 
                             {(reportType === 'convenios' || reportType === 'lectura') && (
-                                <div className="rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3 text-xs text-zinc-400 flex items-center gap-2">
-                                    <Calendar size={14} className="shrink-0 text-zinc-500" />
-                                    <span>Desglose mes por mes, de enero a diciembre de {new Date().getFullYear()}.</span>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-black text-zinc-500 uppercase tracking-widest">
+                                            Meses a incluir ({new Date().getFullYear()})
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedMonths(selectedMonths.length === 12 ? [] : Array.from({ length: 12 }, (_, i) => i))}
+                                            className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                                        >
+                                            {selectedMonths.length === 12 ? 'Quitar todos' : 'Seleccionar todos'}
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {MONTH_NAMES.map((name, idx) => (
+                                            <button
+                                                key={name}
+                                                type="button"
+                                                onClick={() => toggleMonth(idx)}
+                                                className={`px-2 py-2 rounded-lg border text-[11px] font-bold transition-all ${selectedMonths.includes(idx) ? 'bg-indigo-500/10 border-indigo-500/50 text-indigo-300' : 'bg-white/[0.03] border-white/5 text-zinc-500 hover:border-white/10'}`}
+                                            >
+                                                {name.slice(0, 3)}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 

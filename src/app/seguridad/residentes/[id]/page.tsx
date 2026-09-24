@@ -267,6 +267,8 @@ export default function ResidentMovementsPage() {
 
             const payload = {
                 "tipo": "recordatorio",
+                "resident_id": resident.id,
+                "organization_id": organizationId || null,
                 "first_name": `${resident.first_name} ${resident.last_name}`,
                 "phone": resident.phone || '',
                 "amount": stats.totalPending, // Saldo real pendiente (balance_due + debt_amount)

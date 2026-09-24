@@ -45,7 +45,9 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
     // 2. VALIDACIÓN DE EXPIRACIÓN AUTOMÁTICA EN TIEMPO REAL
     const now = new Date()
     // Forzamos el offset de México (UTC-6) para evitar problemas con la hora del servidor (UTC)
-    const visitDateTime = new Date(`${visita.visit_date}T${visita.end_time}-06:00`)
+    // Si no se registró hora de fin (ej. visitas dadas de alta por WhatsApp sin ese dato),
+    // se toma el final del día como límite en vez de tronar con un valor nulo.
+    const visitDateTime = new Date(`${visita.visit_date}T${visita.end_time || '23:59:59'}-06:00`)
     
     let currentStatus = visita.status
     const isActuallyExpired = now > visitDateTime
@@ -203,7 +205,7 @@ export default async function AccesoVisitaPage({ params }: { params: Promise<{ i
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Hora Válida</p>
-                                    <p className="font-bold text-white">{visita.start_time.substring(0,5)} - {visita.end_time.substring(0,5)} hs</p>
+                                    <p className="font-bold text-white">{visita.start_time.substring(0,5)}{visita.end_time ? ` - ${visita.end_time.substring(0,5)}` : ''} hs</p>
                                 </div>
                             </div>
                         </div>

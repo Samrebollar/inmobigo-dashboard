@@ -1,7 +1,9 @@
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
 import { getAnnouncementsAction } from '@/app/actions/announcement-actions'
 import { getResidentRecentMovementsAction } from '@/app/actions/resident-actions'
+import { findResidentForUser } from '@/services/mobile-resident-lookup'
 import { redirect } from 'next/navigation'
 import MobileDashboardClient from '@/components/mobile/mobile-dashboard-client'
 
@@ -28,11 +30,21 @@ export default async function MobileDashboardPage() {
     const firstName = fullName.trim().split(' ')[0]
     const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url || null
 
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('*, condominiums(name, organization_id), units(unit_number, monto_mensual, payment_deadline)')
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const resident = await findResidentForUser(user)
+
+    if (resident) {
+        const adminSupabase = createAdminClient()
+        const [{ data: condo }, { data: unit }] = await Promise.all([
+            resident.condominium_id
+                ? adminSupabase.from('condominiums').select('name, organization_id').eq('id', resident.condominium_id).maybeSingle()
+                : Promise.resolve({ data: null }),
+            resident.unit_id
+                ? adminSupabase.from('units').select('unit_number, monto_mensual, payment_deadline').eq('id', resident.unit_id).maybeSingle()
+                : Promise.resolve({ data: null }),
+        ])
+        ;(resident as any).condominiums = condo
+        ;(resident as any).units = unit
+    }
 
     if (!resident) {
         // La versión móvil todavía no tiene su propia pantalla para este caso —

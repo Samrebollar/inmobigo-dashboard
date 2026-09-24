@@ -762,7 +762,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                 initial={{ opacity: 0, scale: 0.95, y: 50 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95, y: 50 }}
-                                className="bg-zinc-950 border border-zinc-800 rounded-[2.5rem] p-10 w-full max-w-md shadow-[0_40px_100px_rgba(0,0,0,0.8)] relative my-8"
+                                className="bg-zinc-950 border border-zinc-800 rounded-[2.5rem] p-6 sm:p-10 w-full max-w-md shadow-[0_40px_100px_rgba(0,0,0,0.8)] relative my-8"
                             >
                                 <button onClick={() => setIsCreateModalOpen(false)} className="absolute top-8 right-8 text-zinc-400 hover:text-white bg-zinc-900 rounded-full p-1.5 border border-zinc-800">
                                     <X className="w-5 h-5" />

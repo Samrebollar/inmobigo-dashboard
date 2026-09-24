@@ -450,7 +450,7 @@ export default function ResidentPaymentsClient({
                 className={cn(
                     // Contorno apagado en reposo — solo se ilumina al pasar el mouse, y con
                     // un tono más cálido/apagado que el neón saturado de antes.
-                    "relative overflow-hidden bg-zinc-900/50 rounded-[3rem] p-8 md:p-12 group transition-all duration-500 border-2 shadow-none",
+                    "relative overflow-hidden bg-zinc-900/50 rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 md:p-12 group transition-all duration-500 border-2 shadow-none",
                     heroIsOverdue
                         ? "border-rose-500/20 hover:border-rose-400/50 hover:shadow-[0_0_40px_-12px_rgba(225,29,72,0.35)]"
                         : "border-blue-500/20 hover:border-blue-400/50 hover:shadow-[0_0_40px_-12px_rgba(37,99,235,0.35)]"
@@ -504,13 +504,13 @@ export default function ResidentPaymentsClient({
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     className={cn(
-                                        "text-7xl font-black tracking-tighter italic",
+                                        "text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter italic break-all",
                                         heroIsOverdue ? "text-rose-400" : heroIsPending ? "text-amber-400" : "text-white"
                                     )}
                                 >
                                     ${heroDebt.toLocaleString('es-MX')}
                                 </motion.h2>
-                                <span className="text-zinc-500 font-bold text-xl uppercase tracking-tighter">MXN</span>
+                                <span className="text-zinc-500 font-bold text-base sm:text-xl uppercase tracking-tighter">MXN</span>
                             </div>
                         </div>
 
@@ -542,7 +542,7 @@ export default function ResidentPaymentsClient({
                                             // (size='md') — sin repetir el mismo prefijo "md:" aquí, twMerge no las
                                             // considera del mismo grupo y las deja convivir, así que en desktop
                                             // (md+) terminaba ganando el tamaño chico del default.
-                                            "h-20 md:h-20 px-10 md:px-10 rounded-2xl text-base md:text-base font-black shadow-2xl transition-all flex items-center gap-3 group/btn disabled:opacity-70",
+                                            "h-14 sm:h-20 md:h-20 px-6 sm:px-10 md:px-10 rounded-2xl text-base md:text-base font-black shadow-2xl transition-all flex items-center gap-3 group/btn disabled:opacity-70",
                                             heroIsOverdue ? "bg-rose-600 hover:bg-rose-500 shadow-rose-600/40" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/40"
                                         )}
                                     >
@@ -560,7 +560,7 @@ export default function ResidentPaymentsClient({
 
                             <motion.div
                                 whileHover={{ scale: 1.02 }}
-                                className="relative flex items-center gap-4 h-20 px-8 rounded-2xl bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] border border-blue-400/20 shadow-[0_8px_24px_-8px_rgba(0,158,247,0.35)] overflow-hidden group/mp"
+                                className="relative flex items-center gap-4 h-14 sm:h-20 px-5 sm:px-8 rounded-2xl bg-gradient-to-r from-[#00203d] via-[#003d7a] to-[#0a3d91] border border-blue-400/20 shadow-[0_8px_24px_-8px_rgba(0,158,247,0.35)] overflow-hidden group/mp"
                             >
                                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-150%] group-hover/mp:translate-x-[150%] transition-transform duration-1000 ease-out" />
                                 <div className="h-11 w-11 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center relative z-10 shrink-0">
@@ -962,7 +962,7 @@ export default function ResidentPaymentsClient({
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 shadow-2xl"
+                            className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-[2rem] p-5 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
                         >
                             <button
                                 onClick={() => setShowPaymentMethodModal(false)}

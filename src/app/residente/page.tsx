@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getUserContext } from '@/utils/user-context'
 import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
 import { NotLinkedState } from '@/components/residente/NotLinkedState'
+import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-service'
 import Link from 'next/link'
 import nextDynamic from 'next/dynamic'
 
@@ -141,11 +142,16 @@ export default async function ResidentePage() {
         )
     }
 
+    const mpAccount = residentData.condominium_id
+        ? await getCondoMercadoPagoAccount(residentData.condominium_id)
+        : { connected: false }
+
     return (
         <ResidentDashboardCondominioClient
             resident={residentData}
             userName={firstName}
             financialData={financialData}
+            mpConnected={mpAccount.connected}
         />
     )
 }

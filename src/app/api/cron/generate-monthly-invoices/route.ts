@@ -129,7 +129,8 @@ async function handleRequest(request: Request) {
                     monto_mensual,
                     facturacion_activa,
                     billing_status,
-                    billing_day
+                    billing_day,
+                    payment_deadline
                 )
             `)
             .in('status', ['active', 'delinquent'])
@@ -234,6 +235,13 @@ async function handleRequest(request: Request) {
             // es precisamente el "modo manual" que se ofrece cuando "Generar cobros
             // automáticos" está apagado, o cuando ya pasó el día de cobro de la unidad.
             const billingDay = Math.min(Number(unit.billing_day) || 1, lastDayOfMonth)
+            // Día límite de pago real (Propiedades > Unidades > "Fecha límite de
+            // cobro"), NUNCA el día de generación — son cosas distintas: la cuota
+            // se genera el billing_day (día 1 por defecto) pero el residente tiene
+            // hasta el payment_deadline (día 10 por defecto) para pagarla sin
+            // considerarse vencida. Antes esto usaba billingDay para due_date,
+            // así que toda factura vencía el mismo día en que se generaba.
+            const paymentDeadlineDay = Math.min(Number(unit.payment_deadline) || 10, lastDayOfMonth)
 
             if (isCronCall) {
                 if (!isAutoGenerationEnabledForCondo(resident.condominium_id)) {
@@ -258,7 +266,7 @@ async function handleRequest(request: Request) {
                 }
             }
 
-            const dueDateStr = `${year}-${mm}-${String(billingDay).padStart(2, '0')}`
+            const dueDateStr = `${year}-${mm}-${String(paymentDeadlineDay).padStart(2, '0')}`
 
             const fee = Number(unit.monto_mensual || 0)
             if (fee <= 0) {

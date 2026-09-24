@@ -36,7 +36,6 @@ const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 
 export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClose, onSuccess }: ReportsGeneratorModalProps) {
     const [dateRange, setDateRange] = useState<'this-month' | 'last-month' | 'quarter' | 'year'>('this-month')
-    const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
     const [formatOption, setFormatOption] = useState<'pdf' | 'excel'>('pdf')
     const [selectedCondo, setSelectedCondo] = useState<string>('all')
     const [isGenerating, setIsGenerating] = useState(false)
@@ -908,6 +907,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 if (formatOption === 'excel') await generateBitacoraExcel(entries, fileSummary)
                 else await generateBitacoraPDF(entries, fileSummary)
             } else if (reportType === 'convenios') {
+                const currentYear = new Date().getFullYear()
                 const result = await getPaymentAgreementsAction()
                 if (!result.success) {
                     setErrorMsg(result.error || 'Error al obtener los convenios')
@@ -947,10 +947,10 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     agreements = agreements.filter((a: any) => a.condominium_id === selectedCondo)
                 }
 
-                agreements = agreements.filter((a: any) => new Date(a.created_at).getFullYear() === selectedYear)
+                agreements = agreements.filter((a: any) => new Date(a.created_at).getFullYear() === currentYear)
 
                 if (agreements.length === 0) {
-                    setErrorMsg(`No hay convenios registrados en ${selectedYear} para este condominio.`)
+                    setErrorMsg(`No hay convenios registrados este año (${currentYear}) para este condominio.`)
                     setIsGenerating(false)
                     return
                 }
@@ -973,8 +973,8 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
 
                 fileSummary = {
                     condoName: selectedCondo === 'all' ? 'Todos los condominios' : (condoNameById[selectedCondo] || 'Desconocido'),
-                    periodName: `AÑO ${selectedYear}`,
-                    year: selectedYear,
+                    periodName: `ENERO - DICIEMBRE ${currentYear}`,
+                    year: currentYear,
                     total: agreements.length,
                     approved,
                     rejected,
@@ -987,6 +987,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 if (formatOption === 'excel') await generateConveniosExcel(agreements, fileSummary)
                 else await generateConveniosPDF(agreements, fileSummary)
             } else if (reportType === 'lectura') {
+                const currentYear = new Date().getFullYear()
                 const supabase = createClient()
 
                 const { data: announcementsData } = await supabase
@@ -1008,14 +1009,14 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 let views = (viewsResult.data || [])
                     .filter((v: any) => {
                         if (!v.acknowledged_at) return false
-                        return new Date(v.acknowledged_at).getFullYear() === selectedYear
+                        return new Date(v.acknowledged_at).getFullYear() === currentYear
                     })
                     .filter((v: any) => !selectedCondoName || v.property_name === selectedCondoName)
                     .map((v: any) => ({ ...v, announcement_title: announcementTitleById[v.announcement_id] }))
                     .sort((a: any, b: any) => new Date(b.acknowledged_at).getTime() - new Date(a.acknowledged_at).getTime())
 
                 if (views.length === 0) {
-                    setErrorMsg(`No hay confirmaciones de lectura registradas en ${selectedYear}.`)
+                    setErrorMsg(`No hay confirmaciones de lectura registradas este año (${currentYear}).`)
                     setIsGenerating(false)
                     return
                 }
@@ -1038,8 +1039,8 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                 })
 
                 fileSummary = {
-                    periodName: `AÑO ${selectedYear}`,
-                    year: selectedYear,
+                    periodName: `ENERO - DICIEMBRE ${currentYear}`,
+                    year: currentYear,
                     total: views.length,
                     uniqueAnnouncements,
                     uniqueResidents,
@@ -1172,24 +1173,9 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                             )}
 
                             {(reportType === 'convenios' || reportType === 'lectura') && (
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                                        Año (desglose mes por mes)
-                                    </label>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedYear}
-                                            onChange={(e) => setSelectedYear(Number(e.target.value))}
-                                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-                                        >
-                                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                                                <option key={y} value={y} className="bg-zinc-900">{y}</option>
-                                            ))}
-                                        </select>
-                                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-zinc-500">
-                                            <ChevronDown size={16} />
-                                        </div>
-                                    </div>
+                                <div className="rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3 text-xs text-zinc-400 flex items-center gap-2">
+                                    <Calendar size={14} className="shrink-0 text-zinc-500" />
+                                    <span>Desglose mes por mes, de enero a diciembre de {new Date().getFullYear()}.</span>
                                 </div>
                             )}
 

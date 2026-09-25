@@ -483,6 +483,32 @@ export function AvisosClient({
         setRejectionReasonInput('')
     }
 
+    const [deletingAmenityReservation, setDeletingAmenityReservation] = useState<any | null>(null)
+    const [isDeletingAmenityReservation, setIsDeletingAmenityReservation] = useState(false)
+
+    const handleConfirmDeleteAmenityReservation = async () => {
+        if (!deletingAmenityReservation) return
+        setIsDeletingAmenityReservation(true)
+        try {
+            const { error } = await supabase
+                .from('amenity_reservations')
+                .delete()
+                .eq('id', deletingAmenityReservation.id)
+
+            if (error) throw error
+
+            setAmenityReservations(prev => prev.filter(r => r.id !== deletingAmenityReservation.id))
+            setToastMessage('Tarjeta eliminada correctamente')
+            setTimeout(() => setToastMessage(null), 3000)
+        } catch (error) {
+            console.error('Error deleting amenity reservation:', error)
+            alert('Error al eliminar la tarjeta')
+        } finally {
+            setIsDeletingAmenityReservation(false)
+            setDeletingAmenityReservation(null)
+        }
+    }
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0])
@@ -963,8 +989,16 @@ export function AvisosClient({
                                                     </button>
                                                 </>
                                             )}
-                                            {res.status !== 'pending' && (
-                                                <button 
+                                            {res.status === 'cancelled' && (
+                                                <button
+                                                    onClick={() => setDeletingAmenityReservation(res)}
+                                                    className="w-full h-11 px-6 rounded-xl flex items-center justify-center gap-2 text-rose-400 hover:text-white bg-rose-500/5 hover:bg-rose-600 border border-rose-500/20 hover:border-rose-600 transition-all font-bold text-[10px] uppercase tracking-widest"
+                                                >
+                                                    <Trash2 size={14} /> Eliminar Tarjeta
+                                                </button>
+                                            )}
+                                            {res.status === 'approved' && (
+                                                <button
                                                     disabled
                                                     className="w-full h-11 px-6 rounded-xl flex items-center justify-center text-zinc-600 bg-zinc-900 border border-zinc-800 font-bold text-[10px] uppercase tracking-widest cursor-not-allowed opacity-50"
                                                 >
@@ -1417,6 +1451,63 @@ export function AvisosClient({
                                             <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                         ) : (
                                             'Sí, Denegar'
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Delete Amenity Reservation Card Modal */}
+            <AnimatePresence>
+                {deletingAmenityReservation && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => !isDeletingAmenityReservation && setDeletingAmenityReservation(null)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="relative w-full max-w-md bg-zinc-900 border border-rose-500/30 rounded-[2.5rem] p-10 shadow-2xl shadow-rose-500/10 overflow-hidden"
+                        >
+                            <div className="absolute -top-24 -right-24 w-48 h-48 bg-rose-500/10 blur-[100px] rounded-full" />
+
+                            <div className="relative space-y-8 text-center">
+                                <div className="mx-auto w-24 h-24 bg-rose-500/10 text-rose-500 rounded-3xl flex items-center justify-center ring-1 ring-rose-500/20 shadow-inner">
+                                    <Trash2 size={44} />
+                                </div>
+
+                                <div className="space-y-3">
+                                    <h2 className="text-3xl font-black text-white tracking-tight leading-none">¿Eliminar tarjeta?</h2>
+                                    <p className="text-zinc-400 text-sm font-medium leading-relaxed px-2">
+                                        Se eliminará por completo el registro de esta reserva denegada. Esta acción no puede deshacerse.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                                    <button
+                                        disabled={isDeletingAmenityReservation}
+                                        onClick={() => setDeletingAmenityReservation(null)}
+                                        className="flex-1 h-14 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold transition-all text-sm uppercase tracking-widest disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        disabled={isDeletingAmenityReservation}
+                                        onClick={handleConfirmDeleteAmenityReservation}
+                                        className="flex-1 h-14 px-8 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black transition-all text-sm uppercase tracking-widest shadow-lg shadow-rose-600/40 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isDeletingAmenityReservation ? (
+                                            <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            'Sí, Eliminar'
                                         )}
                                     </button>
                                 </div>

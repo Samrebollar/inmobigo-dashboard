@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, Send, Loader2, Search, Home, User } from 'lucide-react'
+import { MessageCircle, Send, Loader2, Search, Home } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import {
     getAdminMessageThreadsAction,
@@ -42,16 +42,35 @@ function formatMessageTime(iso: string) {
     return format(date, "d MMM, HH:mm", { locale: es })
 }
 
+const AVATAR_COLORS = [
+    'bg-indigo-500', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500',
+    'bg-sky-500', 'bg-violet-500', 'bg-teal-500', 'bg-fuchsia-500',
+]
+
+function getInitials(name?: string | null) {
+    const trimmed = (name || '').trim()
+    if (!trimmed) return '?'
+    const parts = trimmed.split(/\s+/)
+    return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?'
+}
+
+function getAvatarColor(name?: string | null) {
+    const str = name || ''
+    let hash = 0
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash)
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
 function Avatar({ url, name, size = 32 }: { url?: string | null, name?: string | null, size?: number }) {
     return (
         <div
-            className="rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-white/5"
+            className={`rounded-full flex items-center justify-center overflow-hidden shrink-0 ring-1 ring-white/5 ${url ? 'bg-zinc-800' : getAvatarColor(name)}`}
             style={{ width: size, height: size }}
         >
             {url ? (
                 <img src={url} alt={name || 'Avatar'} className="h-full w-full object-cover" />
             ) : (
-                <User className="text-zinc-500" size={size * 0.55} />
+                <span className="font-bold text-white" style={{ fontSize: size * 0.4 }}>{getInitials(name)}</span>
             )}
         </div>
     )

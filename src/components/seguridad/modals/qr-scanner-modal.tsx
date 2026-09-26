@@ -7,19 +7,42 @@ import { Button } from '@/components/ui/button'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/utils/supabase/client'
 
 interface QRScannerModalProps {
     isOpen: boolean
     onClose: () => void
 }
 
+type VisitorPass = {
+    id: string
+    visitor_name: string
+    unit_name: string | null
+    organization_name: string | null
+    start_time: string
+    end_time: string | null
+    status: string
+    used_at: string | null
+    notes: string | null
+}
+
+type Phase = 'looking-up' | 'found' | 'authorized' | 'denied' | null
+
+const DENIED_REASON: Record<string, string> = {
+    used: 'Este pase ya fue utilizado anteriormente.',
+    cancelled: 'Este pase fue cancelado.',
+    expired: 'Este pase ha expirado.',
+    'not-found': 'El código QR no corresponde a ningún pase de visita.',
+}
+
 export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     const [isScanning, setIsScanning] = useState(false)
     const [isInitializing, setIsInitializing] = useState(false)
-    const [result, setResult] = useState<'success' | 'error' | null>(null)
-    const [scanData, setScanData] = useState<string | null>(null)
+    const [phase, setPhase] = useState<Phase>(null)
+    const [pass, setPass] = useState<VisitorPass | null>(null)
+    const [authorizing, setAuthorizing] = useState(false)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
-    
+
     const scannerRef = useRef<Html5Qrcode | null>(null)
     const isTransitioning = useRef(false)
     const containerId = "qr-reader-container"
@@ -52,19 +75,83 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         }
     }
 
+    const extractToken = (decodedText: string) => {
+        const trimmed = decodedText.trim()
+        const parts = trimmed.split('/')
+        return parts[parts.length - 1] || trimmed
+    }
+
+    const lookupPass = async (token: string) => {
+        setPhase('looking-up')
+        try {
+            const supabase = createClient()
+            const { data, error } = await supabase
+                .from('visitor_passes')
+                .select('id, visitor_name, unit_name, organization_name, start_time, end_time, status, used_at, notes')
+                .eq('qr_token', token)
+                .maybeSingle()
+
+            if (error || !data) {
+                setPass(null)
+                setPhase('denied')
+                return
+            }
+
+            setPass(data as VisitorPass)
+            setPhase(data.status === 'pending' ? 'found' : 'denied')
+        } catch (err) {
+            console.error('Error al validar el pase:', err)
+            setPass(null)
+            setPhase('denied')
+        }
+    }
+
     const handleScanSuccess = async (decodedText: string) => {
         // Detenemos el escáner inmediatamente
         await stopScanner()
-        
-        setScanData(decodedText)
         setIsScanning(false)
-        
-        if (decodedText) {
-            setResult('success')
-            toast.success("Código QR detectado correctamente")
-        } else {
-            setResult('error')
-            toast.error("Código QR inválido o expirado")
+
+        const token = extractToken(decodedText)
+        await lookupPass(token)
+    }
+
+    const handleAutorizar = async () => {
+        if (!pass) return
+        setAuthorizing(true)
+        try {
+            const supabase = createClient()
+
+            const { data: latest, error: fetchErr } = await supabase
+                .from('visitor_passes')
+                .select('status')
+                .eq('id', pass.id)
+                .single()
+
+            if (fetchErr) throw fetchErr
+
+            if (latest.status !== 'pending') {
+                toast.error('El estado del pase ya cambió (puede que otro guardia ya lo haya registrado).')
+                setPass({ ...pass, status: latest.status })
+                setPhase('denied')
+                return
+            }
+
+            const usedAt = new Date().toISOString()
+            const { error: updateErr } = await supabase
+                .from('visitor_passes')
+                .update({ status: 'used', used_at: usedAt })
+                .eq('id', pass.id)
+
+            if (updateErr) throw updateErr
+
+            setPass({ ...pass, status: 'used', used_at: usedAt })
+            setPhase('authorized')
+            toast.success(`Entrada autorizada para ${pass.visitor_name}`)
+        } catch (err) {
+            console.error('Error al autorizar el pase:', err)
+            toast.error('No se pudo autorizar el pase.')
+        } finally {
+            setAuthorizing(false)
         }
     }
 
@@ -74,8 +161,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
         setIsInitializing(true)
         setIsScanning(false)
-        setResult(null)
-        setScanData(null)
+        setPhase(null)
+        setPass(null)
         setErrorMsg(null)
 
         try {
@@ -202,7 +289,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                                 </div>
                             )}
 
-                            {errorMsg && !isScanning && !isInitializing && !result && (
+                            {errorMsg && !isScanning && !isInitializing && !phase && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950/80 z-30">
                                     <div className="h-20 w-20 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6">
                                         <AlertCircle className="h-10 w-10" />
@@ -231,46 +318,95 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                                 </>
                             )}
 
-                            {!isScanning && result && (
-                                <motion.div 
+                            {!isScanning && phase === 'looking-up' && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/80 z-30">
+                                    <Loader2 className="h-10 w-10 text-indigo-500 animate-spin mb-4" />
+                                    <p className="text-zinc-400 text-sm font-medium">Validando pase...</p>
+                                </div>
+                            )}
+
+                            {!isScanning && phase === 'found' && pass && (
+                                <motion.div
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950 z-40"
                                 >
-                                    {result === 'success' ? (
-                                        <>
-                                            <div className="h-24 w-24 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mb-6 ring-8 ring-emerald-500/5">
-                                                <ShieldCheck className="h-12 w-12" />
-                                            </div>
-                                            <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Acceso Permitido</h3>
-                                            <div className="space-y-1 mb-6">
-                                                <p className="text-sm text-zinc-400 font-medium italic">Datos del Código:</p>
-                                                <p className="text-indigo-400 font-mono text-xs break-all px-4">{scanData}</p>
-                                            </div>
-                                            <p className="text-sm text-zinc-500">Pase validado correctamente a las {new Date().toLocaleTimeString()}</p>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="h-24 w-24 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6 ring-8 ring-rose-500/5">
-                                                <AlertCircle className="h-12 w-12" />
-                                            </div>
-                                            <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Acceso Denegado</h3>
-                                            <p className="text-sm text-zinc-400 font-medium">El código QR no es válido, ha sido utilizado previamente o ha expirado.</p>
-                                        </>
-                                    )}
+                                    <div className="h-24 w-24 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mb-6 ring-8 ring-amber-500/5">
+                                        <ShieldCheck className="h-12 w-12" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">{pass.visitor_name}</h3>
+                                    <div className="space-y-1 mb-4 text-sm text-zinc-400">
+                                        <p>Unidad: <span className="text-white font-semibold">{pass.unit_name || 'N/D'}</span></p>
+                                        <p>Horario: {pass.start_time?.slice(0, 5)}{pass.end_time ? ` - ${pass.end_time.slice(0, 5)}` : ''}</p>
+                                        {pass.notes && <p className="italic">"{pass.notes}"</p>}
+                                    </div>
+                                    <p className="text-xs text-amber-400 font-bold uppercase tracking-widest">Pendiente de autorizar</p>
+                                </motion.div>
+                            )}
+
+                            {!isScanning && phase === 'authorized' && pass && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950 z-40"
+                                >
+                                    <div className="h-24 w-24 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mb-6 ring-8 ring-emerald-500/5">
+                                        <ShieldCheck className="h-12 w-12" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Acceso Permitido</h3>
+                                    <div className="space-y-1 mb-6">
+                                        <p className="text-sm text-zinc-400 font-medium">{pass.visitor_name} — Unidad {pass.unit_name || 'N/D'}</p>
+                                    </div>
+                                    <p className="text-sm text-zinc-500">Pase validado correctamente a las {new Date().toLocaleTimeString()}</p>
+                                </motion.div>
+                            )}
+
+                            {!isScanning && phase === 'denied' && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950 z-40"
+                                >
+                                    <div className="h-24 w-24 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6 ring-8 ring-rose-500/5">
+                                        <AlertCircle className="h-12 w-12" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Acceso Denegado</h3>
+                                    <p className="text-sm text-zinc-400 font-medium">
+                                        {pass ? (DENIED_REASON[pass.status] || 'Este pase no está disponible.') : DENIED_REASON['not-found']}
+                                    </p>
                                 </motion.div>
                             )}
                         </div>
 
-                        {!isScanning && !isInitializing && (
+                        {phase === 'found' && pass && (
                             <div className="grid grid-cols-2 gap-4">
-                                <Button 
+                                <Button
+                                    onClick={startScanner}
+                                    disabled={authorizing}
+                                    className="h-14 rounded-2xl bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-white font-bold gap-2 disabled:opacity-60"
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    onClick={handleAutorizar}
+                                    disabled={authorizing}
+                                    className="h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-2 disabled:opacity-60"
+                                >
+                                    {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                                    {authorizing ? 'Autorizando...' : 'Autorizar Entrada'}
+                                </Button>
+                            </div>
+                        )}
+
+                        {!isScanning && !isInitializing && phase !== 'found' && phase !== 'looking-up' && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <Button
                                     onClick={startScanner}
                                     className="h-14 rounded-2xl bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-white font-bold gap-2"
                                 >
-                                    <RefreshCcw className="h-4 w-4" /> {result ? "Escanear otro" : "Reintentar"}
+                                    <RefreshCcw className="h-4 w-4" /> {phase ? "Escanear otro" : "Reintentar"}
                                 </Button>
-                                <Button 
+                                <Button
                                     onClick={onClose}
                                     className="h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
                                 >

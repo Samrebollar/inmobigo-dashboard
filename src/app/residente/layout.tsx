@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload, ClipboardList, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphone, Sparkles, Bell, Upload, ClipboardList, MessageCircle, PawPrint } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -177,6 +177,14 @@ export default async function ResidenteLayout({
                 >
                     <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
                     <span>Avisos</span>
+                </Link>
+
+                <Link
+                    href="/residente/mascotas"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
+                >
+                    <PawPrint size={18} className="text-amber-500/80 group-hover:text-amber-400" />
+                    <span>Mascotas</span>
                 </Link>
 
                 <Link

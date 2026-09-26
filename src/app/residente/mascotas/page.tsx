@@ -41,7 +41,17 @@ export default async function MascotasPage() {
         return <NotLinkedState email={user.email} />
     }
 
+    let organizationId: string | null = null
+    if (resident.condominium_id) {
+        const { data: condo } = await supabase
+            .from('condominiums')
+            .select('organization_id')
+            .eq('id', resident.condominium_id)
+            .maybeSingle()
+        organizationId = condo?.organization_id || null
+    }
+
     return (
-        <ResidentPetsClient resident={resident} />
+        <ResidentPetsClient resident={{ ...resident, organization_id: organizationId }} />
     )
 }

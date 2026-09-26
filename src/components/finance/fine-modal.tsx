@@ -8,7 +8,7 @@ import { createClient } from '@/utils/supabase/client'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { Resident } from '@/types/residents'
-import { format, addDays } from 'date-fns'
+import { format } from 'date-fns'
 
 interface FineModalProps {
     isOpen: boolean
@@ -38,7 +38,7 @@ export function FineModal({
     const [selectedResident, setSelectedResident] = useState<Resident | null>(null)
 
     const [amount, setAmount] = useState('')
-    const [dueDate, setDueDate] = useState(format(addDays(new Date(), 15), 'yyyy-MM-dd'))
+    const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'))
     const [notes, setNotes] = useState('')
     const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
 
@@ -48,7 +48,7 @@ export function FineModal({
             setResidentSearch('')
             setSelectedResident(null)
             setAmount('')
-            setDueDate(format(addDays(new Date(), 15), 'yyyy-MM-dd'))
+            setDueDate(format(new Date(), 'yyyy-MM-dd'))
             setNotes('')
             setEvidenceFile(null)
         }

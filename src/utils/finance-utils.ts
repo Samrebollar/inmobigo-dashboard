@@ -395,6 +395,18 @@ export function calculateResidentMonthlyFinancials({
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
+    // Cargos que no son la cuota recurrente de mantenimiento (multas, cuotas
+    // extraordinarias, saldo inicial, etc.) — se suman aparte a los totales de
+    // pendiente/vencido en vez de mezclarse con la reconciliación de la cuota
+    // mensual de arriba, que solo compara mantenimiento contra su meta mensual.
+    const otrosCargos = mappedDbInvoices.filter(inv => inv.invoice_type !== 'maintenance')
+    const otrosCargosPendientes = otrosCargos
+        .filter(inv => inv.status === 'pending')
+        .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
+    const otrosCargosVencidosList = otrosCargos.filter(inv => inv.status === 'overdue')
+    const otrosCargosVencidos = otrosCargosVencidosList
+        .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
+
     if (selectedMonth === 'all') {
         // totalPaid = suma de amount - balance_due de todas las facturas del año, sin
         // filtrar por status: una factura con abono parcial sigue 'pending' pero ya
@@ -419,7 +431,7 @@ export function calculateResidentMonthlyFinancials({
             .filter(inv => inv.status === 'overdue')
             .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
 
-        const overdueInvoices = kpiInvoices.filter(inv => inv.status === 'overdue')
+        const overdueInvoices = [...kpiInvoices.filter(inv => inv.status === 'overdue'), ...otrosCargosVencidosList]
         let maxDays = 0
         if (overdueInvoices.length > 0) {
             const oldest = overdueInvoices.reduce((prev, curr) =>
@@ -445,8 +457,8 @@ export function calculateResidentMonthlyFinancials({
             .filter(inv => inv.status === 'overdue')
             .reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0)
 
-        const totalPending = pendingSum + virtualPendingSum
-        const overdueAmount = overdueSum + virtualOverdueSum
+        const totalPending = pendingSum + virtualPendingSum + otrosCargosPendientes
+        const overdueAmount = overdueSum + virtualOverdueSum + otrosCargosVencidos
         const overdueCount = overdueInvoices.length + virtualInvoices.filter(inv => inv.status === 'overdue').length
 
         return {
@@ -491,7 +503,7 @@ export function calculateResidentMonthlyFinancials({
     const feeGapForMonth = Math.max(0, monthlyFee - totalPaid)
     const monthlyDebt = Math.max(feeGapForMonth, explicitDebtThisMonth)
 
-    const overdueInvoicesThisMonth = kpiInvoices.filter(inv => inv.status === 'overdue')
+    const overdueInvoicesThisMonth = [...kpiInvoices.filter(inv => inv.status === 'overdue'), ...otrosCargosVencidosList]
     let maxDays = 0
     if (overdueInvoicesThisMonth.length > 0) {
         const oldest = overdueInvoicesThisMonth.reduce((prev, curr) =>
@@ -502,15 +514,16 @@ export function calculateResidentMonthlyFinancials({
     }
 
     const creditBalance = totalPaid > monthlyFee ? totalPaid - monthlyFee : 0
+    const maintenanceOverdueCount = overdueInvoicesThisMonth.length - otrosCargosVencidosList.length
 
     return {
         cuotaMensual: monthlyFee,
         totalPaid,
-        totalPending: isOverduePeriod ? 0 : (isFutureMonth ? 0 : monthlyDebt),
-        overdueCount: overdueInvoicesThisMonth.length > 0
-            ? overdueInvoicesThisMonth.length
-            : ((isOverduePeriod && !isFutureMonth && monthlyDebt > 0) ? Math.ceil(monthlyDebt / (monthlyFee || 3000)) : 0),
-        overdueAmount: isOverduePeriod && !isFutureMonth ? monthlyDebt : 0,
+        totalPending: (isOverduePeriod ? 0 : (isFutureMonth ? 0 : monthlyDebt)) + otrosCargosPendientes,
+        overdueCount: (maintenanceOverdueCount > 0
+            ? maintenanceOverdueCount
+            : ((isOverduePeriod && !isFutureMonth && monthlyDebt > 0) ? Math.ceil(monthlyDebt / (monthlyFee || 3000)) : 0)) + otrosCargosVencidosList.length,
+        overdueAmount: (isOverduePeriod && !isFutureMonth ? monthlyDebt : 0) + otrosCargosVencidos,
         maxDaysOverdue: maxDays,
         creditBalance,
         activeMonthlyFee: monthlyFee,

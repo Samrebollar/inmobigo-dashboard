@@ -25,7 +25,8 @@ import {
     AlertTriangle,
     Landmark,
     X,
-    ArrowRightLeft
+    ArrowRightLeft,
+    FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -771,7 +772,20 @@ export default function ResidentPaymentsClient({
                                             )}
                                         </td>
                                         <td className="px-10 py-8">
-                                            <div className="flex justify-end">
+                                            <div className="flex justify-end gap-2">
+                                                {inv.evidence_url && (
+                                                    <motion.a
+                                                        href={inv.evidence_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        title="Ver evidencia (PDF)"
+                                                        whileHover={{ scale: 1.2, rotate: -12 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                        className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition-all shadow-[0_0_20px_rgba(244,63,94,0)] hover:shadow-[0_0_20px_rgba(244,63,94,0.2)]"
+                                                    >
+                                                        <FileText size={20} />
+                                                    </motion.a>
+                                                )}
                                                 {!isPaid ? (
                                                     <motion.button
                                                         title={`Pagar esta cuota ($${Number(inv.monto || 0).toLocaleString('es-MX')})`}

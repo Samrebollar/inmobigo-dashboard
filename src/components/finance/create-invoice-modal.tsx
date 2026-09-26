@@ -13,6 +13,15 @@ import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { InvoiceType } from '@/types/finance'
+
+// Mismo mapeo de categorías usadas en el alta de deuda inicial de un residente
+// (src/app/actions/resident-actions.ts) — así una Multa o Cuota Extraordinaria
+// se guarda con el mismo invoice_type sin importar por dónde se generó.
+const CONCEPT_TO_INVOICE_TYPE: Record<string, InvoiceType> = {
+    'Multa': 'fine',
+    'Cuota Extraordinaria': 'special_assessment',
+}
 
 interface CreateInvoiceModalProps {
     isOpen: boolean
@@ -234,6 +243,7 @@ export function CreateInvoiceModal({
                     unit_id: selectedResident.unit_id,
                     amount: parseFloat(formData.amount),
                     status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
+                    invoice_type: CONCEPT_TO_INVOICE_TYPE[formData.concept],
                     due_date: formData.dueDate,
                     description: formData.notes ? `${formData.concept} - ${formData.notes}` : formData.concept,
                     payment_method: paymentMethod,
@@ -424,6 +434,7 @@ export function CreateInvoiceModal({
                         >
                              <option value={isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'}>{isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'}</option>
                              <option value="Multa">Multa</option>
+                             <option value="Cuota Extraordinaria">Cuota Extraordinaria</option>
                              <option value="Reserva Amenidad">Reserva Amenidad</option>
                              <option value="Pago de Atraso">Pago de Atraso</option>
                              <option value="Abono a Deuda">Abono a Deuda</option>

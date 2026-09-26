@@ -157,25 +157,25 @@ export default async function ResidenteLayout({
 
                 <Link
                     href="/residente/amenidades"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-teal-500/20"
                 >
-                    <LayoutDashboard size={18} />
+                    <LayoutDashboard size={18} className="text-teal-400 group-hover:text-teal-300 transition-colors" />
                     <span>Amenidades</span>
                 </Link>
 
                 <Link
                     href="/residente/servicios"
-                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-sky-500/20"
                 >
-                    <Smartphone size={18} className="text-zinc-400 group-hover:text-indigo-400 transition-colors" />
+                    <Smartphone size={18} className="text-sky-400 group-hover:text-sky-300 transition-colors" />
                     <span>Servicios</span>
                 </Link>
 
                 <Link
                     href="/residente/avisos"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-amber-500/20"
                 >
-                    <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400" />
+                    <Bell size={18} className="text-amber-500/80 group-hover:text-amber-400 transition-colors" />
                     <span>Avisos</span>
                 </Link>
 
@@ -192,22 +192,22 @@ export default async function ResidenteLayout({
                     className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-indigo-500/20"
                 >
                     <Sparkles size={18} className="text-indigo-400" />
-                    <span>Servicios Hogar</span>
+                    <span>Servicios para el Hogar</span>
                 </Link>
             </nav>
             <div className="p-4 border-t border-zinc-800 bg-zinc-900/30 space-y-1">
                 <Link
                     href="/residente/help"
-                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-emerald-500/20"
                 >
-                    <MessageCircle size={18} />
+                    <MessageCircle size={18} className="text-emerald-400 group-hover:text-emerald-300 transition-colors" />
                     <span>Contacto</span>
                 </Link>
                 <Link
                     href="/residente/perfil"
-                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-violet-500/20"
                 >
-                    <User size={18} />
+                    <User size={18} className="text-violet-400 group-hover:text-violet-300 transition-colors" />
                     <span>Perfil</span>
                 </Link>
                 <form action={logout}>

@@ -117,9 +117,12 @@ export async function sendResidentMessageAction(body: string) {
     return { success: true, data: withAvatar }
 }
 
+export type AdminThreadType = 'resident' | 'security'
+
 /**
- * Lista de hilos (uno por residente) para el inbox del administrador,
- * ordenados por el mensaje más reciente primero, con conteo de no leídos.
+ * Lista de hilos (uno por residente o por guardia de seguridad) para el
+ * inbox del administrador, ordenados por el mensaje más reciente primero,
+ * con conteo de no leídos.
  */
 export async function getAdminMessageThreadsAction() {
     const supabase = await createClient()
@@ -136,13 +139,13 @@ export async function getAdminMessageThreadsAction() {
 
     const { data: messages, error } = await supabase
         .from('resident_messages')
-        .select('id, resident_id, sender_role, sender_name, body, created_at, read_at')
+        .select('id, resident_id, security_user_id, sender_role, sender_name, body, created_at, read_at')
         .eq('organization_id', orgUser.organization_id)
         .order('created_at', { ascending: false })
 
     if (error) return { success: false, error: error.message, data: [] }
 
-    const residentIds = Array.from(new Set((messages || []).map(m => m.resident_id)))
+    const residentIds = Array.from(new Set((messages || []).map(m => m.resident_id).filter(Boolean)))
     const { data: residentsData } = residentIds.length > 0
         ? await supabase
             .from('residents')
@@ -153,10 +156,11 @@ export async function getAdminMessageThreadsAction() {
     const residentById: Record<string, any> = {}
     for (const r of residentsData || []) residentById[r.id] = r
 
+    const adminSupabase = createAdminClient()
+
     const residentUserIds = (residentsData || []).map(r => r.user_id).filter(Boolean)
     const avatarByUserId: Record<string, string | null> = {}
     if (residentUserIds.length > 0) {
-        const adminSupabase = createAdminClient()
         const { data: residentProfiles } = await adminSupabase
             .from('profiles')
             .select('id, avatar_url')
@@ -164,57 +168,93 @@ export async function getAdminMessageThreadsAction() {
         for (const p of residentProfiles || []) avatarByUserId[p.id] = p.avatar_url || null
     }
 
-    const threadsByResident = new Map<string, any>()
+    const securityUserIds = Array.from(new Set((messages || []).map(m => m.security_user_id).filter(Boolean)))
+    const securityProfileById: Record<string, any> = {}
+    if (securityUserIds.length > 0) {
+        const { data: securityProfiles } = await adminSupabase
+            .from('profiles')
+            .select('id, full_name, avatar_url')
+            .in('id', securityUserIds)
+        for (const p of securityProfiles || []) securityProfileById[p.id] = p
+    }
+
+    const threadsByKey = new Map<string, any>()
     for (const m of messages || []) {
-        if (!threadsByResident.has(m.resident_id)) {
-            const r = residentById[m.resident_id]
-            threadsByResident.set(m.resident_id, {
-                residentId: m.resident_id,
-                residentName: r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : (m.sender_role === 'resident' ? m.sender_name : 'Residente'),
-                unitNumber: r?.units?.unit_number || null,
-                residentAvatarUrl: r?.user_id ? avatarByUserId[r.user_id] || null : null,
-                lastMessage: m.body,
-                lastMessageAt: m.created_at,
-                lastSenderRole: m.sender_role,
-                unreadCount: 0,
-            })
+        const threadType: AdminThreadType = m.security_user_id ? 'security' : 'resident'
+        const contextId = m.security_user_id || m.resident_id
+        const key = `${threadType}:${contextId}`
+
+        if (!threadsByKey.has(key)) {
+            if (threadType === 'security') {
+                const p = securityProfileById[contextId]
+                threadsByKey.set(key, {
+                    threadType,
+                    contextId,
+                    residentName: p?.full_name || m.sender_name || 'Guardia de Seguridad',
+                    unitNumber: null,
+                    residentAvatarUrl: p?.avatar_url || null,
+                    lastMessage: m.body,
+                    lastMessageAt: m.created_at,
+                    lastSenderRole: m.sender_role,
+                    unreadCount: 0,
+                })
+            } else {
+                const r = residentById[contextId]
+                threadsByKey.set(key, {
+                    threadType,
+                    contextId,
+                    residentName: r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : (m.sender_role === 'resident' ? m.sender_name : 'Residente'),
+                    unitNumber: r?.units?.unit_number || null,
+                    residentAvatarUrl: r?.user_id ? avatarByUserId[r.user_id] || null : null,
+                    lastMessage: m.body,
+                    lastMessageAt: m.created_at,
+                    lastSenderRole: m.sender_role,
+                    unreadCount: 0,
+                })
+            }
         }
-        if (m.sender_role === 'resident' && !m.read_at) {
-            threadsByResident.get(m.resident_id).unreadCount += 1
+
+        const isFromCounterpart = threadType === 'security' ? m.sender_role === 'security' : m.sender_role === 'resident'
+        if (isFromCounterpart && !m.read_at) {
+            threadsByKey.get(key).unreadCount += 1
         }
     }
 
-    return { success: true, data: Array.from(threadsByResident.values()) }
+    return { success: true, data: Array.from(threadsByKey.values()) }
 }
 
 /**
- * Hilo completo de un residente puntual, visto por el admin. Marca como
- * leídos los mensajes del residente que el admin todavía no había visto.
+ * Hilo completo de un residente o guardia puntual, visto por el admin.
+ * Marca como leídos los mensajes del residente/guardia que el admin
+ * todavía no había visto.
  */
-export async function getAdminThreadMessagesAction(residentId: string) {
-    if (!residentId) return { success: false, error: 'residentId requerido', data: [] }
+export async function getAdminThreadMessagesAction(contextId: string, threadType: AdminThreadType = 'resident') {
+    if (!contextId) return { success: false, error: 'contextId requerido', data: [] }
 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, error: 'No autenticado', data: [] }
 
+    const filterColumn = threadType === 'security' ? 'security_user_id' : 'resident_id'
+    const counterpartRole = threadType === 'security' ? 'security' : 'resident'
+
     const { data: messages, error } = await supabase
         .from('resident_messages')
         .select('*')
-        .eq('resident_id', residentId)
+        .eq(filterColumn, contextId)
         .order('created_at', { ascending: true })
 
     if (error) return { success: false, error: error.message, data: [] }
 
-    const unreadResidentMessageIds = (messages || [])
-        .filter(m => m.sender_role === 'resident' && !m.read_at)
+    const unreadCounterpartMessageIds = (messages || [])
+        .filter(m => m.sender_role === counterpartRole && !m.read_at)
         .map(m => m.id)
 
-    if (unreadResidentMessageIds.length > 0) {
+    if (unreadCounterpartMessageIds.length > 0) {
         await supabase
             .from('resident_messages')
             .update({ read_at: new Date().toISOString() })
-            .in('id', unreadResidentMessageIds)
+            .in('id', unreadCounterpartMessageIds)
     }
 
     const withAvatars = await attachSenderAvatars(messages || [])
@@ -222,9 +262,9 @@ export async function getAdminThreadMessagesAction(residentId: string) {
     return { success: true, data: withAvatars }
 }
 
-export async function sendAdminMessageAction(residentId: string, body: string) {
+export async function sendAdminMessageAction(contextId: string, body: string, threadType: AdminThreadType = 'resident') {
     const trimmed = (body || '').trim()
-    if (!residentId || !trimmed) return { success: false, error: 'Datos incompletos' }
+    if (!contextId || !trimmed) return { success: false, error: 'Datos incompletos' }
 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -238,13 +278,17 @@ export async function sendAdminMessageAction(residentId: string, body: string) {
 
     if (!orgUser?.organization_id) return { success: false, error: 'No administras ninguna organización' }
 
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('id, condominium_id')
-        .eq('id', residentId)
-        .maybeSingle()
+    let condominiumId: string | null = null
+    if (threadType === 'resident') {
+        const { data: resident } = await supabase
+            .from('residents')
+            .select('id, condominium_id')
+            .eq('id', contextId)
+            .maybeSingle()
 
-    if (!resident) return { success: false, error: 'Residente no encontrado' }
+        if (!resident) return { success: false, error: 'Residente no encontrado' }
+        condominiumId = resident.condominium_id
+    }
 
     const { data: profile } = await supabase
         .from('profiles')
@@ -260,8 +304,9 @@ export async function sendAdminMessageAction(residentId: string, body: string) {
         .from('resident_messages')
         .insert({
             organization_id: orgUser.organization_id,
-            condominium_id: resident.condominium_id,
-            resident_id: residentId,
+            condominium_id: condominiumId,
+            resident_id: threadType === 'resident' ? contextId : null,
+            security_user_id: threadType === 'security' ? contextId : null,
             sender_role: 'admin',
             sender_id: user.id,
             sender_name: senderName,
@@ -273,6 +318,7 @@ export async function sendAdminMessageAction(residentId: string, body: string) {
     if (error) return { success: false, error: error.message }
 
     revalidatePath('/dashboard/mensajes')
+    revalidatePath('/seguridad/mensajes')
     const [withAvatar] = await attachSenderAvatars([data])
     return { success: true, data: withAvatar }
 }

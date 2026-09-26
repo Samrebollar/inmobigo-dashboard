@@ -880,7 +880,14 @@ export function calculateResidentDebtSummary({
         .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
     const remainingDebtAmount = Math.max(0, Number(resident.debt_amount || 0) - paymentSurplus - initialBalanceInvoiceDebt)
 
-    const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount
+    // Cargos que no son la cuota recurrente de mantenimiento ni el saldo inicial
+    // (multas, cuotas extraordinarias, etc.) — se suman aparte porque invoiceDebt/
+    // feeBasedDebt solo reconcilian la cuota mensual contra su meta.
+    const otrosCargosDebt = pendingInvoices
+        .filter(inv => inv.invoice_type !== 'maintenance' && inv.invoice_type !== 'initial_balance')
+        .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
+
+    const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount + otrosCargosDebt
 
     let overdueCount = overdueInvoices.length
     if (overdueCount === 0 && feeBasedDebt > 0 && monthlyFee > 0) {

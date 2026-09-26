@@ -5,7 +5,8 @@ import { KPICards } from '@/components/finance/kpi-cards'
 import { RevenueChart } from '@/components/finance/revenue-chart'
 import { ReportsGeneratorModal } from '@/components/finance/reports-generator'
 import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
-import { FileText, Download, ArrowRight, Plus } from 'lucide-react'
+import { BulkChargeModal } from '@/components/finance/bulk-charge-modal'
+import { FileText, Download, ArrowRight, Plus, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AdminFinanceClient({ 
@@ -20,6 +21,7 @@ export default function AdminFinanceClient({
     const [selectedCondoId, setSelectedCondoId] = useState<string | null>(initialCondoId)
     const [isReportModalOpen, setIsReportModalOpen] = useState(false)
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
+    const [isBulkChargeOpen, setIsBulkChargeOpen] = useState(false)
 
     // El Historial de Recibos hereda el condominio seleccionado aquí, en vez de
     // mandar siempre a ver todo el portafolio.
@@ -56,6 +58,13 @@ export default function AdminFinanceClient({
                     >
                         <Plus size={16} />
                         Nuevo Recibo
+                    </button>
+                    <button
+                        onClick={() => setIsBulkChargeOpen(true)}
+                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 shadow-lg shadow-amber-500/20 transition-all flex-1 sm:flex-none"
+                    >
+                        <AlertTriangle size={16} />
+                        Cargo Extraordinario
                     </button>
                     <button
                         onClick={() => setIsReportModalOpen(true)}
@@ -104,6 +113,16 @@ export default function AdminFinanceClient({
                     // Optional: refresh data
                     window.location.reload()
                 }}
+            />
+
+            {/* Bulk Charge Modal (multas / cuotas extraordinarias a toda la privada) */}
+            <BulkChargeModal
+                isOpen={isBulkChargeOpen}
+                onClose={() => setIsBulkChargeOpen(false)}
+                condominiumId={selectedCondoId || (condominiumList.length > 0 ? condominiumList[0].id : '')}
+                organizationId={organizationId}
+                condominiumList={condominiumList}
+                onSuccess={() => window.location.reload()}
             />
         </div>
     )

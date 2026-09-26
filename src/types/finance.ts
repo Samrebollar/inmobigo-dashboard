@@ -6,7 +6,7 @@
 
 // ─── STATUS ──────────────────────────────────────────────────────────────────
 export type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'cancelled'
-export type InvoiceType = 'maintenance' | 'initial_balance' | 'manual_payment' | 'custom'
+export type InvoiceType = 'maintenance' | 'initial_balance' | 'manual_payment' | 'custom' | 'fine' | 'special_assessment'
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 
 // ─── TABLA PRINCIPAL: resident_invoices ───────────────────────────────────────

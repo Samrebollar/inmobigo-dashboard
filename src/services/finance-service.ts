@@ -11,7 +11,7 @@ import {
     Invoice
 } from '@/types/finance'
 import { calculateCondoMonthlyFinancials, getLocalDateParts } from '@/utils/finance-utils'
-import { syncToLegacy, syncPaymentToLegacy } from './legacy-sync-service'
+import { buildFolio } from './legacy-sync-service'
 
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -242,21 +242,34 @@ export const financeService = {
             throw new Error('resident_id es obligatorio para crear un recibo')
         }
 
+        // El id se genera aquí (en vez de dejar que la BD lo asigne) para poder
+        // calcular el folio real en el mismo insert — antes se hacía en un
+        // segundo insert "legacy" hacia esta misma tabla física (resident_invoices
+        // es una vista de invoices), lo que dejaba dos filas duplicadas por cada
+        // recibo creado.
+        const id = crypto.randomUUID()
+        const isPaid = invoice.status === 'paid'
+
         const { data, error } = await supabase
             .from('resident_invoices')
             .insert({
+                id,
                 organization_id: invoice.organization_id,
                 condominium_id: invoice.condominium_id,
                 resident_id: invoice.resident_id,
+                unit_id: (invoice as any).unit_id || null,
                 amount: invoice.amount,
                 balance_due: balanceDue,
+                paid_amount: invoice.amount - balanceDue,
                 status: invoice.status,
                 invoice_type: invoice.invoice_type || 'maintenance',
                 due_date: invoice.due_date,
                 description: invoice.description,
                 payment_method: invoice.payment_method || null,
-                payment_provider: (invoice as any).payment_provider || null,
+                payment_provider: (invoice as any).payment_provider || (isPaid ? 'Manual' : null),
+                paid_at: isPaid ? (invoice.paid_at || new Date().toISOString()) : null,
                 evidence_url: invoice.evidence_url || null,
+                folio: buildFolio(id),
             })
             .select()
             .single()
@@ -264,18 +277,6 @@ export const financeService = {
         if (error) {
             console.error('[financeService.create]', error)
             throw new Error('Error al crear el recibo')
-        }
-
-        // Sincronizar a la tabla legacy invoices
-        try {
-            await syncToLegacy(supabase, data, {
-                paid_amount: invoice.amount - balanceDue,
-                paid_at: invoice.status === 'paid' ? (invoice.paid_at || new Date().toISOString()) : null,
-                payment_provider: invoice.payment_method || (invoice.status === 'paid' ? 'Manual' : null),
-                external_payment_id: data.id,
-            })
-        } catch (syncErr) {
-            console.warn('[financeService.create] Failed to sync to legacy invoices:', syncErr)
         }
 
         return enrichInvoice(data)
@@ -301,21 +302,6 @@ export const financeService = {
         if (error) {
             console.error('[financeService.update]', error)
             throw new Error('Error al actualizar el recibo')
-        }
-
-        // Sincronizar a la tabla legacy invoices
-        try {
-            const isPaid = data.status === 'paid'
-            const paidAmount = Math.max(0, data.amount - data.balance_due)
-            await syncPaymentToLegacy(supabase, id, {
-                paidAmount,
-                newBalanceDue: data.balance_due,
-                newStatus: data.status,
-                paymentProvider: (updates as any).payment_method || (isPaid ? 'Manual' : undefined),
-                externalPaymentId: (updates as any).external_payment_id || undefined,
-            })
-        } catch (syncErr) {
-            console.warn('[financeService.update] Failed to sync to legacy invoices:', syncErr)
         }
 
         return enrichInvoice(data)

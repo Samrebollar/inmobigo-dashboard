@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, HandCoins, History } from 'lucide-react'
+import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +15,6 @@ import { financeService } from '@/services/finance-service'
 import { propertiesService } from '@/services/properties-service'
 import { notificationsService } from '@/services/notifications-service'
 import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
-import { RegisterPaymentModal } from '@/components/finance/register-payment-modal'
 import { CommunicationLog } from '@/types/residents'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -54,7 +53,6 @@ export default function ResidentMovementsPage() {
     const [logs, setLogs] = useState<CommunicationLog[]>([])
     const [search, setSearch] = useState('')
     const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false)
-    const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null)
     const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
     const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getMonth().toString())
@@ -879,17 +877,6 @@ export default function ResidentMovementsPage() {
                                     <td className="px-6 py-4 flex items-center justify-end gap-2">
                                         {inv.status !== 'paid' && (
                                             <Button
-                                                onClick={() => setPaymentModalInvoice(inv)}
-                                                variant="ghost"
-                                                size="sm"
-                                                title="Registrar Pago"
-                                                className="h-8 w-8 p-0 text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:text-amber-200 hover:bg-amber-500/30 hover:border-amber-500/40 rounded-lg transition-all duration-300 ease-in-out transform hover:scale-125 active:scale-95"
-                                            >
-                                                <HandCoins size={16} className="transition-transform duration-300" />
-                                            </Button>
-                                        )}
-                                        {inv.status !== 'paid' && (
-                                            <Button
                                                 onClick={() => setShowCreateInvoiceModal(true)}
                                                 variant="ghost"
                                                 size="sm"
@@ -1019,13 +1006,6 @@ export default function ResidentMovementsPage() {
                     />
                 )
             }
-            <RegisterPaymentModal
-                isOpen={!!paymentModalInvoice}
-                onClose={() => setPaymentModalInvoice(null)}
-                condominiumId={resident.condominium_id || ''}
-                invoice={paymentModalInvoice}
-                onSuccess={() => fetchData(id)}
-            />
         </div >
     )
 }

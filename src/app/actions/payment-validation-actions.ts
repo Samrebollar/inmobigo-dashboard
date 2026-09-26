@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { syncToLegacy, syncPaymentToLegacy, buildFolio } from '@/services/legacy-sync-service'
+import { buildFolio } from '@/services/legacy-sync-service'
+import { randomUUID } from 'crypto'
 
 /**
  * @param residentId - Cuando se pasa (pantalla del residente), acota el
@@ -230,25 +231,23 @@ export async function updateValidationStatus(
                         const newStatus = newBalanceDue <= 0 ? 'paid' : invoice.status
                         const paidAmount = Math.max(0, Number(invoice.amount) - newBalanceDue)
 
-                        // Actualizar resident_invoices (fuente de verdad)
-                        await adminClient
+                        // Actualizar resident_invoices (fuente de verdad — invoices es la
+                        // misma tabla física por debajo, así que no hace falta un segundo
+                        // "sync" hacia una fila espejo aparte)
+                        const { error: applyErr } = await adminClient
                             .from('resident_invoices')
                             .update({
                                 balance_due: newBalanceDue,
                                 status: newStatus,
+                                paid_amount: paidAmount,
                                 updated_at: new Date().toISOString(),
                                 notes: `validation:${id}`,
                             })
                             .eq('id', invoice.id)
 
-                        // Sync al legacy invoices para n8n
-                        await syncPaymentToLegacy(adminClient as any, invoice.id, {
-                            paidAmount,
-                            newBalanceDue,
-                            newStatus,
-                            paymentProvider: 'Manual',
-                            externalPaymentId: id,
-                        })
+                        if (applyErr) {
+                            console.error('[Validation] Error aplicando pago a factura', invoice.id, applyErr)
+                        }
                     }
                 }
 
@@ -274,47 +273,37 @@ export async function updateValidationStatus(
                         ? `Pago manual validado - ${validation.nota}`
                         : 'Pago manual validado'
 
-                    // Insertar en resident_invoices (fuente de verdad)
-                    const { data: newRI, error: insertRIErr } = await adminClient
+                    // El id se genera aquí para poder incluir el folio real en el mismo
+                    // insert — antes se hacía un segundo insert "legacy" hacia esta misma
+                    // tabla física (resident_invoices es una vista de invoices), lo que
+                    // dejaba dos filas duplicadas por cada excedente registrado.
+                    const newInvoiceId = randomUUID()
+                    const nowIso = new Date().toISOString()
+
+                    const { error: insertRIErr } = await adminClient
                         .from('resident_invoices')
                         .insert({
+                            id: newInvoiceId,
                             organization_id: organizationId,
                             condominium_id: resData.condominium_id,
                             resident_id: resData.id,
                             amount: remainingPayment,
                             balance_due: 0,
+                            paid_amount: remainingPayment,
                             status: 'paid',
                             invoice_type: 'manual_payment',
                             due_date: dueDateStr,
                             description,
                             notes: `validation:${id}`,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString(),
-                        })
-                        .select()
-                        .single()
-
-                    if (!insertRIErr && newRI) {
-                        // Sync al legacy invoices para n8n
-                        await syncToLegacy(adminClient as any, {
-                            id: newRI.id,
-                            organization_id: organizationId || '',
-                            condominium_id: resData.condominium_id,
-                            resident_id: resData.id,
-                            amount: remainingPayment,
-                            balance_due: 0,
-                            status: 'paid',
-                            due_date: dueDateStr,
-                            description,
-                            created_at: newRI.created_at,
-                            updated_at: newRI.updated_at,
-                        }, {
-                            paid_amount: remainingPayment,
-                            paid_at: new Date().toISOString(),
                             payment_provider: 'Manual',
-                            external_payment_id: id,
-                            folio: buildFolio(newRI.id),
+                            paid_at: nowIso,
+                            folio: buildFolio(newInvoiceId),
+                            created_at: nowIso,
+                            updated_at: nowIso,
                         })
+
+                    if (insertRIErr) {
+                        console.error('[Validation] Error registrando excedente como factura pagada', insertRIErr)
                     }
                 }
 

@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import { KPICards } from '@/components/finance/kpi-cards'
 import { RevenueChart } from '@/components/finance/revenue-chart'
-import { ReportsGeneratorModal } from '@/components/finance/reports-generator'
 import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
 import { BulkChargeModal } from '@/components/finance/bulk-charge-modal'
-import { FileText, Download, ArrowRight, Plus, AlertTriangle } from 'lucide-react'
+import { FineModal } from '@/components/finance/fine-modal'
+import { FileText, ArrowRight, Plus, AlertTriangle, Gavel } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AdminFinanceClient({ 
@@ -19,9 +19,9 @@ export default function AdminFinanceClient({
     condominiumList: { id: string, name: string }[] 
 }) {
     const [selectedCondoId, setSelectedCondoId] = useState<string | null>(initialCondoId)
-    const [isReportModalOpen, setIsReportModalOpen] = useState(false)
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
     const [isBulkChargeOpen, setIsBulkChargeOpen] = useState(false)
+    const [isFineModalOpen, setIsFineModalOpen] = useState(false)
 
     // El Historial de Recibos hereda el condominio seleccionado aquí, en vez de
     // mandar siempre a ver todo el portafolio.
@@ -67,11 +67,11 @@ export default function AdminFinanceClient({
                         Cargo Extraordinario
                     </button>
                     <button
-                        onClick={() => setIsReportModalOpen(true)}
-                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 transition-colors flex-1 sm:flex-none border border-zinc-700"
+                        onClick={() => setIsFineModalOpen(true)}
+                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 shadow-lg shadow-rose-500/20 transition-all flex-1 sm:flex-none"
                     >
-                        <Download size={16} />
-                        Reporte
+                        <Gavel size={16} />
+                        Multas
                     </button>
                     <Link href={billingHref} className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all flex-[2] sm:flex-none">
                         <FileText size={16} />
@@ -97,12 +97,6 @@ export default function AdminFinanceClient({
                 </Link>
             </div>
 
-            {/* Report Generator Modal */}
-            <ReportsGeneratorModal
-                isOpen={isReportModalOpen}
-                onClose={() => setIsReportModalOpen(false)}
-            />
-
             {/* Create Invoice Modal */}
             <CreateInvoiceModal
                 isOpen={isCreateInvoiceOpen}
@@ -115,10 +109,20 @@ export default function AdminFinanceClient({
                 }}
             />
 
-            {/* Bulk Charge Modal (multas / cuotas extraordinarias a toda la privada) */}
+            {/* Bulk Charge Modal (cuota extraordinaria a toda la privada) */}
             <BulkChargeModal
                 isOpen={isBulkChargeOpen}
                 onClose={() => setIsBulkChargeOpen(false)}
+                condominiumId={selectedCondoId || (condominiumList.length > 0 ? condominiumList[0].id : '')}
+                organizationId={organizationId}
+                condominiumList={condominiumList}
+                onSuccess={() => window.location.reload()}
+            />
+
+            {/* Fine Modal (multa individual con evidencia en PDF) */}
+            <FineModal
+                isOpen={isFineModalOpen}
+                onClose={() => setIsFineModalOpen(false)}
                 condominiumId={selectedCondoId || (condominiumList.length > 0 ? condominiumList[0].id : '')}
                 organizationId={organizationId}
                 condominiumList={condominiumList}

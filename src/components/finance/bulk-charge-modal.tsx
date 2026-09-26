@@ -20,7 +20,6 @@ interface BulkChargeModalProps {
 }
 
 const CONCEPTS: { value: string; invoiceType: InvoiceType }[] = [
-    { value: 'Multa', invoiceType: 'fine' },
     { value: 'Cuota Extraordinaria', invoiceType: 'special_assessment' },
     { value: 'Otro', invoiceType: 'custom' },
 ]
@@ -44,7 +43,7 @@ export function BulkChargeModal({
     const [submitting, setSubmitting] = useState(false)
 
     const [condoId, setCondoId] = useState(defaultCondominiumId)
-    const [concept, setConcept] = useState('Multa')
+    const [concept, setConcept] = useState('Cuota Extraordinaria')
     const [defaultAmount, setDefaultAmount] = useState('')
     const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'))
     const [notes, setNotes] = useState('')
@@ -54,7 +53,7 @@ export function BulkChargeModal({
         if (isOpen) {
             setStep('form')
             setCondoId(defaultCondominiumId)
-            setConcept('Multa')
+            setConcept('Cuota Extraordinaria')
             setDefaultAmount('')
             setDueDate(format(new Date(), 'yyyy-MM-dd'))
             setNotes('')

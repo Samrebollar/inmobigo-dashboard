@@ -621,11 +621,11 @@ export default function ResidentMovementsPage() {
                                     <span className="text-sm font-bold">Cuotas vencidas</span>
                                 </div>
                                 <div className="text-3xl font-bold text-red-400 tracking-tight mt-2">
-                                    {formatMoney(dynamicStats.overdueAmount + carriedOverDebt)}
+                                    {formatMoney(dynamicStats.overdueAmount)}
                                 </div>
                             </div>
                             <div className="text-xs text-red-400/80 mt-4 flex items-center gap-1 font-medium">
-                                {(dynamicStats.overdueAmount + carriedOverDebt) > 0
+                                {dynamicStats.overdueAmount > 0
                                     ? dynamicStats.maxDaysOverdue > 0
                                         ? `● ${dynamicStats.maxDaysOverdue} días de atraso`
                                         : '● Pago vencido'

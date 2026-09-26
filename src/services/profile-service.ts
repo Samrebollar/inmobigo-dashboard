@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const ADMIN_LIKE_ROLES = ['super_admin', 'admin_condominio', 'admin_propiedad', 'owner', 'accountant', 'staff', 'security', 'admin']
+const ORG_OWNER_ROLES = ['super_admin', 'admin_condominio', 'admin_propiedad', 'owner']
 
 export interface AdminContact {
     name: string
@@ -78,7 +79,11 @@ export async function resolveProfileData(supabase: SupabaseClient, user: any): P
     }
 
     let adminContact: AdminContact | null = null
-    if (organizationId && !isAdmin) {
+    if (organizationId && !ORG_OWNER_ROLES.includes(role)) {
+        // isAdmin agrupa también a staff/security/accountant (para gating de
+        // otras pantallas), pero esos roles sí necesitan saber quién es SU
+        // administrador — solo el dueño/admin real de la organización no.
+        //
         // Un residente no tiene organization_id en su propio profile (solo el
         // staff lo tiene), así que la RLS de profiles ("mi org = organization_id
         // del profile de quien pregunta") nunca deja leer aquí con el cliente

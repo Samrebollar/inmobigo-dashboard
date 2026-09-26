@@ -256,6 +256,7 @@ export const financeService = {
                 description: invoice.description,
                 payment_method: invoice.payment_method || null,
                 payment_provider: (invoice as any).payment_provider || null,
+                evidence_url: invoice.evidence_url || null,
             })
             .select()
             .single()

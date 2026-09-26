@@ -25,6 +25,7 @@ export interface ResidentInvoice {
     updated_at?: string
     payment_method?: string | null
     payment_provider?: string | null
+    evidence_url?: string | null
 
     // Joined data (optional, from joins)
     resident_name?: string
@@ -103,6 +104,7 @@ export interface CreateInvoiceDTO {
     paid_at?: string
     paid_amount?: number
     balance_due?: number
+    evidence_url?: string
 }
 
 export interface FinancialSummary {

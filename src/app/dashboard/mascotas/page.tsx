@@ -17,7 +17,7 @@ const ACCION_LABEL: Record<string, string> = { registrada: 'Registrada', perdida
 
 function KPICard({ label, value, icon: Icon, color, sub }: { label: string; value: number | string; icon: any; color: string; sub?: string }) {
     return (
-        <div className="relative overflow-hidden p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] transition-all">
+        <div className={`relative overflow-hidden p-4 rounded-2xl bg-white/[0.03] border ${color.replace('text-', 'border-').replace('400', '500/40')} hover:bg-white/[0.05] transition-all`}>
             <div className="flex items-start justify-between mb-3">
                 <div className={`p-2 rounded-xl ${color.replace('text-', 'bg-').replace('400', '500/10')}`}>
                     <Icon size={18} className={color} />
@@ -161,8 +161,8 @@ export default async function MascotasAdminPage({ searchParams }: { searchParams
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-zinc-900/40 border border-zinc-800/50 rounded-2xl overflow-hidden">
-                    <div className="px-6 py-4 border-b border-zinc-800/50">
+                <div className="lg:col-span-2 bg-zinc-900/40 border border-amber-500/20 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-amber-500/20">
                         <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
                             <Home className="h-4 w-4 text-amber-400" />
                             Mascotas registradas
@@ -222,8 +222,8 @@ export default async function MascotasAdminPage({ searchParams }: { searchParams
                     )}
                 </div>
 
-                <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl overflow-hidden">
-                    <div className="px-6 py-4 border-b border-zinc-800/50">
+                <div className="bg-zinc-900/40 border border-amber-500/20 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-amber-500/20">
                         <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
                             <Clock className="h-4 w-4 text-amber-400" />
                             Bitacora de eventos

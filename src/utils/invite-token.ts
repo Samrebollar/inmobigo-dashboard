@@ -1,6 +1,19 @@
 import crypto from 'crypto'
 
-const SECRET_KEY = process.env.MP_CLIENT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'inmobigo-mp-invite-signature-key-2026'
+// Sin un secreto real configurado, cualquiera podría firmar su propio token de
+// invitación válido para vincularse a cualquier condominio — antes había un
+// tercer valor fijo de respaldo aquí mismo en el código (visible para quien
+// tenga el repo), lo cual anulaba la firma si por algún motivo faltaban las
+// dos variables de entorno reales.
+function getSecretKey(): string {
+    const key = process.env.MP_CLIENT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!key) {
+        throw new Error('Falta configurar MP_CLIENT_SECRET o SUPABASE_SERVICE_ROLE_KEY para firmar tokens de invitación.')
+    }
+    return key
+}
+
+const SECRET_KEY = getSecretKey()
 
 export interface InviteTokenPayload {
     cid: string // condominium_id

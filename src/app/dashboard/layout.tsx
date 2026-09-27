@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift, BookOpen, MessageCircle, PawPrint, ShieldAlert } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3, Search, LogOut, User, CreditCard, AlertTriangle, Wallet, Zap, Home, HelpCircle, Bell, Smartphone, Sparkles, Brain, CheckCircle, ClipboardList, Gift, BookOpen, MessageCircle, PawPrint, ShieldAlert, Activity } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -362,6 +362,13 @@ export default async function DashboardLayout({
                         >
                             <ShieldAlert size={18} className="text-rose-500/80 group-hover:text-rose-400" />
                             <span>Convivencia</span>
+                        </Link>
+                        <Link
+                            href="/dashboard/seguridad-operativa"
+                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors border border-transparent hover:border-sky-500/20"
+                        >
+                            <Activity size={18} className="text-sky-500/80 group-hover:text-sky-400" />
+                            <span>Actividad de Seguridad</span>
                         </Link>
                         <Link
                             href="/dashboard/premium-services"

@@ -30,6 +30,7 @@ import {
 } from '@/app/actions/team-tasks-actions'
 import { addIncidentCommentAction, getIncidentCommentsAction } from '@/app/actions/incident-comments-actions'
 import { updateIncidentStatusAction } from '@/app/actions/security-incident-actions'
+import { getIncidentSLAServer } from '@/app/actions/security-ops-actions'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1573,6 +1574,17 @@ export function ControlOperativoClient() {
 
     useEffect(() => { loadKPIs(); loadIncidents(); loadTasks() }, [loadKPIs, loadIncidents, loadTasks])
 
+    // SLA de incidencias (últimos 30 días) — independiente de `incidents` (que
+    // solo trae las abiertas) porque necesita también las ya resueltas para
+    // calcular el tiempo promedio de resolución.
+    const [incidentSLA, setIncidentSLA] = useState<{ avgResolutionHours: number | null; resolvedCount: number; openOver48h: number } | null>(null)
+    useEffect(() => {
+        if (!ctx) return
+        getIncidentSLAServer(ctx.orgId, 30).then(r => {
+            if (r.success) setIncidentSLA({ avgResolutionHours: r.avgResolutionHours, resolvedCount: r.resolvedCount, openOver48h: r.openOver48h })
+        })
+    }, [ctx])
+
     // ── Realtime subscription ──
     useEffect(() => {
         if (!ctx) return
@@ -1745,6 +1757,26 @@ export function ControlOperativoClient() {
                             {/* ══════════ INCIDENCIAS TAB ══════════ */}
                             {activeTab === 'incidencias' && (
                                 <motion.div key="inc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                                    {/* SLA (últimos 30 días) */}
+                                    {incidentSLA && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                                                <p className="text-lg font-black text-indigo-400">
+                                                    {incidentSLA.avgResolutionHours != null ? `${incidentSLA.avgResolutionHours.toFixed(1)} h` : '—'}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Tiempo promedio de resolución</p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                                                <p className="text-lg font-black text-emerald-400">{incidentSLA.resolvedCount}</p>
+                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Resueltas (30 días)</p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                                                <p className={`text-lg font-black ${incidentSLA.openOver48h > 0 ? 'text-rose-400' : 'text-zinc-400'}`}>{incidentSLA.openOver48h}</p>
+                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Abiertas hace más de 48h</p>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Search */}
                                     <div className="flex items-center gap-2">
                                         <div className="relative flex-1 max-w-sm">

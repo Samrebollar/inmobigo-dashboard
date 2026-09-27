@@ -13,6 +13,14 @@ import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { InvoiceType } from '@/types/finance'
+
+// Mismo mapeo usado en dashboard/create-invoice-modal.tsx y en el alta de deuda
+// inicial de un residente — así una Multa se guarda con el mismo invoice_type
+// sin importar desde qué rol se generó.
+const CONCEPT_TO_INVOICE_TYPE: Record<string, InvoiceType> = {
+    'Multa': 'fine',
+}
 
 interface CreateInvoiceModalProps {
     isOpen: boolean
@@ -203,7 +211,13 @@ export function CreateInvoiceModal({
             const finalNotes = formData.notes
 
             let createdInvoice: any = null
-            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo'
+            // Solo se interpreta como "abonar/liquidar deuda anterior" cuando el
+            // concepto elegido es explícitamente ese — antes se activaba con solo
+            // tener deuda pendiente y método Efectivo, sin importar el concepto
+            // (Multa, etc.), así que crear cualquier cargo nuevo a un residente
+            // que ya debía algo terminaba aplicándose como pago de la deuda vieja
+            // en vez de generar el cargo solicitado.
+            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo' && formData.concept === 'Abono a Deuda'
 
             if (isSettlingDebt) {
                 const firstInvoice = residentInvoices[0]
@@ -257,6 +271,7 @@ export function CreateInvoiceModal({
                     unit_id: selectedResident.unit_id,
                     amount: parseFloat(formData.amount),
                     status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
+                    invoice_type: CONCEPT_TO_INVOICE_TYPE[formData.concept],
                     due_date: formData.dueDate,
                     description: finalNotes ? `${formData.concept} - ${finalNotes}` : formData.concept,
                     payment_method: paymentMethod,

@@ -199,7 +199,13 @@ export function CreateInvoiceModal({
             }
 
             let createdInvoice: any = null
-            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo'
+            // Solo se interpreta como "abonar/liquidar deuda anterior" cuando el
+            // concepto elegido es explícitamente ese — antes se activaba con solo
+            // tener deuda pendiente y método Efectivo, sin importar el concepto
+            // (Multa, Cuota Extraordinaria, etc.), así que crear cualquier cargo
+            // nuevo a un residente que ya debía algo terminaba aplicándose como
+            // pago de la deuda vieja en vez de generar el cargo solicitado.
+            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo' && formData.concept === 'Abono a Deuda'
 
             if (isSettlingDebt) {
                 // Cada abono genera su propio recibo (resident_invoice_payments), con su

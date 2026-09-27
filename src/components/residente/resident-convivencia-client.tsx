@@ -66,7 +66,28 @@ export default function ResidentConvivenciaClient({ resident }: ResidentConviven
     const [evidencePreview, setEvidencePreview] = useState<string | null>(null)
 
     useEffect(() => {
-        if (resident?.id) fetchAll()
+        if (!resident?.id) return
+        fetchAll()
+
+        const channel = supabase
+            .channel(`realtime_resident_complaints_${resident.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'resident_complaints',
+                    filter: `reporter_resident_id=eq.${resident.id}`,
+                },
+                () => {
+                    fetchAll()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
     }, [resident?.id])
 
     const fetchAll = async () => {

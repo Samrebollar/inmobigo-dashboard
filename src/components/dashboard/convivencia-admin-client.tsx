@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/utils/supabase/client'
 import { getComplaintsByOrganizationServer, updateComplaintStatusServer } from '@/app/actions/complaint-actions'
 import { toast } from 'sonner'
 
@@ -69,6 +70,30 @@ export default function ConvivenciaAdminClient({ organizationId, condominiums }:
     useEffect(() => {
         fetchComplaints()
     }, [condoFilter])
+
+    useEffect(() => {
+        if (!organizationId) return
+        const supabase = createClient()
+        const channel = supabase
+            .channel(`realtime_resident_complaints_${organizationId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'resident_complaints',
+                    filter: `organization_id=eq.${organizationId}`,
+                },
+                () => {
+                    fetchComplaints()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [organizationId, condoFilter])
 
     const fetchComplaints = async () => {
         setLoading(true)

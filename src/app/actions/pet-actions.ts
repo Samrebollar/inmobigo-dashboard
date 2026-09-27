@@ -3,7 +3,9 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 
 const PET_BROADCAST_WEBHOOK_URL = 'https://n8n.inmobigo.mx/webhook/mascotas-broadcast'
-const PET_BROADCAST_WEBHOOK_SECRET = '90806e4535968d12ec7c6ade0726e0d4dbb2bb86ab86c934'
+// Antes este secreto estaba escrito directo aquí en el código (visible para
+// cualquiera con acceso al repo) — ahora vive solo como variable de entorno.
+const PET_BROADCAST_WEBHOOK_SECRET = process.env.PET_BROADCAST_WEBHOOK_SECRET || ''
 
 export async function createPetServer(payload: {
     organization_id: string

@@ -74,6 +74,10 @@ export default function ResidentProfileClient({
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const isAdmin = isAdminProp ?? (role !== 'resident' && role !== 'tenant')
+    // Seguridad cae dentro de isAdmin (para el gating de otras pantallas), pero
+    // no es un admin/dueño de la organización: ni el soporte a InmobiGo ni la
+    // suscripción de InmobiGo le aplican, son cosas del administrador real.
+    const isOrgAdmin = isAdmin && role !== 'security'
 
     const [resident, setResident] = useState(() => {
         const res = initialResident || {}
@@ -370,7 +374,7 @@ export default function ResidentProfileClient({
                         </div>
                     </motion.div>
 
-                    {isAdmin && (
+                    {isOrgAdmin && (
                         <ContactInmobiGoCard
                             organizationName={organizationName}
                             adminName={`${resident.first_name || ''} ${resident.last_name || ''}`.trim() || profile?.full_name || user.email}
@@ -548,7 +552,7 @@ export default function ResidentProfileClient({
             {/* Subscription Card — la suscripción de InmobiGo es del administrador/
                 organización, no del residente/inquilino/guardia, así que solo se
                 muestra en el perfil de un admin. */}
-            {isAdmin && (
+            {isOrgAdmin && (
                 <motion.div
                     variants={itemVariants}
                     initial="hidden"

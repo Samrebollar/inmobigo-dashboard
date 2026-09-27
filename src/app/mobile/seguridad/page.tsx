@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import MobileSeguridadDashboardClient from '@/components/mobile/seguridad/seguridad-dashboard-client'
+import { getActiveShiftServer } from '@/app/actions/security-ops-actions'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -80,6 +81,8 @@ export default async function MobileSeguridadPage() {
         recentPasses = recent || []
     }
 
+    const activeShiftResult = await getActiveShiftServer(user.id)
+
     return (
         <MobileSeguridadDashboardClient
             firstName={firstName}
@@ -89,6 +92,11 @@ export default async function MobileSeguridadPage() {
             pendingPackages={pendingPackages}
             openTickets={openTickets}
             recentPasses={recentPasses}
+            organizationId={organizationId}
+            condominiumId={null}
+            guardId={user.id}
+            guardName={fullName}
+            activeShift={activeShiftResult.shift}
         />
     )
 }

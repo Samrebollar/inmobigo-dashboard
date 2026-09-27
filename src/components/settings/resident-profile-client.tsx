@@ -427,10 +427,10 @@ export default function ResidentProfileClient({
 
                 {/* Right Column: Mini Cards */}
                 <div className="space-y-6">
-                    {!isAdmin && (
-                        <>
-                            {/* Administrator Mini Card */}
-                            {adminContact && (
+                    {/* Administrator Mini Card — para residente/inquilino y también para
+                        seguridad/staff, que sí necesitan saber quién es su administrador
+                        (solo el admin/dueño real de la organización no la ve). */}
+                    {!isOrgAdmin && adminContact && (
                                 <motion.div
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -475,38 +475,38 @@ export default function ResidentProfileClient({
                                         <MessageSquare size={14} /> Contactar
                                     </Button>
                                 </motion.div>
-                            )}
+                    )}
 
-                            {/* Unit Details Mini Card */}
-                            <motion.div
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: 0.2 }}
-                                className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group/unit"
-                            >
-                                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">La Unidad</h3>
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <div className="p-3 rounded-2xl bg-zinc-950/50 border border-zinc-800/50">
-                                        <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Superficie</p>
-                                        <div className="flex items-center gap-2">
-                                            <Maximize2 size={12} className="text-blue-400" />
-                                            <span className="text-xs font-bold text-white">{unitInfo.sizeM2 || 'No especificado'}</span>
-                                        </div>
-                                    </div>
-                                    <div className="p-3 rounded-2xl bg-zinc-950/50 border border-zinc-800/50">
-                                        <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Piso</p>
-                                        <div className="flex items-center gap-2">
-                                            <Layers size={12} className="text-amber-400" />
-                                            <span className="text-xs font-bold text-white">{unitInfo.floor || 'No especificado'}</span>
-                                        </div>
+                    {/* Unit Details Mini Card — solo residente/inquilino, seguridad no tiene unidad */}
+                    {!isAdmin && (
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group/unit"
+                        >
+                            <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">La Unidad</h3>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="p-3 rounded-2xl bg-zinc-950/50 border border-zinc-800/50">
+                                    <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Superficie</p>
+                                    <div className="flex items-center gap-2">
+                                        <Maximize2 size={12} className="text-blue-400" />
+                                        <span className="text-xs font-bold text-white">{unitInfo.sizeM2 || 'No especificado'}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 px-1">
-                                    <ShieldCheck size={14} className="text-emerald-500" />
-                                    <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Residencia Verificada</span>
+                                <div className="p-3 rounded-2xl bg-zinc-950/50 border border-zinc-800/50">
+                                    <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Piso</p>
+                                    <div className="flex items-center gap-2">
+                                        <Layers size={12} className="text-amber-400" />
+                                        <span className="text-xs font-bold text-white">{unitInfo.floor || 'No especificado'}</span>
+                                    </div>
                                 </div>
-                            </motion.div>
-                        </>
+                            </div>
+                            <div className="flex items-center gap-2 px-1">
+                                <ShieldCheck size={14} className="text-emerald-500" />
+                                <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Residencia Verificada</span>
+                            </div>
+                        </motion.div>
                     )}
                 </div>
             </div>

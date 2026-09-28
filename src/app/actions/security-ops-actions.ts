@@ -503,6 +503,15 @@ export async function registerSecurityAccessEventAction(params: {
                 body: JSON.stringify({ package_alert_id: id }),
             }).catch((err) => console.error('Error al notificar n8n (paquete-recibido):', err))
         }
+        if ((kind === 'visit' || kind === 'package') && event === 'reject') {
+            // Se espera la respuesta: en serverless un fetch sin await puede
+            // cortarse al terminar la acción.
+            await fetch('https://n8n.inmobigo.mx/webhook/acceso-rechazado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind, id }),
+            }).catch((err) => console.error('Error al notificar n8n (acceso-rechazado):', err))
+        }
         if (kind === 'transport' && (event === 'check_in' || event === 'reject')) {
             fetch('https://n8n.inmobigo.mx/webhook/transporte-decision', {
                 method: 'POST',

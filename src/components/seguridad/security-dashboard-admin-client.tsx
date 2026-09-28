@@ -44,9 +44,11 @@ import { useUserRole } from '@/hooks/use-user-role'
 type SecurityTab = 'visitas' | 'paqueteria' | 'transporte' | 'repartidor' | 'proveedor'
 
 // Los pases de visita se reparten en pestañas según lo que pidió el residente.
+// El panel web guarda 'delivery'/'provider' y el bot de WhatsApp
+// 'repartidor'/'proveedor'; se aceptan ambos.
 const passTab = (pass: any): 'visitas' | 'repartidor' | 'proveedor' =>
-    pass.visitor_type === 'delivery' ? 'repartidor'
-        : (pass.visitor_type === 'provider' || pass.access_type === 'service') ? 'proveedor'
+    (pass.visitor_type === 'delivery' || pass.visitor_type === 'repartidor') ? 'repartidor'
+        : (pass.visitor_type === 'provider' || pass.visitor_type === 'proveedor' || pass.access_type === 'service') ? 'proveedor'
         : 'visitas'
 
 type AccessRowState = 'pending' | 'inside' | 'exited' | 'rejected' | 'expired' | 'cancelled' | 'delivered'

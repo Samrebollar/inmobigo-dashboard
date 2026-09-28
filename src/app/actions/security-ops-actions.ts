@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient as createServerClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getCallerResidentBlock } from '@/lib/resident-delinquency'
 
 // ─── ACCESOS EN VIVO ──────────────────────────────────────────────────────────
 // Quién está dentro de la privada ahora mismo (pase de visita con check-in
@@ -635,6 +636,9 @@ export async function createResidentServiceVisitAction(params: {
         if (!resident || !condo?.organization_id || !resident.unit_id) {
             return { success: false, error: 'Tu perfil de residente está incompleto. Contacta a administración.' }
         }
+
+        const blocked = await getCallerResidentBlock(supabase, user.id)
+        if (blocked) return { success: false, error: blocked }
 
         // Por defecto "ahorita" en hora de México
         const partes = new Intl.DateTimeFormat('en-CA', {

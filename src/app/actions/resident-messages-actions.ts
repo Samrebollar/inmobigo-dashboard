@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { getCallerResidentBlock } from '@/lib/resident-delinquency'
 
 /**
  * Mensajería directa residente <-> administrador. Se opera siempre con el
@@ -95,6 +96,9 @@ export async function sendResidentMessageAction(body: string) {
     const ctx = await getResidentContext(supabase, user.id)
     if (!ctx) return { success: false, error: 'Residente no encontrado' }
     if (!ctx.organizationId) return { success: false, error: 'Tu condominio no tiene una organización asignada' }
+
+    const blocked = await getCallerResidentBlock(createAdminClient(), user.id, ctx.residentId)
+    if (blocked) return { success: false, error: blocked }
 
     const { data, error } = await supabase
         .from('resident_messages')

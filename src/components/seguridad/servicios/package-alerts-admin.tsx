@@ -20,6 +20,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { updatePackageAlertStatusAction, deletePackageAlertAction } from '@/app/actions/service-actions'
+import { registerSecurityAccessEventAction } from '@/app/actions/security-ops-actions'
 import { ConfirmDeleteModal } from './confirm-delete-modal'
 
 interface PackageAlert {
@@ -47,6 +48,9 @@ export function PackageAlertsAdmin({
     const [loading, setLoading] = useState(initialAlerts.length === 0)
     const [alertToDelete, setAlertToDelete] = useState<PackageAlert | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [rejectTarget, setRejectTarget] = useState<PackageAlert | null>(null)
+    const [rejectReason, setRejectReason] = useState('')
+    const [isRejecting, setIsRejecting] = useState(false)
 
     useEffect(() => {
         if (!admin?.organization_id) return
@@ -114,6 +118,31 @@ export function PackageAlertsAdmin({
         } catch (error: any) {
             console.error('Error updating status:', error)
             toast.error(`Error: ${error.message || 'No se pudo actualizar el estado'}`)
+        }
+    }
+
+    // Rechazo con motivo obligatorio: queda como evidencia y el residente lo
+    // ve en su panel y por WhatsApp.
+    const handleConfirmReject = async () => {
+        if (!rejectTarget || !rejectReason.trim()) return
+        try {
+            setIsRejecting(true)
+            const result = await registerSecurityAccessEventAction({
+                kind: 'package',
+                id: rejectTarget.id,
+                event: 'reject',
+                reason: rejectReason,
+            })
+            if (!result.success) throw new Error(result.error)
+            toast.success('Aviso rechazado. Se notificó al residente con el motivo.')
+            setAlerts(prev => prev.filter(a => a.id !== rejectTarget.id))
+            setRejectTarget(null)
+            setRejectReason('')
+        } catch (error: any) {
+            console.error('Error rejecting alert:', error)
+            toast.error(`Error: ${error.message || 'No se pudo rechazar el aviso'}`)
+        } finally {
+            setIsRejecting(false)
         }
     }
 
@@ -285,7 +314,14 @@ export function PackageAlertsAdmin({
                                             )}
                                             
                                             <button
-                                                onClick={() => handleUpdateStatus(alert.id, alert.status === 'pending' ? 'rejected' : 'closed')}
+                                                onClick={() => {
+                                                    if (alert.status === 'pending') {
+                                                        setRejectReason('')
+                                                        setRejectTarget(alert)
+                                                    } else {
+                                                        handleUpdateStatus(alert.id, 'closed')
+                                                    }
+                                                }}
                                                 className={`h-12 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-3 ${
                                                     alert.status === 'received'
                                                     ? 'flex-1 bg-zinc-800 hover:bg-emerald-600 text-zinc-400 hover:text-white border border-zinc-700 hover:border-emerald-500 shadow-xl'
@@ -311,6 +347,66 @@ export function PackageAlertsAdmin({
                     </AnimatePresence>
                 </div>
             )}
+
+            {/* Modal: Motivo de rechazo */}
+            <AnimatePresence>
+                {rejectTarget && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                        onClick={() => !isRejecting && setRejectTarget(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, y: 10 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.95, y: 10 }}
+                            onClick={e => e.stopPropagation()}
+                            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-4"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+                                    <XCircle size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Rechazar paquete</h3>
+                                    <p className="text-xs text-zinc-500 mt-0.5">{rejectTarget.carrier} · Unidad {rejectTarget.unit_name}</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Motivo del rechazo</label>
+                                <textarea
+                                    autoFocus
+                                    value={rejectReason}
+                                    onChange={e => setRejectReason(e.target.value)}
+                                    rows={4}
+                                    maxLength={500}
+                                    placeholder="Ej. El repartidor no traía guía / paquete dañado / datos no coinciden..."
+                                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-sm text-white placeholder:text-zinc-600 outline-none focus:ring-1 focus:ring-rose-500/50 resize-none"
+                                />
+                                <p className="text-[11px] text-zinc-500">El residente verá este motivo en su panel y por WhatsApp.</p>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    onClick={() => setRejectTarget(null)}
+                                    disabled={isRejecting}
+                                    className="h-10 px-4 rounded-xl text-sm font-bold text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleConfirmReject}
+                                    disabled={!rejectReason.trim() || isRejecting}
+                                    className="h-10 px-4 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors disabled:opacity-50"
+                                >
+                                    {isRejecting ? 'Guardando...' : 'Confirmar rechazo'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <ConfirmDeleteModal 
                 isOpen={!!alertToDelete}

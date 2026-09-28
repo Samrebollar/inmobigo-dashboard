@@ -365,7 +365,20 @@ export default function SettingsPage() {
                                             : subscription.subscription_status === 'pending' ? 'bg-amber-400 animate-pulse'
                                             : 'bg-zinc-500'
                                         }`}></span>
-                                        {subscription.subscription_status === 'active' && (
+                                        {subscription.subscription_status === 'active' && subscription.payment_provider === 'cortesia' && (
+                                            <>
+                                                Prueba gratis de InmobiGo hasta el <span className="text-zinc-300">
+                                                    {subscription.next_payment_date
+                                                        ? new Date(subscription.next_payment_date).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+                                                        : 'Por determinar'}
+                                                </span>
+                                                {' · '}
+                                                <Link href="/dashboard/configuracion/planes" className="text-indigo-400 hover:text-indigo-300 underline">
+                                                    Contratar plan
+                                                </Link>
+                                            </>
+                                        )}
+                                        {subscription.subscription_status === 'active' && subscription.payment_provider !== 'cortesia' && (
                                             <>
                                                 Próxima facturación: <span className="text-zinc-300">
                                                     {subscription.next_billing_date && !isNaN(new Date(subscription.next_billing_date).getTime()) 
@@ -395,7 +408,7 @@ export default function SettingsPage() {
                                     ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 group-hover:bg-amber-500/20'
                                     : 'bg-zinc-700/20 text-zinc-400 border-zinc-700/30'
                             }`}>
-                                {subscription.subscription_status === 'active' && '✅ Activo'}
+                                {subscription.subscription_status === 'active' && (subscription.payment_provider === 'cortesia' ? '🎁 Cortesía' : '✅ Activo')}
                                 {subscription.subscription_status === 'pending' && '⏳ En revisión'}
                                 {subscription.subscription_status === 'expired' && '⚠️ Vencido'}
                                 {!['active','pending','expired'].includes(subscription.subscription_status) && subscription.subscription_status}

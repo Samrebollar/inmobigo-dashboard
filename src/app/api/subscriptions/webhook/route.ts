@@ -108,8 +108,24 @@ async function handleWebhook(req: Request) {
         }
 
         const now = new Date()
-        const nextPayment = new Date()
-        nextPayment.setMonth(now.getMonth() + 1)
+
+        // Si la organización tiene una cortesía vigente, el primer mes pagado
+        // empieza cuando termina la cortesía (no pierde los días que le quedaban)
+        const { data: courtesies } = await supabase
+            .from('subscriptions')
+            .select('id, next_payment_date')
+            .eq('organization_id', subscription.organization_id)
+            .eq('payment_provider', 'cortesia')
+            .eq('subscription_status', 'active')
+            .neq('id', subscription.id)
+
+        let periodStart = now
+        for (const c of courtesies || []) {
+            const end = c.next_payment_date ? new Date(c.next_payment_date) : null
+            if (end && end > periodStart) periodStart = end
+        }
+        const nextPayment = new Date(periodStart)
+        nextPayment.setMonth(nextPayment.getMonth() + 1)
 
         // 1️⃣ Activar suscripción
         await supabase
@@ -122,6 +138,14 @@ async function handleWebhook(req: Request) {
                 mercado_subscription_id: preapprovalId
             })
             .eq('id', subscription.id)
+
+        // La cortesía queda cerrada: a partir de aquí rige el plan pagado
+        if (courtesies && courtesies.length > 0) {
+            await supabase
+                .from('subscriptions')
+                .update({ subscription_status: 'expired', canceled_at: now.toISOString() })
+                .in('id', courtesies.map((c) => c.id))
+        }
 
         // 2️⃣ Actualizar organización
         await supabase

@@ -151,12 +151,17 @@ export async function POST(req: Request) {
         // 4️⃣ Verificar suscripción activa (y desactivar si ya expiró por tiempo)
         const { data: existingActive } = await adminSupabase
             .from('subscriptions')
-            .select('id, created_at')
+            .select('id, created_at, payment_provider')
             .eq('organization_id', organizationId)
             .eq('subscription_status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle()
 
-        if (existingActive) {
+        // Una cortesía (prueba gratis otorgada por InmobiGo) no impide contratar:
+        // el cliente puede pagar en cualquier momento y los días que le queden
+        // se respetan al activar el plan pagado (ver webhook).
+        if (existingActive && existingActive.payment_provider !== 'cortesia') {
             const createdAt = new Date(existingActive.created_at)
             const nextPayment = new Date(createdAt)
             nextPayment.setMonth(nextPayment.getMonth() + 1)

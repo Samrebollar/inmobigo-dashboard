@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import {
     Activity,
     Package,
@@ -10,6 +11,8 @@ import {
     Loader2,
     LogIn,
     LogOut,
+    BookOpen,
+    ChevronRight,
     AlertTriangle,
     TrendingUp,
     Car,
@@ -19,7 +22,6 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
     getLiveAccessActivityServer,
-    getPackageHistoryServer,
     getVisitorPassMetricsServer,
     getGuardShiftsServer,
     getCrossFlaggedUnitsServer,
@@ -31,11 +33,13 @@ interface SeguridadOperativaClientProps {
     condominiums: { id: string; name: string }[]
 }
 
-type TabKey = 'accesos' | 'paqueteria' | 'visitas' | 'turnos' | 'riesgo'
+// El historial de accesos, paquetería y transporte (y quién está dentro) vive
+// en la Bitácora Inteligente; aquí solo lo que la caseta tiene pendiente,
+// guardias y riesgo, para no duplicar información.
+type TabKey = 'pendientes' | 'visitas' | 'turnos' | 'riesgo'
 
 const TABS: { key: TabKey; label: string; icon: any }[] = [
-    { key: 'accesos', label: 'Accesos en Vivo', icon: Activity },
-    { key: 'paqueteria', label: 'Paquetería', icon: Package },
+    { key: 'pendientes', label: 'Pendientes de Caseta', icon: Activity },
     { key: 'visitas', label: 'Pases de Visita', icon: Users },
     { key: 'turnos', label: 'Turnos de Guardias', icon: Clock },
     { key: 'riesgo', label: 'Riesgo por Unidad', icon: ShieldAlert },
@@ -72,14 +76,12 @@ function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
 }
 
 export default function SeguridadOperativaClient({ organizationId, condominiums }: SeguridadOperativaClientProps) {
-    const [activeTab, setActiveTab] = useState<TabKey>('accesos')
+    const [activeTab, setActiveTab] = useState<TabKey>('pendientes')
     const [condoFilter, setCondoFilter] = useState<string>('')
     const [loading, setLoading] = useState(true)
 
-    const [insideNow, setInsideNow] = useState<any[]>([])
     const [pendingPackages, setPendingPackages] = useState<any[]>([])
     const [pendingTransport, setPendingTransport] = useState<any[]>([])
-    const [packageHistory, setPackageHistory] = useState<any[]>([])
     const [visitMetrics, setVisitMetrics] = useState<{ totalPasses: number; usedCount: number; noShowCount: number; byUnit: any[]; anomalies: any[] }>({
         totalPasses: 0, usedCount: 0, noShowCount: 0, byUnit: [], anomalies: [],
     })
@@ -91,18 +93,15 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [live, pkgHistory, visitStats, shiftLog, riskUnits, transportNotices] = await Promise.all([
+            const [live, visitStats, shiftLog, riskUnits, transportNotices] = await Promise.all([
                 getLiveAccessActivityServer(organizationId),
-                getPackageHistoryServer(organizationId, 30),
                 getVisitorPassMetricsServer(organizationId, 30),
                 getGuardShiftsServer(organizationId, 14),
                 getCrossFlaggedUnitsServer(organizationId, 90),
                 getPendingTransportNoticesServer(organizationId),
             ])
-            setInsideNow(live.insideNow || [])
             setPendingPackages(live.pendingPackages || [])
             setPendingTransport(transportNotices.notices || [])
-            setPackageHistory(pkgHistory.packages || [])
             setVisitMetrics({
                 totalPasses: visitStats.totalPasses,
                 usedCount: visitStats.usedCount,
@@ -130,7 +129,7 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
                     <Activity className="h-7 w-7 text-sky-400" />
                     Actividad de Seguridad
                 </h1>
-                <p className="text-zinc-400">Accesos en vivo, paquetería, pases de visita, turnos de guardias y riesgo por unidad.</p>
+                <p className="text-zinc-400">Pendientes de caseta, pases de visita, turnos de guardias y riesgo por unidad.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -183,35 +182,26 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
                 </div>
             ) : (
                 <>
-                    {activeTab === 'accesos' && (
+                    {activeTab === 'pendientes' && (
                         <div className="space-y-6">
-                            <div className="grid gap-4 sm:grid-cols-3">
-                                <KPI label="Dentro de la privada ahora" value={byCondo(insideNow).length} icon={LogIn} color="text-emerald-400" />
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <KPI label="Paquetes pendientes de entrega" value={byCondo(pendingPackages).length} icon={Package} color="text-amber-400" />
                                 <KPI label="Transporte pendiente (Uber/DiDi/taxi)" value={byCondo(pendingTransport).length} icon={Car} color="text-sky-400" />
                             </div>
 
-                            <div className="space-y-3">
-                                <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider">Dentro de la privada ahora</h3>
-                                {byCondo(insideNow).length === 0 ? (
-                                    <EmptyState icon={LogIn} text="No hay visitas ni proveedores registrados dentro en este momento." />
-                                ) : (
-                                    <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl divide-y divide-zinc-800/70">
-                                        {byCondo(insideNow).map((v: any) => (
-                                            <div key={v.id} className="flex items-center justify-between px-5 py-3">
-                                                <div>
-                                                    <p className="text-sm font-bold text-white">{v.visitor_name || 'Sin nombre'}</p>
-                                                    <p className="text-xs text-zinc-500">Unidad {v.unit_name || 'S/N'} · {v.visitor_type === 'package' ? 'Proveedor/paquetería' : 'Visita personal'} · {condoName(v.condominium_id)}</p>
-                                                </div>
-                                                <div className="text-right text-xs text-zinc-500">
-                                                    <p>Entró {fmt(v.checked_in_at)}</p>
-                                                    {v.guard_name && <p>Guardia: {v.guard_name}</p>}
-                                                </div>
-                                            </div>
-                                        ))}
+                            <Link
+                                href="/dashboard/bitacora-inteligente"
+                                className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/40 px-5 py-4 transition-colors hover:border-sky-500/30"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <BookOpen className="h-5 w-5 text-sky-400" />
+                                    <div>
+                                        <p className="text-sm font-bold text-white">¿Quién está dentro o qué pasó en la caseta?</p>
+                                        <p className="text-xs text-zinc-500">El historial completo de accesos, paquetería y transporte, y las personas dentro, están en la Bitácora Inteligente.</p>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 shrink-0 text-zinc-500" />
+                            </Link>
 
                             <div className="space-y-3">
                                 <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider">Paquetes pendientes de entrega</h3>
@@ -255,47 +245,6 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
                                     </div>
                                 )}
                             </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'paqueteria' && (
-                        <div className="space-y-3">
-                            <p className="text-xs text-zinc-500">Últimos 30 días</p>
-                            {byCondo(packageHistory).length === 0 ? (
-                                <EmptyState icon={Package} text="No hay paquetería registrada en los últimos 30 días." />
-                            ) : (
-                                <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl overflow-hidden">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-white/[0.02]">
-                                            <tr>
-                                                <th className="px-5 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Fecha</th>
-                                                <th className="px-5 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Unidad / Residente</th>
-                                                <th className="px-5 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Paquetería</th>
-                                                <th className="px-5 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Estado</th>
-                                                <th className="px-5 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Guardia</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-zinc-800/70">
-                                            {byCondo(packageHistory).map((p: any) => (
-                                                <tr key={p.id}>
-                                                    <td className="px-5 py-3 text-zinc-400">{fmt(p.created_at)}</td>
-                                                    <td className="px-5 py-3 text-white font-medium">Unidad {p.unit_name || 'S/N'} · {p.resident_name || '—'}</td>
-                                                    <td className="px-5 py-3 text-zinc-400">{p.carrier || '—'}</td>
-                                                    <td className="px-5 py-3">
-                                                        <span className={cn(
-                                                            'px-2 py-1 rounded-lg text-[10px] font-bold uppercase',
-                                                            p.status === 'delivered' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
-                                                        )}>
-                                                            {p.status === 'delivered' ? 'Entregado' : p.status === 'received' ? 'Recibido' : 'Pendiente'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-5 py-3 text-zinc-500">{p.guard_name || '—'}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
                         </div>
                     )}
 

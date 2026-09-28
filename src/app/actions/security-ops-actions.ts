@@ -56,6 +56,37 @@ export async function getLiveAccessActivityServer(organizationId: string) {
     }
 }
 
+// ─── AVISOS DE TRANSPORTE (UBER/DIDI/TAXI) ───────────────────────────────────
+export async function getPendingTransportNoticesServer(organizationId: string) {
+    try {
+        const supabase = createAdminClient()
+
+        const { data: units } = await supabase
+            .from('units')
+            .select('id, condominium_id')
+            .eq('organization_id', organizationId)
+        const condoByUnit = new Map((units || []).map((u: any) => [u.id, u.condominium_id]))
+
+        const { data, error } = await supabase
+            .from('transport_notices')
+            .select('id, unit_id, unit_name, resident_name, direction, platform, vehicle_info, notes, status, created_at, guard_name')
+            .eq('organization_id', organizationId)
+            .in('status', ['pending', 'received'])
+            .order('created_at', { ascending: false })
+
+        if (error) {
+            console.error('[getPendingTransportNoticesServer] DB error:', error)
+            return { success: false, error: error.message, notices: [] }
+        }
+
+        const notices = (data || []).map((n: any) => ({ ...n, condominium_id: condoByUnit.get(n.unit_id) || null }))
+        return { success: true, notices }
+    } catch (err: any) {
+        console.error('[getPendingTransportNoticesServer] Fatal error:', err)
+        return { success: false, error: err.message || 'Error desconocido', notices: [] }
+    }
+}
+
 // ─── HISTORIAL DE PAQUETERÍA ──────────────────────────────────────────────────
 export async function getPackageHistoryServer(organizationId: string, days: number = 30) {
     try {

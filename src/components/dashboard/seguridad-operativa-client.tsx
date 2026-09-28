@@ -12,6 +12,7 @@ import {
     LogOut,
     AlertTriangle,
     TrendingUp,
+    Car,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -22,6 +23,7 @@ import {
     getVisitorPassMetricsServer,
     getGuardShiftsServer,
     getCrossFlaggedUnitsServer,
+    getPendingTransportNoticesServer,
 } from '@/app/actions/security-ops-actions'
 
 interface SeguridadOperativaClientProps {
@@ -76,6 +78,7 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
 
     const [insideNow, setInsideNow] = useState<any[]>([])
     const [pendingPackages, setPendingPackages] = useState<any[]>([])
+    const [pendingTransport, setPendingTransport] = useState<any[]>([])
     const [packageHistory, setPackageHistory] = useState<any[]>([])
     const [visitMetrics, setVisitMetrics] = useState<{ totalPasses: number; usedCount: number; noShowCount: number; byUnit: any[]; anomalies: any[] }>({
         totalPasses: 0, usedCount: 0, noShowCount: 0, byUnit: [], anomalies: [],
@@ -88,15 +91,17 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
     const fetchAll = useCallback(async () => {
         setLoading(true)
         try {
-            const [live, pkgHistory, visitStats, shiftLog, riskUnits] = await Promise.all([
+            const [live, pkgHistory, visitStats, shiftLog, riskUnits, transportNotices] = await Promise.all([
                 getLiveAccessActivityServer(organizationId),
                 getPackageHistoryServer(organizationId, 30),
                 getVisitorPassMetricsServer(organizationId, 30),
                 getGuardShiftsServer(organizationId, 14),
                 getCrossFlaggedUnitsServer(organizationId, 90),
+                getPendingTransportNoticesServer(organizationId),
             ])
             setInsideNow(live.insideNow || [])
             setPendingPackages(live.pendingPackages || [])
+            setPendingTransport(transportNotices.notices || [])
             setPackageHistory(pkgHistory.packages || [])
             setVisitMetrics({
                 totalPasses: visitStats.totalPasses,
@@ -180,9 +185,10 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
                 <>
                     {activeTab === 'accesos' && (
                         <div className="space-y-6">
-                            <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-4 sm:grid-cols-3">
                                 <KPI label="Dentro de la privada ahora" value={byCondo(insideNow).length} icon={LogIn} color="text-emerald-400" />
                                 <KPI label="Paquetes pendientes de entrega" value={byCondo(pendingPackages).length} icon={Package} color="text-amber-400" />
+                                <KPI label="Transporte pendiente (Uber/DiDi/taxi)" value={byCondo(pendingTransport).length} icon={Car} color="text-sky-400" />
                             </div>
 
                             <div className="space-y-3">
@@ -220,6 +226,30 @@ export default function SeguridadOperativaClient({ organizationId, condominiums 
                                                     <p className="text-xs text-zinc-500">{p.carrier || 'Paquetería sin especificar'} · {condoName(p.condominium_id)}</p>
                                                 </div>
                                                 <p className="text-xs text-zinc-500">Avisado {fmt(p.created_at)}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider">Transporte pendiente (Uber/DiDi/taxi)</h3>
+                                {byCondo(pendingTransport).length === 0 ? (
+                                    <EmptyState icon={Car} text="No hay avisos de transporte pendientes." />
+                                ) : (
+                                    <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl divide-y divide-zinc-800/70">
+                                        {byCondo(pendingTransport).map((t: any) => (
+                                            <div key={t.id} className="flex items-center justify-between px-5 py-3">
+                                                <div>
+                                                    <p className="text-sm font-bold text-white">
+                                                        {t.resident_name || 'Sin nombre'} · Unidad {t.unit_name || 'S/N'}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        {t.platform} · {t.direction === 'pickup' ? 'Lo van a recoger' : 'Está llegando'}
+                                                        {t.vehicle_info ? ` · ${t.vehicle_info}` : ''} · {condoName(t.condominium_id)}
+                                                    </p>
+                                                </div>
+                                                <p className="text-xs text-zinc-500">Avisado {fmt(t.created_at)}</p>
                                             </div>
                                         ))}
                                     </div>

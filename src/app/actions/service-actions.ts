@@ -138,6 +138,82 @@ export async function createPackageAlertAction(data: any) {
 }
 
 /**
+ * Crea un aviso de transporte (Uber/DiDi/taxi) — recogida o llegada de un
+ * residente. Separado de package_alerts a propósito: un auto que va a
+ * recoger o dejar a alguien no es un paquete, y mezclarlos confundía a
+ * seguridad sobre si debía abrir la reja o solo recibir algo en la puerta.
+ */
+export async function createTransportNoticeAction(data: any) {
+    if (!data.organization_id || !data.resident_id || !data.direction || !data.platform) {
+        return { success: false, error: 'Datos incompletos para crear el aviso' }
+    }
+
+    try {
+        const adminClient = createAdminClient()
+
+        const { error } = await adminClient
+            .from('transport_notices')
+            .insert({
+                ...data,
+                created_at: new Date().toISOString()
+            })
+
+        if (error) throw error
+
+        revalidatePath('/dashboard/servicios')
+        revalidatePath('/dashboard/seguridad-operativa')
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('Error in createTransportNoticeAction:', error)
+        return { success: false, error: error.message || 'Error al crear el aviso' }
+    }
+}
+
+/**
+ * Actualiza el estado de un aviso de transporte (Bypass RLS)
+ */
+export async function updateTransportNoticeStatusAction(params: {
+    id: string
+    status: 'received' | 'closed' | 'rejected'
+    guardName?: string
+    checkpoint?: string
+    handledBy?: string
+}) {
+    const { id, status, guardName, checkpoint, handledBy } = params
+    if (!id || !status) return { success: false, error: 'Parámetros incompletos' }
+
+    try {
+        const adminClient = createAdminClient()
+
+        const updateData: any = {
+            status,
+            handled_by: handledBy || null,
+            guard_name: guardName || undefined,
+            checkpoint: checkpoint || undefined,
+        }
+        if (status === 'received' || status === 'closed') {
+            updateData.handled_at = new Date().toISOString()
+        }
+
+        const { error } = await adminClient
+            .from('transport_notices')
+            .update(updateData)
+            .eq('id', id)
+
+        if (error) throw error
+
+        revalidatePath('/dashboard/servicios')
+        revalidatePath('/dashboard/seguridad-operativa')
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('Error in updateTransportNoticeStatusAction:', error)
+        return { success: false, error: error.message || 'Error al actualizar estado' }
+    }
+}
+
+/**
  * Crea o actualiza una amenidad (Bypass RLS)
  */
 export async function saveAmenityAction(amenityData: any) {

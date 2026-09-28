@@ -43,6 +43,7 @@ export default async function MobileSeguridadPage() {
 
     let pendingPassesToday = 0
     let pendingPackages = 0
+    let pendingTransport = 0
     let openTickets = 0
     let recentPasses: any[] = []
 
@@ -62,6 +63,12 @@ export default async function MobileSeguridadPage() {
             .eq('organization_id', organizationId)
             .eq('status', 'pending')
 
+        const { count: transportCount } = await adminSupabase
+            .from('transport_notices')
+            .select('*', { count: 'exact', head: true })
+            .eq('organization_id', organizationId)
+            .eq('status', 'pending')
+
         const { count: ticketsCount } = await adminSupabase
             .from('tickets')
             .select('*', { count: 'exact', head: true })
@@ -77,6 +84,7 @@ export default async function MobileSeguridadPage() {
 
         pendingPassesToday = passesCount || 0
         pendingPackages = packagesCount || 0
+        pendingTransport = transportCount || 0
         openTickets = ticketsCount || 0
         recentPasses = recent || []
     }
@@ -90,6 +98,7 @@ export default async function MobileSeguridadPage() {
             condominiumName={securityCondo?.name || null}
             pendingPassesToday={pendingPassesToday}
             pendingPackages={pendingPackages}
+            pendingTransport={pendingTransport}
             openTickets={openTickets}
             recentPasses={recentPasses}
             organizationId={organizationId}

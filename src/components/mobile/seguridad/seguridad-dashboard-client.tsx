@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { User, ScanLine, Package, AlertTriangle, ChevronRight, CheckCircle2, Clock, LogIn, LogOut, Loader2 } from 'lucide-react'
+import { User, ScanLine, Package, AlertTriangle, ChevronRight, CheckCircle2, Clock, LogIn, LogOut, Loader2, Car } from 'lucide-react'
 import { startShiftServer, endShiftServer } from '@/app/actions/security-ops-actions'
 import { toast } from 'sonner'
 
@@ -31,6 +31,7 @@ export default function MobileSeguridadDashboardClient({
     condominiumName,
     pendingPassesToday,
     pendingPackages,
+    pendingTransport,
     openTickets,
     recentPasses,
     organizationId,
@@ -44,6 +45,7 @@ export default function MobileSeguridadDashboardClient({
     condominiumName?: string | null
     pendingPassesToday: number
     pendingPackages: number
+    pendingTransport: number
     openTickets: number
     recentPasses: RecentPass[]
     organizationId: string | null
@@ -173,6 +175,24 @@ export default function MobileSeguridadDashboardClient({
                         <div className="flex flex-col">
                             <p className="text-[12px] font-semibold tracking-[0.24px] text-[#191C1D]">Paquetería</p>
                             <p className="text-[11px] font-medium text-[#434655]">Autorizar y gestionar paquetes</p>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="text-[#434655]" />
+                </Link>
+
+                <Link
+                    href="/mobile/seguridad/transporte"
+                    className="flex w-full items-center justify-between rounded-[20px] bg-[#e0f2fe] p-4"
+                >
+                    <div className="flex items-center gap-4">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#bae6fd]">
+                            <Car size={18} className="text-[#0284c7]" />
+                        </span>
+                        <div className="flex flex-col">
+                            <p className="text-[12px] font-semibold tracking-[0.24px] text-[#191C1D]">
+                                Transporte {pendingTransport > 0 && `(${pendingTransport})`}
+                            </p>
+                            <p className="text-[11px] font-medium text-[#434655]">Recogidas y llegadas por Uber/DiDi/taxi</p>
                         </div>
                     </div>
                     <ChevronRight size={16} className="text-[#434655]" />

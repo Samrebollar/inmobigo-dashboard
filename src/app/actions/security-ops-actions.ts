@@ -531,7 +531,7 @@ export async function registerSecurityAccessEventAction(params: {
     }
 }
 
-// ─── HISTORIAL DEL RESIDENTE (paquetería y transporte) ───────────────────────
+// ─── HISTORIAL DEL RESIDENTE (paquetería, transporte, repartidor y proveedor) ───────────────────────
 // El residente necesita ver el estado de sus avisos y, si seguridad los
 // rechazó, el motivo. Se resuelve con el usuario autenticado, nunca con un id
 // enviado desde el cliente.
@@ -539,7 +539,7 @@ export async function getMyServiceNoticesAction(days: number = 30) {
     try {
         const serverClient = await createServerClient()
         const { data: { user } } = await serverClient.auth.getUser()
-        if (!user) return { success: false, error: 'No autenticado', packages: [], transports: [] }
+        if (!user) return { success: false, error: 'No autenticado', packages: [], transports: [], services: [] }
 
         const supabase = createAdminClient()
         const since = new Date()
@@ -551,7 +551,7 @@ export async function getMyServiceNoticesAction(days: number = 30) {
             .eq('user_id', user.id)
         const residentIds = (residents || []).map((r: any) => r.id)
 
-        const [{ data: packages }, { data: transports }] = await Promise.all([
+        const [{ data: packages }, { data: transports }, { data: services }] = await Promise.all([
             supabase
                 .from('package_alerts')
                 .select('id, carrier, notes, status, created_at, received_at, checked_in_at, checked_out_at, delivered_at, rejection_reason, rejected_at')
@@ -568,11 +568,114 @@ export async function getMyServiceNoticesAction(days: number = 30) {
                     .order('created_at', { ascending: false })
                     .limit(20)
                 : Promise.resolve({ data: [] as any[] }),
+            supabase
+                .from('visitor_passes')
+                .select('id, visitor_name, visitor_type, vehicle_info, status, created_at, used_at, checked_in_at, checked_out_at, rejection_reason, rejected_at')
+                .eq('resident_id', user.id)
+                .in('visitor_type', ['delivery', 'provider', 'repartidor', 'proveedor'])
+                .gte('created_at', since.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(20),
         ])
 
-        return { success: true, packages: packages || [], transports: transports || [] }
+        return { success: true, packages: packages || [], transports: transports || [], services: services || [] }
     } catch (err: any) {
         console.error('[getMyServiceNoticesAction] Error:', err)
-        return { success: false, error: err.message || 'Error desconocido', packages: [], transports: [] }
+        return { success: false, error: err.message || 'Error desconocido', packages: [], transports: [], services: [] }
+    }
+}
+
+const AVISO_RESIDENTE_WEBHOOK_URL = 'https://n8n.inmobigo.mx/webhook/aviso-residente'
+
+// Avisa por WhatsApp a seguridad y administración (flujo n8n "30 - Notificar
+// Aviso Residente Web") de un aviso que el residente registró desde la app.
+export async function notifyResidentNotice(kind: 'package' | 'visit', id: string) {
+    try {
+        await fetch(AVISO_RESIDENTE_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind, id }),
+        })
+    } catch (err) {
+        console.error('[notifyResidentNotice] Error notificando aviso del residente:', err)
+    }
+}
+
+// ─── AVISO DE REPARTIDOR / PROVEEDOR DESDE EL PANEL DEL RESIDENTE ───────────
+// Se guarda como pase de visita sin QR (visitor_type delivery/provider) para
+// que seguridad lo vea en su pestaña Repartidor o Proveedor. El residente se
+// resuelve con el usuario autenticado, nunca con datos enviados por el cliente.
+export async function createResidentServiceVisitAction(params: {
+    type: 'delivery' | 'provider'
+    name: string
+    visitDate?: string
+    startTime?: string
+    vehicleInfo?: string
+    notes?: string
+}) {
+    const name = params.name?.trim()
+    const notes = params.notes?.trim() || null
+    if (params.type !== 'delivery' && params.type !== 'provider') return { success: false, error: 'Tipo de aviso inválido' }
+    if (!name) return { success: false, error: params.type === 'delivery' ? 'Indica la app o negocio del repartidor' : 'Indica el nombre o la empresa del proveedor' }
+    if (params.type === 'provider' && !notes) return { success: false, error: 'Indica el motivo del servicio' }
+
+    try {
+        const serverClient = await createServerClient()
+        const { data: { user } } = await serverClient.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        const supabase = createAdminClient()
+        const { data: resident } = await supabase
+            .from('residents')
+            .select('first_name, last_name, unit_id, condominium_id, units(unit_number), condominiums(name, organization_id)')
+            .eq('user_id', user.id)
+            .maybeSingle()
+        const condo: any = Array.isArray((resident as any)?.condominiums) ? (resident as any).condominiums[0] : (resident as any)?.condominiums
+        const unit: any = Array.isArray((resident as any)?.units) ? (resident as any).units[0] : (resident as any)?.units
+        if (!resident || !condo?.organization_id || !resident.unit_id) {
+            return { success: false, error: 'Tu perfil de residente está incompleto. Contacta a administración.' }
+        }
+
+        // Por defecto "ahorita" en hora de México
+        const partes = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', hour12: false,
+        }).formatToParts(new Date())
+        const p = Object.fromEntries(partes.map(x => [x.type, x.value]))
+        const visitDate = /^\d{4}-\d{2}-\d{2}$/.test(params.visitDate || '') ? params.visitDate! : `${p.year}-${p.month}-${p.day}`
+        const startTime = /^\d{2}:\d{2}$/.test(params.startTime || '') ? params.startTime! : `${p.hour === '24' ? '00' : p.hour}:${p.minute}`
+
+        const { data: pass, error } = await supabase
+            .from('visitor_passes')
+            .insert({
+                organization_id: condo.organization_id,
+                organization_name: condo.name || null,
+                unit_id: resident.unit_id,
+                unit_name: unit?.unit_number || 'S/N',
+                resident_id: user.id,
+                authorized_by_name: `${resident.first_name || ''} ${resident.last_name || ''}`.trim() || 'Residente',
+                visitor_name: name,
+                visitor_type: params.type,
+                access_type: 'service',
+                visit_date: visitDate,
+                start_time: startTime,
+                vehicle_info: params.vehicleInfo?.trim() || null,
+                notes,
+                status: 'pending',
+                qr_token: null,
+            })
+            .select('id')
+            .single()
+        if (error) throw error
+
+        await notifyResidentNotice('visit', pass.id)
+
+        revalidatePath('/seguridad')
+        revalidatePath('/residente/servicios')
+
+        return { success: true, id: pass.id }
+    } catch (err: any) {
+        console.error('[createResidentServiceVisitAction] Error:', err)
+        return { success: false, error: err.message || 'No se pudo registrar el aviso' }
     }
 }

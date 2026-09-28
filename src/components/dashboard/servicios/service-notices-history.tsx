@@ -3,14 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Package, Car, History, RefreshCw, XCircle, LogIn, LogOut } from 'lucide-react'
+import { Package, Car, History, RefreshCw, XCircle, LogIn, LogOut, Bike, Wrench } from 'lucide-react'
 import { getMyServiceNoticesAction } from '@/app/actions/security-ops-actions'
 
 type NoticeState = 'pending' | 'inside' | 'exited' | 'delivered' | 'rejected'
 
 interface NoticeItem {
     id: string
-    kind: 'package' | 'transport'
+    kind: 'package' | 'transport' | 'delivery' | 'provider'
     title: string
     createdAt: string
     checkIn?: string | null
@@ -26,6 +26,13 @@ const STATE_BADGE: Record<NoticeState, { label: string; className: string }> = {
     exited: { label: 'Salió', className: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
     delivered: { label: 'Entregado', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
     rejected: { label: 'Rechazado', className: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+}
+
+const KIND_STYLE: Record<NoticeItem['kind'], { icon: typeof Package; box: string }> = {
+    package: { icon: Package, box: 'bg-amber-500/10 text-amber-400' },
+    transport: { icon: Car, box: 'bg-sky-500/10 text-sky-400' },
+    delivery: { icon: Bike, box: 'bg-fuchsia-500/10 text-fuchsia-400' },
+    provider: { icon: Wrench, box: 'bg-violet-500/10 text-violet-400' },
 }
 
 const fmt = (iso?: string | null, pattern = 'HH:mm') => (iso ? format(parseISO(iso), pattern, { locale: es }) : null)
@@ -62,7 +69,21 @@ async function loadNotices(): Promise<NoticeItem[] | null> {
                 : t.status === 'received' ? 'inside'
                 : 'pending',
         }))
-        return [...packages, ...transports].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        const services: NoticeItem[] = (result.services || []).map((v: any) => ({
+            id: v.id,
+            kind: (v.visitor_type === 'delivery' || v.visitor_type === 'repartidor') ? 'delivery' : 'provider',
+            title: `${(v.visitor_type === 'delivery' || v.visitor_type === 'repartidor') ? 'Repartidor' : 'Proveedor'} — ${v.visitor_name}${v.vehicle_info ? ` · ${v.vehicle_info}` : ''}`,
+            createdAt: v.created_at,
+            checkIn: v.checked_in_at || v.used_at,
+            checkOut: v.checked_out_at,
+            rejectionReason: v.rejection_reason,
+            rejectedAt: v.rejected_at,
+            state: v.status === 'rejected' ? 'rejected'
+                : v.checked_out_at ? 'exited'
+                : (v.status === 'used' || v.checked_in_at) ? 'inside'
+                : 'pending',
+        }))
+        return [...packages, ...transports, ...services].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     }
     return null
 }
@@ -72,7 +93,7 @@ async function loadNotices(): Promise<NoticeItem[] | null> {
  * cuándo entró/salió el repartidor o el auto y, si seguridad rechazó el
  * acceso, el motivo que quedó registrado como evidencia.
  */
-export function ServiceNoticesHistory() {
+export function ServiceNoticesHistory({ refreshKey = 0 }: { refreshKey?: number }) {
     const [items, setItems] = useState<NoticeItem[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -83,7 +104,7 @@ export function ServiceNoticesHistory() {
         })
     }, [])
 
-    useEffect(() => { fetchItems() }, [fetchItems])
+    useEffect(() => { fetchItems() }, [fetchItems, refreshKey])
 
     const refresh = () => {
         setLoading(true)
@@ -99,7 +120,7 @@ export function ServiceNoticesHistory() {
                     </div>
                     <div>
                         <h3 className="text-lg font-black text-white tracking-tight">Mis avisos recientes</h3>
-                        <p className="text-xs text-zinc-500">Paquetería y transporte de los últimos 30 días</p>
+                        <p className="text-xs text-zinc-500">Paquetería, transporte, repartidores y proveedores de los últimos 30 días</p>
                     </div>
                 </div>
                 <button
@@ -122,8 +143,8 @@ export function ServiceNoticesHistory() {
                             <div key={`${item.kind}-${item.id}`} className="rounded-2xl border border-zinc-800/80 bg-zinc-950/40 p-4">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3 min-w-0">
-                                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${item.kind === 'package' ? 'bg-amber-500/10 text-amber-400' : 'bg-sky-500/10 text-sky-400'}`}>
-                                            {item.kind === 'package' ? <Package className="h-4 w-4" /> : <Car className="h-4 w-4" />}
+                                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${KIND_STYLE[item.kind].box}`}>
+                                            {React.createElement(KIND_STYLE[item.kind].icon, { className: 'h-4 w-4' })}
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-sm font-bold text-white truncate">{item.title}</p>

@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { notifyResidentNotice } from './security-ops-actions'
 
 /**
  * Borra un pase de visitante (Bypass RLS)
@@ -118,14 +119,19 @@ export async function createPackageAlertAction(data: any) {
     try {
         const adminClient = createAdminClient()
         
-        const { error } = await adminClient
+        const { data: inserted, error } = await adminClient
             .from('package_alerts')
             .insert({
                 ...data,
                 created_at: new Date().toISOString()
             })
+            .select('id')
+            .single()
 
         if (error) throw error
+
+        // Aviso por WhatsApp a seguridad y administración
+        await notifyResidentNotice('package', inserted.id)
 
         revalidatePath('/dashboard/avisos')
         revalidatePath('/dashboard/servicios')

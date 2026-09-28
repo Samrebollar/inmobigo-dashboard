@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { SubscriptionLock } from './SubscriptionLock'
+import { daysUntilDeletionFrom } from '@/lib/subscription-access'
 
 interface SubscriptionLockWrapperProps {
     children: React.ReactNode
@@ -23,7 +24,7 @@ export function SubscriptionLockWrapper({ children, daysRemaining, role }: Subsc
         return (
             <div className="relative min-h-screen w-full bg-zinc-950">
                 {/* The lock component is fixed and covers everything, but here we just render it in place of children to prevent any sensitive data from rendering underneath */}
-                <SubscriptionLock role={role} />
+                <SubscriptionLock role={role} daysUntilDeletion={daysUntilDeletionFrom(daysRemaining)} />
             </div>
         )
     }

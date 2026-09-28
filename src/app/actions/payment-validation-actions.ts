@@ -5,6 +5,8 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { buildFolio } from '@/services/legacy-sync-service'
 import { randomUUID } from 'crypto'
+import { createAdminClient as createServiceClient } from '@/utils/supabase/admin'
+import { getCondominiumAccess, SUSPENDED_RESIDENT_MESSAGE } from '@/lib/subscription-access'
 
 /**
  * @param residentId - Cuando se pasa (pantalla del residente), acota el
@@ -409,6 +411,12 @@ export async function submitValidation(data: {
     try {
         if (!data.comprobante_url) {
             return { success: false, error: 'Debes adjuntar el comprobante de pago.' }
+        }
+
+        // Con la suscripción del condominio vencida no se aceptan pagos
+        if (data.condominium_id) {
+            const access = await getCondominiumAccess(createServiceClient(), data.condominium_id)
+            if (access.suspended) return { success: false, error: SUSPENDED_RESIDENT_MESSAGE }
         }
 
         const supabase = await createClient()

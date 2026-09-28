@@ -16,6 +16,7 @@ import { InviteUserModal } from '@/components/settings/InviteUserModal'
 import { Role } from '@/types/auth'
 import { inviteTeamMemberAction, removeTeamMemberAction } from '@/app/actions/team-actions'
 import { DeleteConfirmModal } from '@/components/dashboard/delete-confirm-modal'
+import { DeleteAccountSection } from '@/components/settings/delete-account-section'
 
 interface TeamMember {
     id: string
@@ -420,6 +421,9 @@ export default function SettingsPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Eliminar cuenta */}
+            <DeleteAccountSection />
         </div>
     )
 }

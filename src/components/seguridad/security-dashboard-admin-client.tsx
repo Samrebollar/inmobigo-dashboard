@@ -510,16 +510,21 @@ export default function SecurityDashboardAdminClient({
                             <CardHeader className="border-b border-zinc-900 pb-0">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex gap-1 bg-zinc-900 p-1 rounded-xl">
-                                        {(['visitas', 'paqueteria', 'transporte'] as const).map((tab) => (
+                                        {[
+                                            { id: 'visitas' as const, label: 'Visitas', icon: UserPlus, activeClasses: 'bg-indigo-500/15 text-indigo-400' },
+                                            { id: 'paqueteria' as const, label: 'Paquetería', icon: Package, activeClasses: 'bg-amber-500/15 text-amber-400' },
+                                            { id: 'transporte' as const, label: 'Transporte', icon: Car, activeClasses: 'bg-sky-500/15 text-sky-400' },
+                                        ].map((tab) => (
                                             <button
-                                                key={tab}
-                                                onClick={() => setActiveTab(tab)}
+                                                key={tab.id}
+                                                onClick={() => setActiveTab(tab.id)}
                                                 className={cn(
-                                                    "px-6 py-2 text-xs font-bold rounded-lg transition-all capitalize",
-                                                    activeTab === tab ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"
+                                                    "flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-lg transition-all",
+                                                    activeTab === tab.id ? cn(tab.activeClasses, "shadow-lg") : "text-zinc-500 hover:text-zinc-300"
                                                 )}
                                             >
-                                                {tab}
+                                                <tab.icon className="h-3.5 w-3.5" />
+                                                {tab.label}
                                             </button>
                                         ))}
                                     </div>

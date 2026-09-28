@@ -16,7 +16,7 @@ import { es } from 'date-fns/locale'
 import {
     QrCode, UserPlus, Clock, X, CheckCircle2, History,
     ShieldAlert, Calendar, FileText, ChevronRight, Share2, 
-    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift, Trash2, Car, Bike
+    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift, Trash2, Car
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDeleteModal } from './confirm-delete-modal'
@@ -119,7 +119,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         const date = new Date()
         date.setHours(hours, minutes, 0)
         
-        const duration = accessType === 'Proveedor' ? 8 : 4
+        const duration = 4
         date.setHours(date.getHours() + duration)
         
         return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:00`
@@ -172,29 +172,16 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             const typeMap: Record<string, string> = {
                 'Invitado': 'guest',
                 'Evento': 'event',
-                'Repartidor': 'service',
-                'Proveedor': 'service'
             }
-            // visitor_type decide en qué pestaña lo ve seguridad
-            // (Visitas / Repartidor / Proveedor).
-            const visitorTypeMap: Record<string, string> = {
-                'Invitado': 'visit',
-                'Evento': 'event',
-                'Repartidor': 'delivery',
-                'Proveedor': 'provider'
-            }
-            const extraNotes = (formData.accessType === 'Repartidor' || formData.accessType === 'Proveedor')
-                ? [formData.company && `Empresa: ${formData.company}`, formData.accessType === 'Proveedor' && formData.serviceType && `Servicio: ${formData.serviceType}`]
-                : []
 
             const newPass = {
                 visitor_name: formData.visitorName,
                 access_type: typeMap[formData.accessType] || 'guest',
-                visitor_type: visitorTypeMap[formData.accessType] || 'visit',
+                visitor_type: formData.accessType === 'Evento' ? 'event' : 'visit',
                 visit_date: formData.visitDate,
                 start_time: formData.startTime,
                 end_time: endTime,
-                notes: [...extraNotes, formData.notes].filter(Boolean).join(' · '),
+                notes: formData.notes,
                 vehicle_info: formData.vehicleInfo.trim() || null,
                 qr_token: token,
                 status: 'pending',
@@ -277,8 +264,12 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         }
     }
 
-    const activePasses = passes.filter(p => p.status === 'pending' || p.status === 'used')
-    const historyPasses = passes.filter(p => p.status !== 'pending' && p.status !== 'used')
+    // Repartidores y proveedores no llevan QR: se avisan desde la tarjeta de
+    // avisos y aparecen en "Mis avisos recientes".
+    const SERVICE_TYPES = ['delivery', 'provider', 'repartidor', 'proveedor']
+    const qrPasses = passes.filter(p => !SERVICE_TYPES.includes(p.visitor_type))
+    const activePasses = qrPasses.filter(p => p.status === 'pending' || p.status === 'used')
+    const historyPasses = qrPasses.filter(p => p.status !== 'pending' && p.status !== 'used')
 
     const getStatusStyle = (status: string) => {
         switch(status) {
@@ -832,8 +823,6 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                             >
                                                 <div className="flex items-center gap-3">
                                                     {formData.accessType === 'Invitado' && <UserPlus className="h-5 w-5 text-indigo-400" />}
-                                                    {formData.accessType === 'Repartidor' && <Bike className="h-5 w-5 text-fuchsia-400" />}
-                                                    {formData.accessType === 'Proveedor' && <ShieldCheck className="h-5 w-5 text-violet-400" />}
                                                     {formData.accessType === 'Evento' && <Calendar className="h-5 w-5 text-purple-400" />}
                                                     <span className="font-bold text-zinc-200">{formData.accessType}</span>
                                                 </div>
@@ -848,7 +837,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
                                                         className="absolute top-16 left-0 right-0 z-[100] bg-zinc-950 border border-zinc-800 rounded-2xl p-2 shadow-2xl backdrop-blur-xl"
                                                     >
-                                                        {['Invitado', 'Evento', 'Repartidor', 'Proveedor'].map((type) => (
+                                                        {['Invitado', 'Evento'].map((type) => (
                                                             <button
                                                                 key={type}
                                                                 type="button"
@@ -862,8 +851,6 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                                 `}
                                                             >
                                                                 {type === 'Invitado' && <UserPlus className="h-4 w-4" />}
-                                                                {type === 'Repartidor' && <Bike className="h-4 w-4" />}
-                                                                {type === 'Proveedor' && <ShieldCheck className="h-4 w-4" />}
                                                                 {type === 'Evento' && <Calendar className="h-4 w-4" />}
                                                                 {type}
                                                             </button>
@@ -875,37 +862,6 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                     </div>
 
                                     <AnimatePresence mode="wait">
-                                        {(formData.accessType === 'Proveedor' || formData.accessType === 'Repartidor') && (
-                                            <motion.div
-                                                key="servicio-fields"
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                exit={{ opacity: 0, height: 0 }}
-                                                className="space-y-4 overflow-hidden"
-                                            >
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="space-y-2">
-                                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Empresa</label>
-                                                        <input
-                                                            value={formData.company}
-                                                            onChange={e => setFormData({...formData, company: e.target.value})}
-                                                            className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-emerald-500 rounded-2xl h-14 px-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700 font-bold"
-                                                            placeholder={formData.accessType === 'Repartidor' ? 'Ej. Rappi, DiDi Food' : 'Ej. Totalplay'}
-                                                        />
-                                                    </div>
-                                                    {formData.accessType === 'Proveedor' && <div className="space-y-2">
-                                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Tipo de Servicio</label>
-                                                        <input
-                                                            value={formData.serviceType}
-                                                            onChange={e => setFormData({...formData, serviceType: e.target.value})}
-                                                            className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-emerald-500 rounded-2xl h-14 px-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700 font-bold"
-                                                            placeholder="Ej. Reparación"
-                                                        />
-                                                    </div>}
-                                                </div>
-                                            </motion.div>
-                                        )}
-
                                         {formData.accessType === 'Evento' && (
                                             <motion.div
                                                 key="evento-fields"

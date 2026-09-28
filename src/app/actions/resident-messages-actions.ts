@@ -283,6 +283,17 @@ export async function sendAdminMessageAction(contextId: string, body: string, th
     if (!orgUser?.organization_id) return { success: false, error: 'No administras ninguna organización' }
 
     let condominiumId: string | null = null
+    if (threadType === 'security') {
+        // Solo a miembros del equipo de seguridad de la propia organización
+        const { data: member } = await createAdminClient()
+            .from('organization_users')
+            .select('user_id')
+            .eq('organization_id', orgUser.organization_id)
+            .eq('user_id', contextId)
+            .eq('role_new', 'security')
+            .maybeSingle()
+        if (!member) return { success: false, error: 'Este miembro no pertenece a tu equipo de seguridad' }
+    }
     if (threadType === 'resident') {
         const { data: resident } = await supabase
             .from('residents')
@@ -325,4 +336,81 @@ export async function sendAdminMessageAction(contextId: string, body: string, th
     revalidatePath('/seguridad/mensajes')
     const [withAvatar] = await attachSenderAvatars([data])
     return { success: true, data: withAvatar }
+}
+
+// Roles del panel que administran la organización (el guardia de seguridad
+// también vive en organization_users, pero no administra la bandeja).
+const ORG_ADMIN_ROLES = ['owner', 'admin', 'admin_condominio', 'admin_propiedad', 'super_admin']
+
+async function getOrgAdminContext() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+
+    const { data: orgUser } = await createAdminClient()
+        .from('organization_users')
+        .select('organization_id, role_new')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+    if (!orgUser?.organization_id || !ORG_ADMIN_ROLES.includes(orgUser.role_new)) return null
+    return { userId: user.id, organizationId: orgUser.organization_id as string }
+}
+
+/**
+ * Miembros del equipo de seguridad a los que el administrador puede
+ * escribir desde Mensajes (su chat está en el panel de Seguridad > Ayuda).
+ */
+export async function getAdminTeamMembersAction() {
+    const ctx = await getOrgAdminContext()
+    if (!ctx) return { success: false, error: 'No autorizado', data: [] }
+
+    const adminSupabase = createAdminClient()
+    const { data: members } = await adminSupabase
+        .from('organization_users')
+        .select('user_id, role_new')
+        .eq('organization_id', ctx.organizationId)
+        .eq('role_new', 'security')
+        .neq('user_id', ctx.userId)
+
+    const userIds = (members || []).map(m => m.user_id).filter(Boolean)
+    if (userIds.length === 0) return { success: true, data: [] }
+
+    const { data: profiles } = await adminSupabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', userIds)
+
+    const data = userIds.map(id => {
+        const p = (profiles || []).find(pr => pr.id === id)
+        return { userId: id as string, name: p?.full_name || 'Guardia de Seguridad', avatarUrl: p?.avatar_url || null }
+    }).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+
+    return { success: true, data }
+}
+
+/**
+ * El administrador elimina una conversación completa (con un residente o
+ * con un guardia). Se borra para ambos lados y no se puede deshacer.
+ */
+export async function deleteAdminThreadAction(contextId: string, threadType: AdminThreadType) {
+    if (!contextId) return { success: false, error: 'Conversación no válida' }
+
+    const ctx = await getOrgAdminContext()
+    if (!ctx) return { success: false, error: 'Solo la administración puede eliminar conversaciones' }
+
+    const filterColumn = threadType === 'security' ? 'security_user_id' : 'resident_id'
+    const { error, count } = await createAdminClient()
+        .from('resident_messages')
+        .delete({ count: 'exact' })
+        .eq('organization_id', ctx.organizationId)
+        .eq(filterColumn, contextId)
+
+    if (error) {
+        console.error('[deleteAdminThreadAction]', error)
+        return { success: false, error: 'No se pudo eliminar la conversación' }
+    }
+
+    revalidatePath('/dashboard/mensajes')
+    return { success: true, deleted: count || 0 }
 }

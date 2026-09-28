@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, Send, Loader2, Search, Home, Shield } from 'lucide-react'
+import { MessageCircle, Send, Loader2, Search, Home, Shield, Trash2, Users, AlertTriangle, X } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import {
     getAdminMessageThreadsAction,
     getAdminThreadMessagesAction,
     sendAdminMessageAction,
+    getAdminTeamMembersAction,
+    deleteAdminThreadAction,
     AdminThreadType,
 } from '@/app/actions/resident-messages-actions'
 import { format, isToday, isYesterday } from 'date-fns'
@@ -36,6 +38,12 @@ interface ThreadMessage {
     body: string
     created_at: string
     read_at: string | null
+}
+
+interface TeamMember {
+    userId: string
+    name: string
+    avatarUrl: string | null
 }
 
 function formatMessageTime(iso: string) {
@@ -93,9 +101,15 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
     const [draft, setDraft] = useState('')
     const [sending, setSending] = useState(false)
     const [search, setSearch] = useState('')
+    const [team, setTeam] = useState<TeamMember[]>([])
+    // Conversación nueva con un miembro del equipo que aún no tiene mensajes
+    const [draftThread, setDraftThread] = useState<ThreadSummary | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+    const [deleting, setDeleting] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
 
-    const selectedThread = threads.find(t => threadKey(t.threadType, t.contextId) === selectedThreadKey) || null
+    const selectedThread = threads.find(t => threadKey(t.threadType, t.contextId) === selectedThreadKey)
+        || (draftThread && threadKey(draftThread.threadType, draftThread.contextId) === selectedThreadKey ? draftThread : null)
 
     const loadThreads = async () => {
         const res = await getAdminMessageThreadsAction()
@@ -122,6 +136,12 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
         }
         if (!silent) setLoadingMessages(false)
     }
+
+    useEffect(() => {
+        getAdminTeamMembersAction().then(res => {
+            if (res.success) setTeam(res.data as TeamMember[])
+        })
+    }, [])
 
     useEffect(() => {
         loadThreads()
@@ -216,7 +236,9 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
             if (res.data) {
                 setMessages(prev => prev.some(m => m.id === res.data.id) ? prev : [...prev, res.data as ThreadMessage])
                 setThreads(prev => {
-                    const updated = prev.map(t => (t.threadType === selectedThread.threadType && t.contextId === selectedThread.contextId) ? {
+                    const exists = prev.some(t => t.threadType === selectedThread.threadType && t.contextId === selectedThread.contextId)
+                    const base = exists ? prev : [...prev, selectedThread]
+                    const updated = base.map(t => (t.threadType === selectedThread.threadType && t.contextId === selectedThread.contextId) ? {
                         ...t, lastMessage: body, lastMessageAt: res.data.created_at, lastSenderRole: 'admin' as const,
                     } : t)
                     return updated.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
@@ -225,6 +247,43 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
         } finally {
             setSending(false)
         }
+    }
+
+    const openTeamMember = (member: TeamMember) => {
+        const key = threadKey('security', member.userId)
+        if (!threads.some(t => threadKey(t.threadType, t.contextId) === key)) {
+            setDraftThread({
+                threadType: 'security',
+                contextId: member.userId,
+                residentName: member.name,
+                unitNumber: null,
+                residentAvatarUrl: member.avatarUrl,
+                lastMessage: '',
+                lastMessageAt: new Date().toISOString(),
+                lastSenderRole: 'admin',
+                unreadCount: 0,
+            })
+            setMessages([])
+        }
+        setSelectedThreadKey(key)
+    }
+
+    const handleDelete = async () => {
+        if (!selectedThread || deleting) return
+        setDeleting(true)
+        const res = await deleteAdminThreadAction(selectedThread.contextId, selectedThread.threadType)
+        setDeleting(false)
+        if (!res.success) {
+            toast.error(res.error || 'No se pudo eliminar la conversación')
+            return
+        }
+        const key = threadKey(selectedThread.threadType, selectedThread.contextId)
+        setThreads(prev => prev.filter(t => threadKey(t.threadType, t.contextId) !== key))
+        setDraftThread(null)
+        setMessages([])
+        setSelectedThreadKey(null)
+        setConfirmDelete(false)
+        toast.success('Conversación eliminada')
     }
 
     return (
@@ -302,6 +361,33 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
                             })
                         )}
                     </div>
+
+                    {team.length > 0 && (
+                        <div className="border-t border-zinc-800 max-h-56 overflow-y-auto">
+                            <p className="px-4 pt-3 pb-1 text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                                <Users size={11} /> Equipo
+                            </p>
+                            {team.map(member => {
+                                const key = threadKey('security', member.userId)
+                                return (
+                                    <button
+                                        key={member.userId}
+                                        onClick={() => openTeamMember(member)}
+                                        className={`w-full text-left px-4 py-2.5 hover:bg-zinc-800/40 transition-colors flex items-center gap-3 ${
+                                            selectedThreadKey === key ? 'bg-indigo-500/10' : ''
+                                        }`}
+                                    >
+                                        <Avatar url={member.avatarUrl} name={member.name} size={30} />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold text-white truncate">{member.name}</p>
+                                            <span className="text-[11px] text-zinc-500 flex items-center gap-1"><Shield size={10} /> Seguridad</span>
+                                        </div>
+                                        <MessageCircle size={14} className="text-zinc-600 shrink-0" />
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* Hilo activo */}
@@ -323,12 +409,25 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
                                         <span className="text-xs text-zinc-500 flex items-center gap-1"><Home size={11} /> {selectedThread.unitNumber}</span>
                                     )}
                                 </div>
+                                {messages.length > 0 && (
+                                    <button
+                                        onClick={() => setConfirmDelete(true)}
+                                        className="ml-auto h-9 w-9 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors"
+                                        title="Eliminar conversación"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
                             </div>
 
                             <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                                 {loadingMessages ? (
                                     <div className="flex items-center justify-center h-full text-zinc-600">
                                         <Loader2 className="h-5 w-5 animate-spin" />
+                                    </div>
+                                ) : messages.length === 0 ? (
+                                    <div className="flex h-full items-center justify-center text-center text-sm text-zinc-600">
+                                        Escribe el primer mensaje para {selectedThread.residentName}.
                                     </div>
                                 ) : (
                                     <AnimatePresence initial={false}>
@@ -388,6 +487,49 @@ export function MensajesAdminClient({ organizationId, adminUserId }: { organizat
                     )}
                 </div>
             </div>
+
+            <AnimatePresence>
+                {confirmDelete && selectedThread && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-7 shadow-2xl"
+                        >
+                            <div className="mb-5 flex items-center justify-between">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-500/20 bg-rose-500/10 text-rose-500">
+                                    <AlertTriangle size={22} />
+                                </div>
+                                <button onClick={() => !deleting && setConfirmDelete(false)} className="p-2 text-zinc-500 hover:text-white">
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <h3 className="mb-2 text-lg font-black text-white">¿Eliminar la conversación con {selectedThread.residentName}?</h3>
+                            <p className="mb-6 text-sm leading-relaxed text-zinc-400">
+                                Se borrarán todos los mensajes de este chat, también para {selectedThread.threadType === 'security' ? 'el guardia' : 'el residente'}. Esta acción no se puede deshacer.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setConfirmDelete(false)}
+                                    disabled={deleting}
+                                    className="flex-1 rounded-xl border border-zinc-700 py-2.5 text-sm font-semibold text-zinc-300 hover:bg-zinc-800"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    Eliminar
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

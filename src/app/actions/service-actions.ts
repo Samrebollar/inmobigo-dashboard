@@ -162,6 +162,7 @@ export async function createTransportNoticeAction(data: any) {
 
         revalidatePath('/dashboard/servicios')
         revalidatePath('/dashboard/seguridad-operativa')
+        revalidatePath('/seguridad')
 
         return { success: true }
     } catch (error: any) {
@@ -205,6 +206,7 @@ export async function updateTransportNoticeStatusAction(params: {
 
         revalidatePath('/dashboard/servicios')
         revalidatePath('/dashboard/seguridad-operativa')
+        revalidatePath('/seguridad')
 
         return { success: true }
     } catch (error: any) {

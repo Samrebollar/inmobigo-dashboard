@@ -8,7 +8,7 @@ import {
     Search, Filter, X, RefreshCw, Download, Printer, ChevronDown,
     DoorOpen, MapPin, User, Building2, Shield, CheckCircle2,
     AlertTriangle, XCircle, MoreVertical, LogOut, Eye, BookOpen,
-    SlidersHorizontal, TrendingUp, FileText,
+    SlidersHorizontal, TrendingUp, FileText, Car,
 } from 'lucide-react'
 import type { BitacoraEntry, BitacoraKPIs, BitacoraFilters, EventType, BitacoraStatus } from '@/types/bitacora'
 import { EVENT_TYPE_CONFIG, STATUS_CONFIG, VISITOR_TYPE_LABELS, COURIER_ICONS } from '@/types/bitacora'
@@ -84,7 +84,7 @@ function KPICard({ label, value, icon: Icon, color, sub }: {
 // ─── Event Type Badge ─────────────────────────────────────────────────────────
 function EventBadge({ type }: { type: EventType }) {
     const cfg = EVENT_TYPE_CONFIG[type]
-    const Icon = type === 'access' ? DoorOpen : type === 'delivery' ? Package : Calendar
+    const Icon = type === 'access' ? DoorOpen : type === 'delivery' ? Package : type === 'transport' ? Car : Calendar
     return (
         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
             <Icon size={10} />
@@ -124,13 +124,13 @@ function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
     if (entry.checked_in_at) {
         events.push({
             time: fmtTime(entry.checked_in_at),
-            label: entry.event_type === 'delivery' ? 'Entrega llegó' : entry.event_type === 'amenity' ? 'Acceso a amenidad' : 'Entrada autorizada',
+            label: entry.event_type === 'delivery' ? 'Entrega llegó' : entry.event_type === 'amenity' ? 'Acceso a amenidad' : entry.event_type === 'transport' ? 'Aviso de transporte recibido' : 'Entrada autorizada',
             icon: ArrowDownLeft,
             color: 'text-emerald-400',
         })
     }
     if (entry.checked_out_at) {
-        events.push({ time: fmtTime(entry.checked_out_at), label: entry.event_type === 'delivery' ? 'Entrega completada' : 'Salida registrada', icon: ArrowUpRight, color: 'text-rose-400' })
+        events.push({ time: fmtTime(entry.checked_out_at), label: entry.event_type === 'delivery' ? 'Entrega completada' : entry.event_type === 'transport' ? 'Transporte resuelto por seguridad' : 'Salida registrada', icon: ArrowUpRight, color: 'text-rose-400' })
         if (entry.duration_minutes) {
             events.push({ time: '', label: `Permanencia total: ${fmtDuration(entry.duration_minutes)}`, icon: Clock, color: 'text-blue-400' })
         }
@@ -170,7 +170,8 @@ function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
                         { label: 'Autorizado por', value: entry.authorized_by || '—' },
                         ...(entry.event_type === 'amenity' ? [{ label: 'Amenidad', value: entry.amenity_name || '—' }] : []),
                         ...(entry.event_type === 'delivery' ? [{ label: 'Empresa', value: entry.company || '—' }] : []),
-                        ...(entry.visitor_type ? [{ label: 'Tipo', value: VISITOR_TYPE_LABELS[entry.visitor_type] || entry.visitor_type }] : []),
+                        ...(entry.event_type === 'transport' ? [{ label: 'Transporte', value: entry.company || '—' }] : []),
+                        ...(entry.visitor_type && entry.event_type !== 'transport' ? [{ label: 'Tipo', value: VISITOR_TYPE_LABELS[entry.visitor_type] || entry.visitor_type }] : []),
                     ].map(m => (
                         <div key={m.label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
                             <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1">{m.label}</p>
@@ -250,7 +251,8 @@ function BitacoraRow({ entry, onSelect }: { entry: BitacoraEntry; onSelect: () =
                 <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0 text-sm">
                         {entry.event_type === 'delivery' ? courierEmoji :
-                         entry.event_type === 'amenity' ? '🏊' : '👤'}
+                         entry.event_type === 'amenity' ? '🏊' :
+                         entry.event_type === 'transport' ? '🚗' : '👤'}
                     </div>
                     <div>
                         <p className="text-xs font-bold text-zinc-200">{entry.person_name || '—'}</p>
@@ -259,6 +261,9 @@ function BitacoraRow({ entry, onSelect }: { entry: BitacoraEntry; onSelect: () =
                         )}
                         {entry.event_type === 'amenity' && entry.amenity_name && (
                             <p className="text-[10px] text-zinc-600">{entry.amenity_name}</p>
+                        )}
+                        {entry.event_type === 'transport' && entry.company && (
+                            <p className="text-[10px] text-zinc-600">{entry.company}</p>
                         )}
                     </div>
                 </div>
@@ -698,6 +703,7 @@ export function BitacoraInteligenteClient({
                                                     <option value="access">Acceso</option>
                                                     <option value="delivery">Entrega</option>
                                                     <option value="amenity">Amenidad</option>
+                                                    <option value="transport">Transporte</option>
                                                 </select>
                                             </div>
                                             {/* Status */}

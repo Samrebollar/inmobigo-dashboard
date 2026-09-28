@@ -149,24 +149,6 @@ function PlansContent() {
             idealFor: ['Operadores de gran escala', 'Consorcios inmobiliarios'],
             icon: <Zap className="h-6 w-6" />,
             highlight: false
-        },
-        {
-            name: 'CORE PRUEBA',
-            limit: 5,
-            price: '$10',
-            period: 'MXN / mes',
-            color: 'cyan',
-            description: 'Prueba todas las funcionalidades básicas de la plataforma.',
-            features: [
-                'Máximo 5 unidades',
-                'Todo lo anterior',
-                'Soporte 24/7 Alta Prioridad',
-                'Infraestructura Dedicada',
-                'Reportes Corporativos'
-            ],
-            idealFor: ['Operadores de gran escala', 'Consorcios inmobiliarios'],
-            icon: <Zap className="h-6 w-6" />,
-            highlight: false
         }
     ]
 

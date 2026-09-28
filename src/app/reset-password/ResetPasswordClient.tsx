@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Lock, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react'
 import { resetPasswordWithCodeAction } from '@/app/actions/auth-actions'
+import { validatePassword, PASSWORD_RULES_TEXT } from '@/lib/auth-errors'
 
 function ResetPasswordForm() {
     const [password, setPassword] = useState('')
@@ -46,8 +47,9 @@ function ResetPasswordForm() {
             setError('Las contraseñas no coinciden')
             return
         }
-        if (password.length < 6) {
-            setError('La contraseña debe tener al menos 6 caracteres')
+        const passwordError = validatePassword(password)
+        if (passwordError) {
+            setError(passwordError)
             return
         }
 
@@ -64,6 +66,9 @@ function ResetPasswordForm() {
                 hashRefreshToken || undefined
             )
 
+            if (!result.success && result.error === 'WEAK_PASSWORD') {
+                throw new Error(result.message)
+            }
             if (!result.success) {
                 throw new Error(
                     'Este enlace no es válido o ya expiró. Por favor solicita uno nuevo desde la pantalla de inicio de sesión.'
@@ -165,6 +170,7 @@ function ResetPasswordForm() {
                             required
                         />
                     </div>
+                    <p className="px-1 text-xs text-zinc-500">{PASSWORD_RULES_TEXT}</p>
                 </div>
 
                 <button

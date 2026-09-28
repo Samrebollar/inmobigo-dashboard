@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Mail, Lock, Loader2, ArrowRight, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { validateReferralCodeAction } from '@/app/actions/benefit-actions'
+import { validatePassword, translateAuthError, PASSWORD_RULES_TEXT } from '@/lib/auth-errors'
 
 function RegisterFormContent() {
     const router = useRouter()
@@ -57,6 +58,13 @@ function RegisterFormContent() {
         setLoading(true)
         setError('')
 
+        const passwordError = validatePassword(formData.password)
+        if (passwordError) {
+            setError(passwordError)
+            setLoading(false)
+            return
+        }
+
         const supabase = createClient()
 
         try {
@@ -87,7 +95,7 @@ function RegisterFormContent() {
 
         } catch (err: any) {
             console.error("REGISTER ERROR:", err.message);
-            setError(err.message || 'Error al registrar la cuenta.');
+            setError(translateAuthError(err.message, err.code) || 'Error al registrar la cuenta.');
         } finally {
             setLoading(false)
         }
@@ -175,11 +183,11 @@ function RegisterFormContent() {
                                     name="password"
                                     type="password"
                                     required
-                                    minLength={6}
+                                    minLength={8}
                                     value={formData.password}
                                     onChange={handleChange}
                                     className="w-full rounded-xl border border-white/10 bg-black/40 py-2.5 pl-9 pr-3 text-sm text-white placeholder-zinc-600 focus:border-indigo-500/50 focus:bg-indigo-950/20 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all"
-                                    placeholder="Min. 6 caracteres"
+                                    placeholder={PASSWORD_RULES_TEXT}
                                 />
                             </div>
                         </div>

@@ -3,6 +3,16 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { notifyResidentNotice } from './security-ops-actions'
+import { createClient } from '@/utils/supabase/server'
+import { getCallerResidentBlock } from '@/lib/resident-delinquency'
+
+// Residente moroso: no puede usar Servicios ni Amenidades (el administrador sí
+// puede registrar a su nombre)
+async function delinquencyBlock(residentId?: string | null) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    return getCallerResidentBlock(createAdminClient(), user?.id, residentId)
+}
 
 /**
  * Borra un pase de visitante (Bypass RLS)
@@ -116,6 +126,9 @@ export async function createPackageAlertAction(data: any) {
         return { success: false, error: 'Datos incompletos para crear el aviso' }
     }
 
+    const blocked = await delinquencyBlock(data.resident_id)
+    if (blocked) return { success: false, error: blocked }
+
     try {
         const adminClient = createAdminClient()
         
@@ -153,6 +166,9 @@ export async function createTransportNoticeAction(data: any) {
     if (!data.organization_id || !data.resident_id || !data.direction || !data.platform) {
         return { success: false, error: 'Datos incompletos para crear el aviso' }
     }
+
+    const blocked = await delinquencyBlock(data.resident_id)
+    if (blocked) return { success: false, error: blocked }
 
     try {
         const adminClient = createAdminClient()
@@ -387,6 +403,9 @@ export async function createAmenityReservationAction(data: {
         return { success: false, error: 'Datos incompletos para procesar la reserva' }
     }
 
+    const blocked = await delinquencyBlock(data.resident_id)
+    if (blocked) return { success: false, error: blocked }
+
     try {
         const adminClient = createAdminClient()
         
@@ -458,6 +477,9 @@ export async function createVisitorPassAction(data: any) {
     if (!data.organization_id || !data.visitor_name) {
         return { success: false, error: 'Datos incompletos para crear el pase' }
     }
+
+    const blocked = await delinquencyBlock(data.resident_id)
+    if (blocked) return { success: false, error: blocked }
 
     try {
         const adminClient = createAdminClient()

@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { SeguridadBottomNav } from '@/components/mobile/seguridad-bottom-nav'
+import { getOrganizationAccess } from '@/lib/subscription-access'
+import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
 /**
  * Superficie móvil para guardias de seguridad — separada de /mobile/(app)
@@ -45,9 +47,13 @@ export default async function MobileSeguridadLayout({ children }: { children: Re
         redirect('/dashboard')
     }
 
+    const access = await getOrganizationAccess(adminSupabase, orgUser?.organization_id || securityCondo?.organization_id)
+
     return (
         <div className="pb-16">
-            {children}
+            <SubscriptionLockWrapper daysRemaining={access.daysRemaining} role="security">
+                {children}
+            </SubscriptionLockWrapper>
             <SeguridadBottomNav />
         </div>
     )

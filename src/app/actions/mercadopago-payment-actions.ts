@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { calculateResidentDebtSummary } from '@/utils/finance-utils'
 import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-service'
+import { getCondominiumAccess, SUSPENDED_RESIDENT_MESSAGE } from '@/lib/subscription-access'
 
 /**
  * Crea una preferencia de pago en Mercado Pago para que el residente liquide
@@ -33,6 +34,12 @@ export async function createResidentPaymentCheckout(options?: { amount?: number;
     const condominiumId = resident.condominium_id || resident.condominiums?.id
     if (!condominiumId) {
         return { success: false, error: 'no_condominium', message: 'Tu cuenta no tiene un condominio asociado.' }
+    }
+
+    // Con la suscripción del condominio vencida no se aceptan pagos
+    const access = await getCondominiumAccess(adminSupabase, condominiumId)
+    if (access.suspended) {
+        return { success: false, error: 'subscription_suspended', message: SUSPENDED_RESIDENT_MESSAGE }
     }
 
     const { data: invoices } = await adminSupabase

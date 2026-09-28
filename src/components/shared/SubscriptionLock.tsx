@@ -4,13 +4,22 @@ import { motion } from 'framer-motion'
 import { Lock, CreditCard, Mail, ArrowRight, ShieldAlert, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { SUSPENDED_RESIDENT_MESSAGE } from '@/lib/subscription-access'
 
 interface SubscriptionLockProps {
     role: 'admin' | 'resident' | 'security' | 'staff' | string
+    // Días que faltan para la eliminación definitiva de la cuenta
+    daysUntilDeletion?: number | null
 }
 
-export function SubscriptionLock({ role }: SubscriptionLockProps) {
+export function SubscriptionLock({ role, daysUntilDeletion }: SubscriptionLockProps) {
     const isAdmin = ['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(role)
+    const isSecurity = role === 'security'
+    const deletionText = daysUntilDeletion == null
+        ? null
+        : daysUntilDeletion <= 0
+            ? 'hoy'
+            : `en ${daysUntilDeletion} ${daysUntilDeletion === 1 ? 'día' : 'días'}`
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
@@ -43,18 +52,27 @@ export function SubscriptionLock({ role }: SubscriptionLockProps) {
                     </motion.div>
 
                     <h2 className="mb-3 text-2xl sm:text-3xl font-black tracking-tight text-white">
-                        {isAdmin ? 'Suscripción Expirada' : 'Acceso Restringido'}
+                        {isAdmin ? 'Suscripción Vencida' : 'Servicio Suspendido'}
                     </h2>
                     
                     <p className="mb-8 text-zinc-400 text-sm sm:text-base leading-relaxed max-w-sm">
                         {isAdmin ? (
                             <>
-                                Su plan premium ha llegado a su fin. Para seguir operando InmobiGo y mantener el acceso de sus residentes, renueve su suscripción ahora.
+                                Tu suscripción no está pagada y <strong className="text-zinc-300">todo el sistema está bloqueado</strong> para
+                                ti, seguridad y tus residentes (incluidos sus pagos).
+                                {deletionText && (
+                                    <span className="block mt-3 text-rose-300 font-semibold">
+                                        Si no pagas, tu cuenta y los datos de todos tus residentes se eliminarán definitivamente {deletionText}.
+                                    </span>
+                                )}
+                            </>
+                        ) : isSecurity ? (
+                            <>
+                                El servicio de InmobiGo de este condominio está suspendido porque la administración no ha renovado su suscripción.
+                                Por ahora no es posible registrar accesos en el sistema. <strong className="text-zinc-300">Comunícate con la administración.</strong>
                             </>
                         ) : (
-                            <>
-                                El sistema ha sido bloqueado temporalmente debido al estado de la suscripción del condominio. <strong className="text-zinc-300">Por favor, comuníquese con la administración</strong> para restaurar el acceso.
-                            </>
+                            <>{SUSPENDED_RESIDENT_MESSAGE}</>
                         )}
                     </p>
 
@@ -76,7 +94,7 @@ export function SubscriptionLock({ role }: SubscriptionLockProps) {
                             
                             <p className="text-xs text-zinc-500 flex items-center justify-center gap-2">
                                 <AlertTriangle className="h-3.5 w-3.5" />
-                                <span>Al renovar, el acceso se restaurará instantáneamente para todos.</span>
+                                <span>Al pagar, el acceso se restaura al instante para todos, con todos tus datos.</span>
                             </p>
                         </div>
                     ) : (

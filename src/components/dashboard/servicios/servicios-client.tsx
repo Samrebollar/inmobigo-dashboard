@@ -156,6 +156,17 @@ export default function ServiciosClient({ resident }: { resident: any }) {
                 </div>
             </div>
 
+            {/* Aviso: vigencia de 24 horas */}
+            <div className="flex items-start gap-3 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 px-5 py-4">
+                <Clock className="h-5 w-5 text-indigo-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-zinc-300 leading-relaxed">
+                    <span className="font-bold text-white">Tus avisos se muestran aquí solo por 24 horas.</span>{' '}
+                    Visitas, paquetería, transporte, repartidores y proveedores desaparecen de tu panel un día después
+                    (o al terminar el día de la visita). No se pierden: quedan guardados en la bitácora de seguridad y de la
+                    administración como evidencia.
+                </p>
+            </div>
+
             {/* BENTO GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                 

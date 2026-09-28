@@ -38,7 +38,9 @@ const KIND_STYLE: Record<NoticeItem['kind'], { icon: typeof Package; box: string
 const fmt = (iso?: string | null, pattern = 'HH:mm') => (iso ? format(parseISO(iso), pattern, { locale: es }) : null)
 
 async function loadNotices(): Promise<NoticeItem[] | null> {
-    const result = await getMyServiceNoticesAction(30)
+    // El residente solo ve las últimas 24 horas; el historial completo queda
+    // en la Bitácora de seguridad y administración.
+    const result = await getMyServiceNoticesAction(1)
     if (result.success) {
         const packages: NoticeItem[] = result.packages.map((p: any) => ({
             id: p.id,
@@ -120,7 +122,7 @@ export function ServiceNoticesHistory({ refreshKey = 0 }: { refreshKey?: number 
                     </div>
                     <div>
                         <h3 className="text-lg font-black text-white tracking-tight">Mis avisos recientes</h3>
-                        <p className="text-xs text-zinc-500">Paquetería, transporte, repartidores y proveedores de los últimos 30 días</p>
+                        <p className="text-xs text-zinc-500">Paquetería, transporte, repartidores y proveedores de las últimas 24 horas</p>
                     </div>
                 </div>
                 <button

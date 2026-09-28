@@ -267,7 +267,12 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
     // Repartidores y proveedores no llevan QR: se avisan desde la tarjeta de
     // avisos y aparecen en "Mis avisos recientes".
     const SERVICE_TYPES = ['delivery', 'provider', 'repartidor', 'proveedor']
-    const qrPasses = passes.filter(p => !SERVICE_TYPES.includes(p.visitor_type))
+    // Los pases se ven en el panel del residente hasta el día de la visita o
+    // 24 horas después de creados; luego solo quedan en la Bitácora.
+    const todayMx = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date())
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000
+    const isVisible = (p: any) => (p.visit_date && p.visit_date >= todayMx) || new Date(p.created_at).getTime() >= dayAgo
+    const qrPasses = passes.filter(p => !SERVICE_TYPES.includes(p.visitor_type) && isVisible(p))
     const activePasses = qrPasses.filter(p => p.status === 'pending' || p.status === 'used')
     const historyPasses = qrPasses.filter(p => p.status !== 'pending' && p.status !== 'used')
 

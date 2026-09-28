@@ -66,6 +66,8 @@ interface AccessRow {
     checkOut?: string | null
     rejectionReason?: string | null
     state: AccessRowState
+    // Día del registro (YYYY-MM-DD, hora de México)
+    date: string
 }
 
 const ACCESS_STATE_BADGE: Record<AccessRowState, { label: string; className: string }> = {
@@ -87,6 +89,14 @@ const TAB_CONFIG: Record<SecurityTab, { label: string; icon: typeof UserPlus; ac
     repartidor: { label: 'Repartidor', icon: Bike, activeClasses: 'bg-fuchsia-500/15 text-fuchsia-400', avatarColor: 'text-fuchsia-400' },
     proveedor: { label: 'Proveedor', icon: Wrench, activeClasses: 'bg-violet-500/15 text-violet-400', avatarColor: 'text-violet-400' },
 }
+
+// La tabla solo muestra el día de hoy (hora de México); lo anterior queda en
+// la Bitácora como evidencia.
+const mxDay = (value?: string | Date | null) =>
+    value ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date(value)) : ''
+
+const formatDay = (day: string) =>
+    day ? new Date(`${day}T12:00:00`).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '--'
 
 const formatTime = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
@@ -361,6 +371,7 @@ export default function SecurityDashboardAdminClient({
 
     // Filas normalizadas de la tabla (visitas / paquetería / transporte) para
     // que las tres pestañas compartan el flujo Acceso → Salida → Rechazo.
+    const todayMx = mxDay(new Date())
     const tableRows: AccessRow[] = (
         (activeTab === 'visitas' || activeTab === 'repartidor' || activeTab === 'proveedor')
             ? filteredPasses.filter(pass => passTab(pass) === activeTab).map((pass): AccessRow => {
@@ -377,6 +388,7 @@ export default function SecurityDashboardAdminClient({
                 checkIn,
                 checkOut: pass.checked_out_at,
                 rejectionReason: pass.rejection_reason,
+                date: pass.visit_date || mxDay(pass.created_at),
                 state: pass.status === 'rejected' ? 'rejected'
                     : pass.checked_out_at ? 'exited'
                     : (pass.status === 'used' || pass.status === 'registrado' || checkIn) ? 'inside'
@@ -397,6 +409,7 @@ export default function SecurityDashboardAdminClient({
             checkIn: pkg.checked_in_at || pkg.received_at || null,
             checkOut: pkg.checked_out_at,
             rejectionReason: pkg.rejection_reason,
+            date: mxDay(pkg.created_at),
             state: pkg.status === 'rejected' ? 'rejected'
                 : pkg.checked_out_at ? 'exited'
                 : pkg.status === 'delivered' ? 'delivered'
@@ -415,12 +428,15 @@ export default function SecurityDashboardAdminClient({
             checkIn: notice.checked_in_at || ((notice.status === 'received' || notice.status === 'closed') ? notice.handled_at : null),
             checkOut: notice.checked_out_at || (notice.status === 'closed' && !notice.checked_in_at ? notice.handled_at : null),
             rejectionReason: notice.rejection_reason,
+            date: mxDay(notice.created_at),
             state: notice.status === 'rejected' ? 'rejected'
                 : (notice.checked_out_at || notice.status === 'closed') ? 'exited'
                 : notice.status === 'received' ? 'inside'
                 : 'pending',
         }))
     ).filter(row => {
+        // Solo lo de hoy, más quien siga dentro desde antes (para registrar su salida)
+        if (row.date !== todayMx && row.state !== 'inside') return false
         const q = tableSearch.trim().toLowerCase()
         if (!q) return true
         return [row.unit, row.title, row.subtitle, row.vehicle].some(v => v?.toLowerCase().includes(q))
@@ -560,7 +576,7 @@ export default function SecurityDashboardAdminClient({
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b border-zinc-900 bg-zinc-900/20">
-                                                {['Nombre', 'Casa', 'Color / Placas', 'Estado', 'Hora de Acceso', 'Hora de Salida', 'Acción'].map(h => (
+                                                {['Fecha', 'Nombre', 'Casa', 'Color / Placas', 'Estado', 'Hora de Acceso', 'Hora de Salida', 'Acción'].map(h => (
                                                     <th key={h} className="px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center whitespace-nowrap">{h}</th>
                                                 ))}
                                             </tr>
@@ -571,6 +587,12 @@ export default function SecurityDashboardAdminClient({
                                                 const isProcessing = processingRowId === row.id
                                                 return (
                                                     <tr key={row.id} className="hover:bg-zinc-900/30 transition-colors group">
+                                                        <td className="px-4 py-4 text-xs font-bold text-zinc-400 text-center whitespace-nowrap">
+                                                            {formatDay(row.date)}
+                                                            {row.date !== todayMx && (
+                                                                <p className="text-[9px] font-medium text-amber-500/80 mt-0.5">Sigue dentro</p>
+                                                            )}
+                                                        </td>
                                                         <td className="px-4 py-4">
                                                             <div className="flex flex-col items-center justify-center text-center">
                                                                 <div className="flex items-center gap-3 mb-1">
@@ -673,15 +695,18 @@ export default function SecurityDashboardAdminClient({
 
                                             {tableRows.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500 font-medium">
-                                                        No hay registros para mostrar en esta propiedad.
+                                                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500 font-medium">
+                                                        No hay registros de hoy. Consulta días anteriores en la Bitácora.
                                                     </td>
                                                 </tr>
                                             )}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="border-t border-zinc-900 p-3">
+                                <div className="border-t border-zinc-900 p-3 space-y-1">
+                                    <p className="text-center text-[11px] text-zinc-600">
+                                        Se muestran solo los registros de hoy. Los días anteriores quedan guardados en la Bitácora.
+                                    </p>
                                     <Button
                                         variant="ghost"
                                         onClick={() => router.push('/seguridad/bitacora')}

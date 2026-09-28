@@ -171,6 +171,20 @@ export async function createTransportNoticeAction(data: any) {
     }
 }
 
+const TRANSPORT_DECISION_WEBHOOK_URL = 'https://n8n.inmobigo.mx/webhook/transporte-decision'
+
+async function notifyTransportDecision(noticeId: string) {
+    try {
+        await fetch(TRANSPORT_DECISION_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notice_id: noticeId }),
+        })
+    } catch (err) {
+        console.error('[notifyTransportDecision] Error notificando decision de transporte:', err)
+    }
+}
+
 /**
  * Actualiza el estado de un aviso de transporte (Bypass RLS)
  */
@@ -207,6 +221,10 @@ export async function updateTransportNoticeStatusAction(params: {
         revalidatePath('/dashboard/servicios')
         revalidatePath('/dashboard/seguridad-operativa')
         revalidatePath('/seguridad')
+
+        if (status === 'received' || status === 'rejected') {
+            await notifyTransportDecision(id)
+        }
 
         return { success: true }
     } catch (error: any) {

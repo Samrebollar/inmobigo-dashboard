@@ -3,16 +3,17 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSecurityInitialDataAction } from '@/app/actions/service-actions'
+import { getSecurityInitialDataAction, updateTransportNoticeStatusAction } from '@/app/actions/service-actions'
+import { getPendingTransportNoticesServer } from '@/app/actions/security-ops-actions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { 
-    Users, 
-    Activity, 
-    Wrench, 
-    AlertTriangle, 
-    QrCode, 
-    Package, 
-    UserPlus, 
+import {
+    Users,
+    Activity,
+    Wrench,
+    AlertTriangle,
+    QrCode,
+    Package,
+    UserPlus,
     ChevronRight,
     Search,
     Filter,
@@ -24,12 +25,16 @@ import {
     Phone,
     User,
     Clock,
-    XCircle
+    XCircle,
+    Car,
+    LogIn,
+    LogOut
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
+import { toast } from 'sonner'
 import { DashboardHeader } from '@/components/seguridad/DashboardHeader'
 import { QRScannerModal } from '@/components/seguridad/modals/qr-scanner-modal'
 import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-modal'
@@ -48,6 +53,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 )
 
 interface SecurityDashboardClientProps {
+    userId?: string
     userEmail?: string
     userName?: string
     stats?: {
@@ -64,9 +70,10 @@ interface SecurityDashboardClientProps {
 }
 
 
-export default function SecurityDashboardAdminClient({ 
-    userEmail, 
-    userName, 
+export default function SecurityDashboardAdminClient({
+    userId,
+    userEmail,
+    userName,
     stats = { incidenciasPendientes: 0, anuncios: 0 }, 
     recentActivity = [],
     condoName,
@@ -80,13 +87,15 @@ export default function SecurityDashboardAdminClient({
     const supabase = createClient()
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
     const [selectedCondoName, setSelectedCondoName] = useState<string>('')
-    const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria'>('visitas')
+    const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria' | 'transporte'>('visitas')
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false)
     const [isManualVisitOpen, setIsManualVisitOpen] = useState(false)
-    
+
     // Estados de datos reales
     const [visitorPasses, setVisitorPasses] = useState<any[]>([])
     const [packageAlerts, setPackageAlerts] = useState<any[]>([])
+    const [transportNotices, setTransportNotices] = useState<any[]>([])
+    const [processingTransportId, setProcessingTransportId] = useState<string | null>(null)
     const [securityIncidents, setSecurityIncidents] = useState<any[]>(initialIncidents)
     const [unitToCondoMap, setUnitToCondoMap] = useState<Record<string, string>>({}) // Map unit_id -> condominium_id
     const [loading, setLoading] = useState(true)
@@ -126,7 +135,7 @@ export default function SecurityDashboardAdminClient({
                         ...p,
                         condominium_id: p.condominium_id || unitMap[p.unit_id]
                     }))
-                    
+
                     const enrichedPackages = (packages || []).map((pkg: any) => ({
                         ...pkg,
                         condominium_id: pkg.condominium_id || unitMap[pkg.unit_id]
@@ -135,6 +144,11 @@ export default function SecurityDashboardAdminClient({
                     setVisitorPasses(enrichedPasses)
                     setPackageAlerts(enrichedPackages)
                     setSecurityIncidents(incidents || [])
+                }
+
+                const transportResult = await getPendingTransportNoticesServer(organizationId)
+                if (transportResult.success) {
+                    setTransportNotices(transportResult.notices || [])
                 }
             } catch (error) {
                 console.error('Error fetching security dashboard data:', error)
@@ -191,6 +205,28 @@ export default function SecurityDashboardAdminClient({
             )
             .on(
                 'postgres_changes',
+                { event: '*', schema: 'public', table: 'transport_notices', filter: `organization_id=eq.${organizationId}` },
+                (payload) => {
+                    const enriched = payload.new ? {
+                        ...payload.new as any,
+                        condominium_id: (payload.new as any).condominium_id || unitToCondoMap[(payload.new as any).unit_id]
+                    } : null
+
+                    if (payload.eventType === 'INSERT' && enriched) {
+                        setTransportNotices(prev => [enriched, ...prev])
+                    } else if (payload.eventType === 'UPDATE' && enriched) {
+                        if (enriched.status === 'closed' || enriched.status === 'rejected') {
+                            setTransportNotices(prev => prev.filter(n => n.id !== enriched.id))
+                        } else {
+                            setTransportNotices(prev => prev.map(n => n.id === enriched.id ? enriched : n))
+                        }
+                    } else if (payload.eventType === 'DELETE') {
+                        setTransportNotices(prev => prev.filter(n => n.id !== (payload.old as any).id))
+                    }
+                }
+            )
+            .on(
+                'postgres_changes',
                 { event: '*', schema: 'public', table: 'tickets', filter: `organization_id=eq.${organizationId}` },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
@@ -236,7 +272,31 @@ export default function SecurityDashboardAdminClient({
         return i.condominium_id === selectedCondoId
     })
 
-    
+    const filteredTransportNotices = transportNotices.filter(n => {
+        if (!selectedCondoId) return true
+        return n.condominium_id === selectedCondoId
+    })
+
+    const handleTransportAction = async (id: string, status: 'received' | 'closed' | 'rejected') => {
+        setProcessingTransportId(id)
+        try {
+            const result = await updateTransportNoticeStatusAction({ id, status, handledBy: userId })
+            if (!result.success) throw new Error(result.error)
+
+            if (status === 'closed' || status === 'rejected') {
+                setTransportNotices(prev => prev.filter(n => n.id !== id))
+            } else {
+                setTransportNotices(prev => prev.map(n => n.id === id ? { ...n, status } : n))
+            }
+            toast.success(status === 'received' ? 'Aviso autorizado' : status === 'rejected' ? 'Aviso rechazado' : 'Aviso completado')
+        } catch {
+            toast.error('No se pudo actualizar el aviso.')
+        } finally {
+            setProcessingTransportId(null)
+        }
+    }
+
+
     // Mocks para KPIs operativos en tiempo real
     // KPIs operativos calculados en tiempo real
     const operationalStats = [
@@ -248,6 +308,7 @@ export default function SecurityDashboardAdminClient({
         { label: 'Visitas Activas', value: filteredPasses.filter(p => p.status === 'pendiente' || p.status === 'pending').length.toString().padStart(2, '0'), icon: UserPlus, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'hover:border-indigo-500/50' },
         { label: 'Paquetes Pendientes', value: filteredPackages.filter(p => p.status === 'pending' || p.status === 'delivered_pending').length.toString().padStart(2, '0'), icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'hover:border-amber-500/50' },
         { label: 'Incidencias', value: filteredIncidents.filter(i => i.status !== 'closed' && i.status !== 'resolved').length.toString().padStart(2, '0'), icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'hover:border-rose-500/50' },
+        { label: 'Transporte', value: filteredTransportNotices.filter(n => n.status === 'pending').length.toString().padStart(2, '0'), icon: Car, color: 'text-sky-500', bg: 'bg-sky-500/10', border: 'hover:border-sky-500/50' },
     ]
 
     // Feed de Actividad dinámico basado en datos reales
@@ -281,6 +342,16 @@ export default function SecurityDashboardAdminClient({
             time: inc.created_at ? new Date(inc.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
             status: inc.priority === 'urgent' ? 'alert' : 'pending',
             created_at: inc.created_at
+        })),
+        ...filteredTransportNotices.slice(0, 2).map(notice => ({
+            id: notice.id,
+            type: 'transport',
+            title: notice.direction === 'pickup' ? 'Recogida de Transporte' : 'Llegada de Transporte',
+            house: notice.unit_name || 'S/N',
+            details: `${notice.platform} - ${notice.resident_name}`,
+            time: notice.created_at ? new Date(notice.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
+            status: notice.status === 'received' ? 'success' : 'pending',
+            created_at: notice.created_at
         }))
     ].sort((a, b) => {
         const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
@@ -328,7 +399,7 @@ export default function SecurityDashboardAdminClient({
                 className="space-y-10"
             >
                 {/* 1. KPIs Operativos */}
-                <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-6 grid-cols-2 lg:grid-cols-5">
                     {operationalStats.map((stat, idx) => (
                         <motion.div key={idx} variants={item} whileHover={{ y: -5 }}>
                             <Card className={cn("bg-zinc-950 border-zinc-900 transition-all duration-300 h-40 flex flex-col justify-between overflow-hidden", stat.border)}>
@@ -384,6 +455,7 @@ export default function SecurityDashboardAdminClient({
                                             {event.type === 'package' && <Package className="h-5 w-5" />}
                                             {event.type === 'access' && <XCircle className="h-5 w-5" />}
                                             {event.type === 'incident' && <AlertTriangle className="h-5 w-5" />}
+                                            {event.type === 'transport' && <Car className="h-5 w-5" />}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between mb-1">
@@ -406,11 +478,12 @@ export default function SecurityDashboardAdminClient({
                     <div className="lg:col-span-8 space-y-8">
 
                         {/* Acciones Rápidas */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                             {[
                                 { label: 'Escanear QR', icon: QrCode, color: 'bg-indigo-600 hover:bg-indigo-500', desc: 'Acceso rápido', onClick: () => setIsQRScannerOpen(true) },
                                 { label: 'Visita', icon: UserPlus, color: 'bg-emerald-600 hover:bg-emerald-500', desc: 'Registro manual', onClick: () => setIsManualVisitOpen(true) },
                                 { label: 'Paquete', icon: Package, color: 'bg-amber-600 hover:bg-amber-500', desc: 'Recepción', onClick: () => router.push('/seguridad/avisos') },
+                                { label: 'Transporte', icon: Car, color: 'bg-sky-600 hover:bg-sky-500', desc: 'Uber / DiDi', onClick: () => setActiveTab('transporte') },
                                 { label: 'Incidente', icon: AlertTriangle, color: 'bg-rose-600 hover:bg-rose-500', desc: 'Reportar falla', onClick: () => router.push('/seguridad/incidencias') },
                             ].map((action, i) => (
                                 <motion.button
@@ -437,7 +510,7 @@ export default function SecurityDashboardAdminClient({
                             <CardHeader className="border-b border-zinc-900 pb-0">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex gap-1 bg-zinc-900 p-1 rounded-xl">
-                                        {(['visitas', 'paqueteria'] as const).map((tab) => (
+                                        {(['visitas', 'paqueteria', 'transporte'] as const).map((tab) => (
                                             <button
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
@@ -574,7 +647,77 @@ export default function SecurityDashboardAdminClient({
                                                 </tr>
                                             ))}
 
-                                            {(activeTab === 'visitas' ? filteredPasses : filteredPackages).length === 0 && (
+                                            {activeTab === 'transporte' && filteredTransportNotices.map((notice) => (
+                                                <tr key={notice.id} className="hover:bg-zinc-900/30 transition-colors group">
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-col items-center justify-center text-center">
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-sky-400 font-bold text-xs">
+                                                                    {notice.direction === 'pickup' ? <LogOut size={14} /> : <LogIn size={14} />}
+                                                                </div>
+                                                                <p className="text-sm font-bold text-zinc-200">
+                                                                    {notice.platform} — {notice.direction === 'pickup' ? 'Recogida' : 'Llegada'}
+                                                                </p>
+                                                            </div>
+                                                            <p className="text-[10px] text-zinc-600">Residente: {notice.resident_name}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400 text-center">
+                                                        {notice.unit_name || 'S/N'}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className={cn(
+                                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
+                                                            notice.status === 'received' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                                                        )}>
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                                            {notice.status === 'received' ? 'Autorizado' : 'Esperando'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
+                                                        {notice.created_at ? new Date(notice.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            {notice.status === 'pending' ? (
+                                                                <motion.button
+                                                                    whileHover={{ scale: 1.1 }}
+                                                                    whileTap={{ scale: 0.9 }}
+                                                                    disabled={processingTransportId === notice.id}
+                                                                    onClick={() => handleTransportAction(notice.id, 'received')}
+                                                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 transition-colors disabled:opacity-50"
+                                                                    title="Autorizar"
+                                                                >
+                                                                    <CheckCircle2 className="h-4 w-4" />
+                                                                </motion.button>
+                                                            ) : (
+                                                                <motion.button
+                                                                    whileHover={{ scale: 1.1 }}
+                                                                    whileTap={{ scale: 0.9 }}
+                                                                    disabled={processingTransportId === notice.id}
+                                                                    onClick={() => handleTransportAction(notice.id, 'closed')}
+                                                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-sky-500/10 text-sky-500 transition-colors disabled:opacity-50"
+                                                                    title="Completado"
+                                                                >
+                                                                    <CheckCircle2 className="h-4 w-4" />
+                                                                </motion.button>
+                                                            )}
+                                                            <motion.button
+                                                                whileHover={{ scale: 1.1 }}
+                                                                whileTap={{ scale: 0.9 }}
+                                                                disabled={processingTransportId === notice.id}
+                                                                onClick={() => handleTransportAction(notice.id, 'rejected')}
+                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 transition-colors disabled:opacity-50"
+                                                                title="Rechazar"
+                                                            >
+                                                                <XCircle className="h-4 w-4" />
+                                                            </motion.button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+
+                                            {((activeTab === 'visitas' ? filteredPasses : activeTab === 'paqueteria' ? filteredPackages : filteredTransportNotices).length === 0) && (
                                                 <tr>
                                                     <td colSpan={5} className="px-6 py-12 text-center text-zinc-500 font-medium">
                                                         No hay registros para mostrar en esta propiedad.

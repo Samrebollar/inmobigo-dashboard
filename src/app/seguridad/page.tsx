@@ -139,6 +139,7 @@ export default async function SecurityDashboardPage() {
 
     return (
       <SecurityDashboardAdminClient
+        userId={user.id}
         userEmail={user.email}
         userName={firstName}
         condoName={condoName || 'InmobiGo Control'}

@@ -10,7 +10,10 @@ import { cronService } from '@/services/cron-service'
 // arreglos vacíos, es decir el admin apagó todo a propósito) respeta exactamente
 // lo que guardó, sin caer a este default.
 const DEFAULT_RECORDATORIOS_DIAS_ANTES = [3]
-const DEFAULT_MOROSIDAD_DIAS_DESPUES = [1, 3, 7]
+// La cobranza después del vencimiento ya NO sale de aquí: la manda el flujo
+// n8n "05 - Monitor de Morosidad" una sola vez por residente (con el saldo
+// total) en los días clave 7, 15, 30, 45, 60 y 90 de atraso. Mandarla por
+// factura duplicaba mensajes cuando un residente debe varios meses.
 
 /**
  * GET /api/cron/process-notifications
@@ -65,7 +68,9 @@ export async function GET(request: Request) {
                     last_name,
                     phone,
                     email,
-                    unit_number
+                    units (
+                        unit_number
+                    )
                 ),
                 condominiums (
                     name
@@ -149,41 +154,23 @@ export async function GET(request: Request) {
                     results.recargos_applied++
                 }
 
-                // 2c. Disparar webhook a n8n SOLO en los días que el admin configuró
-                // (settings_condominio.recordatorios_dias_antes / morosidad_dias_despues).
-                // Sin fila de configuración (propiedad nunca la ha guardado) se usa una
-                // cadencia por defecto razonable en vez de quedarse en silencio total;
-                // con fila (aunque los arreglos vengan vacíos, es decir el admin apagó
-                // todo a propósito) se respeta exactamente lo guardado.
+                // 2c. Recordatorio ANTES del vencimiento, solo en los días que el admin
+                // configuró (settings_condominio.recordatorios_dias_antes). Sin fila
+                // de configuración se usa la cadencia por defecto; con fila (aunque
+                // venga vacía, el admin lo apagó a propósito) se respeta lo guardado.
                 const recordatoriosDiasAntes = config
                     ? (config.recordatorios_dias_antes || [])
                     : DEFAULT_RECORDATORIOS_DIAS_ANTES
-                const morosidadDiasDespues = config
-                    ? (config.morosidad_dias_despues || [])
-                    : DEFAULT_MOROSIDAD_DIAS_DESPUES
 
-                let shouldNotify = false
-                let tipoNotif: 'recordatorio' | 'morosidad' = 'recordatorio'
-
-                if (diasAtraso < 0) {
-                    // Antes del vencimiento
-                    if (recordatoriosDiasAntes.includes(Math.abs(diasAtraso))) {
-                        shouldNotify = true
-                        tipoNotif = 'recordatorio'
-                    }
-                } else if (diasAtraso > 0) {
-                    // Después del vencimiento
-                    if (morosidadDiasDespues.includes(diasAtraso)) {
-                        shouldNotify = true
-                        tipoNotif = 'morosidad'
-                    }
-                }
-                // diasAtraso === 0 (vence hoy): no hay toggle de "el mismo día", no se notifica.
+                const shouldNotify = diasAtraso < 0 && recordatoriosDiasAntes.includes(Math.abs(diasAtraso))
+                const tipoNotif = 'recordatorio' as const
 
                 if (shouldNotify && resident?.phone) {
                     await cronService.dispararWebhookN8N(
                         {
                             id: factura.id,
+                            resident_id: factura.resident_id,
+                            organization_id: factura.organization_id,
                             amount: Number(factura.amount),
                             balance_due: Number(factura.balance_due),
                             due_date: factura.due_date,
@@ -193,7 +180,7 @@ export async function GET(request: Request) {
                                 phone: resident?.phone,
                             },
                             condominiums: { name: condo?.name },
-                            unit_number: resident?.unit_number,
+                            unit_number: resident?.units?.unit_number,
                         },
                         tipoNotif,
                         diasAtraso

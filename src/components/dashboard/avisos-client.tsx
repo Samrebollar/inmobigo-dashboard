@@ -33,7 +33,10 @@ import {
     Waves,
     Check,
     AlertCircle,
-    Flame
+    Flame,
+    Car,
+    Bike,
+    Wrench
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -50,8 +53,15 @@ import { ContractsAdmin } from './servicios/contracts-admin'
 import { InventoryAdmin } from './servicios/inventory-admin'
 import { ClipboardList, Handshake } from 'lucide-react'
 import { PaymentAgreementsAdmin } from './servicios/payment-agreements-admin'
+import { ServiceAccessAdmin } from './servicios/service-access-admin'
+import { getPendingTransportNoticesServer } from '@/app/actions/security-ops-actions'
 
-type TabType = 'announcements' | 'packages' | 'access' | 'amenities' | 'contracts' | 'inventory' | 'agreements'
+type TabType = 'announcements' | 'packages' | 'transport' | 'delivery' | 'provider' | 'access' | 'amenities' | 'contracts' | 'inventory' | 'agreements'
+
+// Pases que no son visitas personales: van en sus propias pestañas.
+// El panel web guarda 'delivery'/'provider' y el bot de WhatsApp 'repartidor'/'proveedor'.
+const isDeliveryPass = (p: any) => p.visitor_type === 'delivery' || p.visitor_type === 'repartidor'
+const isProviderPass = (p: any) => p.visitor_type === 'provider' || p.visitor_type === 'proveedor' || (p.access_type === 'service' && !isDeliveryPass(p))
 
 interface Announcement {
     id: string
@@ -174,6 +184,31 @@ export function AvisosClient({
         condominium_id: p.units?.condominium_id
     })))
     const [loadingAmenities, setLoadingAmenities] = useState(false)
+    const [transportNotices, setTransportNotices] = useState<any[]>([])
+
+    // Avisos de transporte: pendientes/autorizados + cerrados o rechazados de
+    // la última semana, con actualización en tiempo real.
+    useEffect(() => {
+        if (!admin?.organization_id) return
+        const orgId = admin.organization_id
+        const loadTransport = () => {
+            getPendingTransportNoticesServer(orgId, { includeResolvedHours: 168 }).then(result => {
+                if (result.success) setTransportNotices(result.notices || [])
+            })
+        }
+        loadTransport()
+        const transportChannel = supabase
+            .channel(`admin-transport-notices-${orgId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'transport_notices', filter: `organization_id=eq.${orgId}` },
+                () => loadTransport()
+            )
+            .subscribe()
+        return () => {
+            supabase.removeChannel(transportChannel)
+        }
+    }, [admin?.organization_id])
 
     useEffect(() => {
         if (!admin?.organization_id) return
@@ -287,7 +322,7 @@ export function AvisosClient({
                                 })
                         }
                     } else if (payload.eventType === 'UPDATE') {
-                        setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+                        setVisitorPasses(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p))
                     } else if (payload.eventType === 'DELETE') {
                         setVisitorPasses(prev => prev.filter(p => p.id !== payload.old.id))
                     }
@@ -706,6 +741,9 @@ export function AvisosClient({
     const condoTabs = [
         { id: 'announcements', label: 'Anuncios', icon: Bell, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
         { id: 'packages', label: 'Paquetería', icon: Package, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+        { id: 'transport', label: 'Transporte', icon: Car, color: 'text-sky-400', bg: 'bg-sky-500/10' },
+        { id: 'delivery', label: 'Repartidor', icon: Bike, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10' },
+        { id: 'provider', label: 'Proveedor', icon: Wrench, color: 'text-violet-400', bg: 'bg-violet-500/10' },
         { id: 'access', label: 'Accesos', icon: QrCode, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         { id: 'amenities', label: 'Amenidades', icon: PartyPopper, color: 'text-rose-400', bg: 'bg-rose-500/10' },
         { id: 'agreements', label: 'Convenios', icon: Handshake, color: 'text-violet-400', bg: 'bg-violet-500/10' }
@@ -745,6 +783,20 @@ export function AvisosClient({
         
         return matchesId || matchesName
     })
+
+    const accessPassesList = filteredPassesList.filter(p => !isDeliveryPass(p) && !isProviderPass(p))
+    const deliveryPassesList = filteredPassesList.filter(isDeliveryPass)
+    const providerPassesList = filteredPassesList.filter(isProviderPass)
+
+    const condoNameById = new Map(availableCondos.map((c: any) => [c.id, c.name]))
+    const filteredTransportList = transportNotices
+        .filter(n => !selectedCondoId || n.condominium_id === selectedCondoId)
+        .map(n => ({ ...n, condominium_name: condoNameById.get(n.condominium_id) }))
+
+    const handleServiceRecordUpdated = (record: any) => {
+        setVisitorPasses(prev => prev.map(p => p.id === record.id ? { ...p, ...record } : p))
+        setTransportNotices(prev => prev.map(n => n.id === record.id ? { ...n, ...record } : n))
+    }
 
     const filteredReservationsList = amenityReservations.filter(res => {
         if (!selectedCondoId) return true
@@ -857,12 +909,12 @@ export function AvisosClient({
 
             {/* Premium Tab Navigation */}
             <div className="flex justify-center">
-                <div className="flex p-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl w-fit backdrop-blur-xl">
+                <div className="flex flex-wrap justify-center p-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl w-fit max-w-full backdrop-blur-xl">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as TabType)}
-                        className={`relative flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-bold transition-all ${
+                        className={`relative flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-bold transition-all ${
                             activeTab === tab.id ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                         }`}
                     >
@@ -1203,10 +1255,22 @@ export function AvisosClient({
                         />
                     )}
 
+                    {activeTab === 'transport' && !isPropiedades && (
+                        <ServiceAccessAdmin type="transport" items={filteredTransportList} onUpdated={handleServiceRecordUpdated} />
+                    )}
+
+                    {activeTab === 'delivery' && !isPropiedades && (
+                        <ServiceAccessAdmin type="delivery" items={deliveryPassesList} onUpdated={handleServiceRecordUpdated} />
+                    )}
+
+                    {activeTab === 'provider' && !isPropiedades && (
+                        <ServiceAccessAdmin type="provider" items={providerPassesList} onUpdated={handleServiceRecordUpdated} />
+                    )}
+
                     {activeTab === 'access' && !isPropiedades && (
                         <VisitorPassesAdmin
                             admin={admin}
-                            initialPasses={filteredPassesList}
+                            initialPasses={accessPassesList}
                             onDeleted={(id) => setVisitorPasses(prev => prev.filter(p => p.id !== id))}
                         />
                     )}

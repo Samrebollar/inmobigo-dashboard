@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { VisitorPassesModule } from './visitor-passes-module'
+import { ServiceNoticesHistory } from './service-notices-history'
 import QRCode from 'react-qr-code'
 import { 
     QrCode, 
@@ -63,7 +64,9 @@ export default function ServiciosClient({ resident }: { resident: any }) {
                             });
                         } else if (newRow.status === 'rejected' && (!oldRow || oldRow.status !== 'rejected')) {
                             toast.error(`📦 Tu aviso de ${carrier} fue rechazado`, {
-                                description: `La administración de ${orgName} no autorizó el acceso.`,
+                                description: newRow.rejection_reason
+                                    ? `Motivo: ${newRow.rejection_reason}`
+                                    : `La administración de ${orgName} no autorizó el acceso.`,
                                 duration: 20000,
                                 position: 'top-center'
                             });
@@ -403,6 +406,9 @@ export default function ServiciosClient({ resident }: { resident: any }) {
                 </motion.div>
 
             </div>
+
+            {/* Historial de avisos con hora de acceso/salida y motivo de rechazo */}
+            <ServiceNoticesHistory />
         </div>
     )
 }

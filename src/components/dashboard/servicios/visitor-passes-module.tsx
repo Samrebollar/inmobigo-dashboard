@@ -16,7 +16,7 @@ import { es } from 'date-fns/locale'
 import {
     QrCode, UserPlus, Clock, X, CheckCircle2, History,
     ShieldAlert, Calendar, FileText, ChevronRight, Share2, 
-    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift, Trash2
+    Download, AlertTriangle, ShieldCheck, ChevronLeft, Gift, Trash2, Car
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDeleteModal } from './confirm-delete-modal'
@@ -53,6 +53,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
         serviceType: '', // New
         eventName: '', // New
         guestCount: '', // New
+        vehicleInfo: '',
         notes: ''
     })
 
@@ -91,6 +92,13 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                         })
                     }
                     
+                    if (eventType === 'UPDATE' && newData.status === 'rejected' && oldData.status !== 'rejected') {
+                        toast.error(`Seguridad rechazó el acceso de ${newData.visitor_name}`, {
+                            description: newData.rejection_reason ? `Motivo: ${newData.rejection_reason}` : undefined,
+                            duration: 15000,
+                        })
+                    }
+
                     // Refrescar lista en cualquier cambio
                     fetchPasses()
                 }
@@ -174,6 +182,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                 start_time: formData.startTime,
                 end_time: endTime,
                 notes: formData.notes,
+                vehicle_info: formData.vehicleInfo.trim() || null,
                 qr_token: token,
                 status: 'pending',
                 organization_id: orgId,
@@ -204,7 +213,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                 company: '',
                 serviceType: '',
                 eventName: '',
-                guestCount: ''
+                guestCount: '',
+                vehicleInfo: ''
             })
             fetchPasses()
             setSelectedPass(data)
@@ -263,6 +273,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             case 'used': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
             case 'expired': return 'bg-red-500/10 text-red-500 border-red-500/20'
             case 'cancelled': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+            case 'rejected': return 'bg-rose-500/10 text-rose-400 border-rose-500/20'
             default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
         }
     }
@@ -272,6 +283,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
             case 'used': return 'REGISTRADO'
             case 'expired': return 'EXPIRADO'
             case 'cancelled': return 'CANCELADO'
+            case 'rejected': return 'RECHAZADO'
             default: return status.toUpperCase()
         }
     }
@@ -560,6 +572,11 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                 <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
                                                     <Calendar className="w-3 h-3" /> {format(parseISO(pass.visit_date), 'd MMM yyyy', {locale:es})}
                                                 </p>
+                                                {pass.status === 'rejected' && pass.rejection_reason && (
+                                                    <p className="text-[11px] text-rose-400/90 mt-1 max-w-[220px] line-clamp-2" title={pass.rejection_reason}>
+                                                        Motivo: {pass.rejection_reason}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
@@ -567,8 +584,8 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                 {getStatusText(pass.status)}
                                             </span>
 
-                                            {/* Delete Button Profesional en Historial */}
-                                            <button 
+                                            {/* Delete Button Profesional en Historial (los rechazos se conservan como evidencia) */}
+                                            {pass.status !== 'rejected' && <button 
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     setPassToDelete(pass)
@@ -577,7 +594,7 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                 title="Eliminar del historial"
                                             >
                                                 <Trash2 size={12} />
-                                            </button>
+                                            </button>}
                                         </div>
                                     </div>
                                 ))
@@ -728,6 +745,18 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                             </div>
                                         </div>
                                     </div>
+
+                                    {selectedPass.status === 'rejected' && (
+                                        <div className="mx-6 mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-rose-400 mb-1">Motivo del rechazo</p>
+                                            <p className="text-sm text-rose-100">{selectedPass.rejection_reason || 'Seguridad no registró un motivo.'}</p>
+                                            {selectedPass.rejected_at && (
+                                                <p className="text-[11px] text-rose-300/70 mt-2">
+                                                    {format(parseISO(selectedPass.rejected_at), "d MMM yyyy '·' HH:mm", {locale:es})}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {selectedPass.status === 'pending' && (
                                         <div className="p-6 pt-0 flex gap-3 pb-10">
@@ -1055,6 +1084,21 @@ export function VisitorPassesModule({ resident }: { resident: any }) {
                                                     )}
                                                 </AnimatePresence>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Color / Placas del auto (Opcional)</label>
+                                        <div className="relative group">
+                                            <div className="absolute top-1/2 -translate-y-1/2 left-4"><Car className="h-5 w-5 text-zinc-600 group-focus-within:text-indigo-400 transition-colors" /></div>
+                                            <input
+                                                type="text"
+                                                value={formData.vehicleInfo}
+                                                onChange={e => setFormData({...formData, vehicleInfo: e.target.value})}
+                                                maxLength={80}
+                                                className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl py-4 pl-12 pr-4 text-white text-sm outline-none transition-all placeholder:text-zinc-700"
+                                                placeholder="Ej. Versa gris · ABC-123-D"
+                                            />
                                         </div>
                                     </div>
 

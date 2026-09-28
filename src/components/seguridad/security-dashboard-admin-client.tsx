@@ -9,7 +9,6 @@ import type { SecurityAccessKind, SecurityAccessEvent } from '@/app/actions/secu
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
     Users,
-    Activity,
     Wrench,
     AlertTriangle,
     QrCode,
@@ -29,9 +28,9 @@ import {
     XCircle,
     Car,
     LogIn,
-    LogOut
+    LogOut,
+    Bike
 } from 'lucide-react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/utils/supabase/client'
@@ -42,16 +41,13 @@ import { ManualVisitModal } from '@/components/seguridad/modals/manual-visit-mod
 import { PlanExpirationBanner } from '@/components/seguridad/PlanExpirationBanner'
 import { useUserRole } from '@/hooks/use-user-role'
 
-const WhatsAppIcon = ({ className }: { className?: string }) => (
-    <svg 
-        viewBox="0 0 24 24" 
-        fill="currentColor" 
-        className={className}
-        xmlns="http://www.w3.org/2000/svg"
-    >
-        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 .018 5.396.015 12.03c0 2.12.54 4.19 1.563 6.04L0 24l6.15-1.612a11.77 11.77 0 005.9 1.532h.005c6.634 0 12.032-5.396 12.035-12.03a11.85 11.85 0 00-3.527-8.508z"/>
-    </svg>
-)
+type SecurityTab = 'visitas' | 'paqueteria' | 'transporte' | 'repartidor' | 'proveedor'
+
+// Los pases de visita se reparten en pestañas según lo que pidió el residente.
+const passTab = (pass: any): 'visitas' | 'repartidor' | 'proveedor' =>
+    pass.visitor_type === 'delivery' ? 'repartidor'
+        : (pass.visitor_type === 'provider' || pass.access_type === 'service') ? 'proveedor'
+        : 'visitas'
 
 type AccessRowState = 'pending' | 'inside' | 'exited' | 'rejected' | 'expired' | 'cancelled' | 'delivered'
 
@@ -78,6 +74,16 @@ const ACCESS_STATE_BADGE: Record<AccessRowState, { label: string; className: str
     expired: { label: 'Expirado', className: 'bg-zinc-500/10 text-zinc-400' },
     cancelled: { label: 'Cancelado', className: 'bg-zinc-500/10 text-zinc-400' },
     delivered: { label: 'Entregado', className: 'bg-emerald-500/10 text-emerald-500' },
+}
+
+const TAB_ORDER: SecurityTab[] = ['visitas', 'paqueteria', 'transporte', 'repartidor', 'proveedor']
+
+const TAB_CONFIG: Record<SecurityTab, { label: string; icon: typeof UserPlus; activeClasses: string; avatarColor: string }> = {
+    visitas: { label: 'Visitas', icon: UserPlus, activeClasses: 'bg-emerald-500/15 text-emerald-400', avatarColor: 'text-emerald-400' },
+    paqueteria: { label: 'Paquetería', icon: Package, activeClasses: 'bg-amber-500/15 text-amber-400', avatarColor: 'text-amber-400' },
+    transporte: { label: 'Transporte', icon: Car, activeClasses: 'bg-sky-500/15 text-sky-400', avatarColor: 'text-sky-400' },
+    repartidor: { label: 'Repartidor', icon: Bike, activeClasses: 'bg-fuchsia-500/15 text-fuchsia-400', avatarColor: 'text-fuchsia-400' },
+    proveedor: { label: 'Proveedor', icon: Wrench, activeClasses: 'bg-violet-500/15 text-violet-400', avatarColor: 'text-violet-400' },
 }
 
 const formatTime = (iso?: string | null) =>
@@ -118,7 +124,7 @@ export default function SecurityDashboardAdminClient({
     const supabase = createClient()
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
     const [selectedCondoName, setSelectedCondoName] = useState<string>('')
-    const [activeTab, setActiveTab] = useState<'visitas' | 'paqueteria' | 'transporte'>('visitas')
+    const [activeTab, setActiveTab] = useState<SecurityTab>('visitas')
     const [isQRScannerOpen, setIsQRScannerOpen] = useState(false)
     const [isManualVisitOpen, setIsManualVisitOpen] = useState(false)
 
@@ -351,66 +357,19 @@ export default function SecurityDashboardAdminClient({
         { label: 'Transporte', value: filteredTransportNotices.filter(n => n.status === 'pending').length.toString().padStart(2, '0'), icon: Car, color: 'text-sky-500', bg: 'bg-sky-500/10', border: 'hover:border-sky-500/50' },
     ]
 
-    // Feed de Actividad dinámico basado en datos reales
-    const activityFeed = [
-        ...filteredPasses.slice(0, 3).map(p => ({
-            id: p.id,
-            type: 'qr',
-            title: (p.status === 'registrado' || p.status === 'used') ? 'Acceso Registrado' : 'Pase Generado',
-            house: p.unit_name || 'S/N',
-            details: `Visitante: ${p.visitor_name}`,
-            time: p.created_at ? new Date(p.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: (p.status === 'registrado' || p.status === 'used') ? 'success' : 'pending',
-            created_at: p.created_at
-        })),
-        ...filteredPackages.slice(0, 2).map(pkg => ({
-            id: pkg.id,
-            type: 'package',
-            title: 'Paquete Recibido',
-            house: pkg.unit_name || 'S/N',
-            details: `${pkg.carrier || 'Amazon'} - ${pkg.resident_name}`,
-            time: pkg.created_at ? new Date(pkg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: pkg.status === 'delivered' ? 'success' : 'pending',
-            created_at: pkg.created_at
-        })),
-        ...filteredIncidents.slice(0, 3).map(inc => ({
-            id: inc.id,
-            type: 'incident',
-            title: 'Incidencia Reportada',
-            house: 'Seguridad',
-            details: inc.title,
-            time: inc.created_at ? new Date(inc.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: inc.priority === 'urgent' ? 'alert' : 'pending',
-            created_at: inc.created_at
-        })),
-        ...filteredTransportNotices.slice(0, 2).map(notice => ({
-            id: notice.id,
-            type: 'transport',
-            title: notice.direction === 'pickup' ? 'Recogida de Transporte' : 'Llegada de Transporte',
-            house: notice.unit_name || 'S/N',
-            details: `${notice.platform} - ${notice.resident_name}`,
-            time: notice.created_at ? new Date(notice.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Hoy',
-            status: notice.status === 'received' ? 'success' : 'pending',
-            created_at: notice.created_at
-        }))
-    ].sort((a, b) => {
-        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
-        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
-        return dateB - dateA
-    }).slice(0, 5)
-
     // Filas normalizadas de la tabla (visitas / paquetería / transporte) para
     // que las tres pestañas compartan el flujo Acceso → Salida → Rechazo.
     const tableRows: AccessRow[] = (
-        activeTab === 'visitas' ? filteredPasses.map((pass): AccessRow => {
+        (activeTab === 'visitas' || activeTab === 'repartidor' || activeTab === 'proveedor')
+            ? filteredPasses.filter(pass => passTab(pass) === activeTab).map((pass): AccessRow => {
             const checkIn = pass.checked_in_at || pass.used_at || null
             return {
                 id: pass.id,
                 kind: 'visit',
-                title: pass.visitor_name || 'Visitante',
-                subtitle: `ID: ${String(pass.id).substring(0, 8)}`,
+                title: pass.visitor_name || TAB_CONFIG[activeTab].label,
+                subtitle: pass.notes ? String(pass.notes) : `ID: ${String(pass.id).substring(0, 8)}`,
                 avatar: <span>{pass.visitor_name?.charAt(0) || 'V'}</span>,
-                avatarColor: 'text-indigo-400',
+                avatarColor: TAB_CONFIG[activeTab].avatarColor,
                 unit: pass.unit_name,
                 vehicle: pass.vehicle_info,
                 checkIn,
@@ -530,62 +489,8 @@ export default function SecurityDashboardAdminClient({
                     ))}
                 </div>
 
-                <div className="grid gap-8 lg:grid-cols-12">
-                    {/* 2. Sección Principal: Feed de Actividad */}
-                    <motion.div variants={item} className="lg:col-span-4 space-y-6">
-                        <div className="flex items-center justify-between px-2">
-                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                <Activity className="h-5 w-5 text-indigo-500" />
-                                Actividad Real
-                            </h2>
-                            <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest animate-pulse">
-                                En Vivo
-                            </span>
-                        </div>
-                        
-                        <div className="space-y-3">
-                            {activityFeed.map((event) => (
-                                <motion.div 
-                                    key={event.id}
-                                    whileHover={{ x: 5 }}
-                                    className="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800/50 hover:border-zinc-700 transition-all cursor-pointer group"
-                                >
-                                    <div className="flex items-start gap-4">
-                                        <div className={cn(
-                                            "h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110",
-                                            event.status === 'success' ? 'bg-emerald-500/10 text-emerald-500' :
-                                            event.status === 'error' ? 'bg-rose-500/10 text-rose-500' :
-                                            event.status === 'warning' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'
-                                        )}>
-                                            {event.type === 'qr' && <QrCode className="h-5 w-5" />}
-                                            {event.type === 'package' && <Package className="h-5 w-5" />}
-                                            {event.type === 'access' && <XCircle className="h-5 w-5" />}
-                                            {event.type === 'incident' && <AlertTriangle className="h-5 w-5" />}
-                                            {event.type === 'transport' && <Car className="h-5 w-5" />}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <p className="text-sm font-bold text-white">{event.title}</p>
-                                                <span className="text-[10px] text-zinc-600 font-mono italic">{event.time}</span>
-                                            </div>
-                                            <p className="text-xs text-zinc-400 font-medium mb-1">{event.house}</p>
-                                            <p className="text-[11px] text-zinc-500 truncate">{event.details}</p>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                        <Button
-                            variant="ghost"
-                            onClick={() => router.push('/seguridad/bitacora')}
-                            className="w-full text-zinc-500 hover:text-white hover:bg-zinc-900 text-xs"
-                        >
-                            Ver historial completo
-                        </Button>
-                    </motion.div>
-
-                    {/* 3. Panel de Control & Tabla */}
-                    <div className="lg:col-span-8 space-y-8">
+                    {/* Panel de Control & Tabla */}
+                    <div className="space-y-8">
 
                         {/* Acciones Rápidas */}
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -618,13 +523,9 @@ export default function SecurityDashboardAdminClient({
                         {/* Tabla de Gestión */}
                         <Card className="bg-zinc-950 border-zinc-900 shadow-2xl overflow-hidden rounded-2xl">
                             <CardHeader className="border-b border-zinc-900 pb-0">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex gap-1 bg-zinc-900 p-1 rounded-xl">
-                                        {[
-                                            { id: 'visitas' as const, label: 'Visitas', icon: UserPlus, activeClasses: 'bg-emerald-500/15 text-emerald-400' },
-                                            { id: 'paqueteria' as const, label: 'Paquetería', icon: Package, activeClasses: 'bg-amber-500/15 text-amber-400' },
-                                            { id: 'transporte' as const, label: 'Transporte', icon: Car, activeClasses: 'bg-sky-500/15 text-sky-400' },
-                                        ].map((tab) => (
+                                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                                    <div className="flex flex-wrap gap-1 bg-zinc-900 p-1 rounded-xl">
+                                        {TAB_ORDER.map(id => ({ id, ...TAB_CONFIG[id] })).map((tab) => (
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id)}
@@ -778,23 +679,19 @@ export default function SecurityDashboardAdminClient({
                                         </tbody>
                                     </table>
                                 </div>
+                                <div className="border-t border-zinc-900 p-3">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => router.push('/seguridad/bitacora')}
+                                        className="w-full text-zinc-500 hover:text-white hover:bg-zinc-900 text-xs font-bold"
+                                    >
+                                        Ver historial completo
+                                        <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
-                </div>
-
-                {/* Footer Section - Links preserving module structure */}
-                <div className="pt-8 border-t border-zinc-900 flex items-center justify-between">
-                    <p className="text-xs text-zinc-600 font-medium italic">InmobiGo v2.4 Security Sentinel Edition</p>
-                    <div className="flex items-center gap-6">
-                        <Link href="/seguridad/avisos" className="text-xs text-zinc-500 hover:text-indigo-400 transition-colors font-bold uppercase tracking-widest">
-                            Panel de Avisos
-                        </Link>
-                        <Link href="/seguridad/configuracion" className="text-xs text-zinc-500 hover:text-white transition-colors">
-                            Configuración
-                        </Link>
-                    </div>
-                </div>
             </motion.div>
 
             {/* Modal: Motivo de rechazo (queda como evidencia y lo ve el residente) */}

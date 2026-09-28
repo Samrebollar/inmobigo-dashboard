@@ -1,9 +1,9 @@
 // src/types/bitacora.ts
 // TypeScript types for Bitácora Inteligente module
 
-export type EventType = 'access' | 'delivery' | 'amenity'
+export type EventType = 'access' | 'delivery' | 'amenity' | 'transport'
 export type BitacoraStatus = 'active' | 'pending' | 'completed' | 'expired' | 'cancelled'
-export type SourceTable = 'visitor_passes' | 'package_alerts' | 'amenity_reservations'
+export type SourceTable = 'visitor_passes' | 'package_alerts' | 'amenity_reservations' | 'transport_notices'
 export type VisitorType =
     | 'visit' | 'family' | 'friend' | 'provider' | 'technician'
     | 'contractor' | 'domestic' | 'guest' | 'event' | 'delivery' | 'amenity' | 'other'
@@ -80,6 +80,13 @@ export const EVENT_TYPE_CONFIG: Record<EventType, {
         bg: 'bg-purple-500/10',
         border: 'border-purple-500/20',
         icon: 'Calendar',
+    },
+    transport: {
+        label: 'Transporte',
+        color: 'text-sky-400',
+        bg: 'bg-sky-500/10',
+        border: 'border-sky-500/20',
+        icon: 'Car',
     },
 }
 

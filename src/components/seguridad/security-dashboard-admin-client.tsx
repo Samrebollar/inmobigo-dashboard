@@ -469,7 +469,11 @@ export default function SecurityDashboardAdminClient({
                                 </motion.div>
                             ))}
                         </div>
-                        <Button variant="ghost" className="w-full text-zinc-500 hover:text-white hover:bg-zinc-900 text-xs">
+                        <Button
+                            variant="ghost"
+                            onClick={() => router.push('/seguridad/bitacora')}
+                            className="w-full text-zinc-500 hover:text-white hover:bg-zinc-900 text-xs"
+                        >
                             Ver historial completo
                         </Button>
                     </motion.div>

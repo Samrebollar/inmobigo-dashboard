@@ -223,6 +223,14 @@ export async function registerCheckoutAction(
             if (error) return { success: false, error: error.message }
         }
 
+        if (sourceTable === 'transport_notices') {
+            const { error } = await supabase
+                .from('transport_notices')
+                .update({ status: 'closed', handled_at: now, guard_name: guardName })
+                .eq('id', entryId)
+            if (error) return { success: false, error: error.message }
+        }
+
         return { success: true }
     } catch (err: any) {
         return { success: false, error: err.message }

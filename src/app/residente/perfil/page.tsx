@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import ResidentProfileClient from '@/components/settings/resident-profile-client'
 import { resolveProfileData } from '@/services/profile-service'
 import { redirect } from 'next/navigation'
+import { DeleteResidentAccountSection } from '@/components/residente/delete-resident-account-section'
 
 export default async function ProfilePage() {
     const supabase = await createClient()
@@ -14,6 +15,7 @@ export default async function ProfilePage() {
     const data = await resolveProfileData(supabase, user)
 
     return (
+        <>
         <ResidentProfileClient
             user={user}
             initialResident={data.resident}
@@ -26,5 +28,8 @@ export default async function ProfilePage() {
             accountStatus={data.accountStatus}
             financeHref="/residente/payments"
         />
+        {/* Solo residentes: las cuentas de administración se eliminan desde Configuración */}
+        {!data.isAdmin && <DeleteResidentAccountSection />}
+        </>
     )
 }

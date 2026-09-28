@@ -1,6 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+import { createClient as createServerClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 // ─── ACCESOS EN VIVO ──────────────────────────────────────────────────────────
 // Quién está dentro de la privada ahora mismo (pase de visita con check-in
@@ -57,7 +59,7 @@ export async function getLiveAccessActivityServer(organizationId: string) {
 }
 
 // ─── AVISOS DE TRANSPORTE (UBER/DIDI/TAXI) ───────────────────────────────────
-export async function getPendingTransportNoticesServer(organizationId: string) {
+export async function getPendingTransportNoticesServer(organizationId: string, options: { includeResolvedHours?: number } = {}) {
     try {
         const supabase = createAdminClient()
 
@@ -67,12 +69,22 @@ export async function getPendingTransportNoticesServer(organizationId: string) {
             .eq('organization_id', organizationId)
         const condoByUnit = new Map((units || []).map((u: any) => [u.id, u.condominium_id]))
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('transport_notices')
-            .select('id, unit_id, unit_name, resident_name, direction, platform, vehicle_info, notes, status, created_at, guard_name')
+            .select('id, unit_id, unit_name, resident_name, direction, platform, vehicle_info, notes, status, created_at, guard_name, handled_at, checked_in_at, checked_out_at, rejection_reason, rejected_at')
             .eq('organization_id', organizationId)
-            .in('status', ['pending', 'received'])
-            .order('created_at', { ascending: false })
+
+        // Con includeResolvedHours también se devuelven los avisos cerrados o
+        // rechazados recientes, para que seguridad vea la hora de salida y el
+        // motivo de rechazo en la tabla del panel.
+        if (options.includeResolvedHours) {
+            const since = new Date(Date.now() - options.includeResolvedHours * 60 * 60 * 1000).toISOString()
+            query = query.or(`status.in.(pending,received),created_at.gte.${since}`)
+        } else {
+            query = query.in('status', ['pending', 'received'])
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false })
 
         if (error) {
             console.error('[getPendingTransportNoticesServer] DB error:', error)
@@ -391,5 +403,167 @@ export async function endShiftServer(shiftId: string, notes?: string) {
     } catch (err: any) {
         console.error('[endShiftServer] Fatal error:', err)
         return { success: false, error: err.message || 'Error desconocido' }
+    }
+}
+
+// ─── ACCESO / SALIDA / RECHAZO DESDE EL PANEL DE SEGURIDAD ───────────────────
+// Flujo único para visitas, paquetería y transporte: primero se registra el
+// Acceso (llegó), después la Salida (se fue). El rechazo exige un motivo que
+// queda como evidencia y que el residente ve en su panel de Servicios.
+export type SecurityAccessKind = 'visit' | 'package' | 'transport'
+export type SecurityAccessEvent = 'check_in' | 'check_out' | 'reject'
+
+const ACCESS_TABLES: Record<SecurityAccessKind, 'visitor_passes' | 'package_alerts' | 'transport_notices'> = {
+    visit: 'visitor_passes',
+    package: 'package_alerts',
+    transport: 'transport_notices',
+}
+
+export async function registerSecurityAccessEventAction(params: {
+    kind: SecurityAccessKind
+    id: string
+    event: SecurityAccessEvent
+    reason?: string
+    guardName?: string
+}) {
+    const { kind, id, event, guardName } = params
+    const reason = params.reason?.trim()
+    const table = ACCESS_TABLES[kind]
+    if (!table || !id || !event) return { success: false, error: 'Parámetros incompletos' }
+    if (event === 'reject' && !reason) return { success: false, error: 'Debes indicar el motivo del rechazo' }
+
+    try {
+        const serverClient = await createServerClient()
+        const { data: { user } } = await serverClient.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        const supabase = createAdminClient()
+        const now = new Date().toISOString()
+
+        const { data: current, error: fetchErr } = await supabase
+            .from(table)
+            .select('*')
+            .eq('id', id)
+            .maybeSingle()
+        if (fetchErr) throw fetchErr
+        if (!current) return { success: false, error: 'Registro no encontrado' }
+
+        const alreadyIn = !!(current.checked_in_at || current.used_at || current.received_at ||
+            (kind === 'transport' && current.status === 'received'))
+
+        if (current.status === 'rejected') return { success: false, error: 'Este registro ya fue rechazado' }
+        if (current.checked_out_at) return { success: false, error: 'Ya se registró la salida' }
+        if (event === 'check_in' && alreadyIn) return { success: false, error: 'Ya se registró el acceso' }
+        if (event === 'check_out' && !alreadyIn) return { success: false, error: 'Primero registra el acceso' }
+        if (event === 'reject' && alreadyIn) return { success: false, error: 'No se puede rechazar después del acceso' }
+
+        const update: Record<string, any> = {}
+        if (guardName) update.guard_name = guardName
+
+        if (event === 'check_in') {
+            update.checked_in_at = now
+            if (kind === 'visit') {
+                update.status = 'used'
+                update.used_at = current.used_at || now
+            } else if (kind === 'package') {
+                update.status = 'received'
+                update.received_at = now
+                update.handled_by = user.id
+            } else {
+                update.status = 'received'
+                update.handled_at = now
+                update.handled_by = user.id
+            }
+        } else if (event === 'check_out') {
+            update.checked_out_at = now
+            if (kind === 'transport') {
+                update.status = 'closed'
+                update.handled_at = now
+            }
+        } else {
+            update.status = 'rejected'
+            update.rejection_reason = reason
+            update.rejected_at = now
+            if (kind !== 'visit') update.handled_by = user.id
+        }
+
+        const { data: updated, error: updateErr } = await supabase
+            .from(table)
+            .update(update)
+            .eq('id', id)
+            .select('*')
+            .single()
+        if (updateErr) throw updateErr
+
+        // Notificaciones existentes por WhatsApp (n8n)
+        if (kind === 'package' && event === 'check_in') {
+            fetch('https://n8n.inmobigo.mx/webhook/paquete-recibido', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ package_alert_id: id }),
+            }).catch((err) => console.error('Error al notificar n8n (paquete-recibido):', err))
+        }
+        if (kind === 'transport' && (event === 'check_in' || event === 'reject')) {
+            fetch('https://n8n.inmobigo.mx/webhook/transporte-decision', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notice_id: id }),
+            }).catch((err) => console.error('Error al notificar n8n (transporte-decision):', err))
+        }
+
+        revalidatePath('/seguridad')
+        revalidatePath('/residente/servicios')
+        revalidatePath('/dashboard/servicios')
+
+        return { success: true, record: updated }
+    } catch (err: any) {
+        console.error('[registerSecurityAccessEventAction] Error:', err)
+        return { success: false, error: err.message || 'Error al registrar el evento' }
+    }
+}
+
+// ─── HISTORIAL DEL RESIDENTE (paquetería y transporte) ───────────────────────
+// El residente necesita ver el estado de sus avisos y, si seguridad los
+// rechazó, el motivo. Se resuelve con el usuario autenticado, nunca con un id
+// enviado desde el cliente.
+export async function getMyServiceNoticesAction(days: number = 30) {
+    try {
+        const serverClient = await createServerClient()
+        const { data: { user } } = await serverClient.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado', packages: [], transports: [] }
+
+        const supabase = createAdminClient()
+        const since = new Date()
+        since.setDate(since.getDate() - days)
+
+        const { data: residents } = await supabase
+            .from('residents')
+            .select('id')
+            .eq('user_id', user.id)
+        const residentIds = (residents || []).map((r: any) => r.id)
+
+        const [{ data: packages }, { data: transports }] = await Promise.all([
+            supabase
+                .from('package_alerts')
+                .select('id, carrier, notes, status, created_at, received_at, checked_in_at, checked_out_at, delivered_at, rejection_reason, rejected_at')
+                .eq('resident_id', user.id)
+                .gte('created_at', since.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(20),
+            residentIds.length
+                ? supabase
+                    .from('transport_notices')
+                    .select('id, platform, direction, vehicle_info, status, created_at, handled_at, checked_in_at, checked_out_at, rejection_reason, rejected_at')
+                    .in('resident_id', residentIds)
+                    .gte('created_at', since.toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(20)
+                : Promise.resolve({ data: [] as any[] }),
+        ])
+
+        return { success: true, packages: packages || [], transports: transports || [] }
+    } catch (err: any) {
+        console.error('[getMyServiceNoticesAction] Error:', err)
+        return { success: false, error: err.message || 'Error desconocido', packages: [], transports: [] }
     }
 }

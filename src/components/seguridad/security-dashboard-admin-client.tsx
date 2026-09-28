@@ -1,10 +1,11 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSecurityInitialDataAction, updateTransportNoticeStatusAction } from '@/app/actions/service-actions'
-import { getPendingTransportNoticesServer } from '@/app/actions/security-ops-actions'
+import { getSecurityInitialDataAction } from '@/app/actions/service-actions'
+import { getPendingTransportNoticesServer, registerSecurityAccessEventAction } from '@/app/actions/security-ops-actions'
+import type { SecurityAccessKind, SecurityAccessEvent } from '@/app/actions/security-ops-actions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
     Users,
@@ -52,6 +53,36 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
     </svg>
 )
 
+type AccessRowState = 'pending' | 'inside' | 'exited' | 'rejected' | 'expired' | 'cancelled' | 'delivered'
+
+interface AccessRow {
+    id: string
+    kind: SecurityAccessKind
+    title: string
+    subtitle: string
+    avatar: ReactNode
+    avatarColor: string
+    unit?: string | null
+    vehicle?: string | null
+    checkIn?: string | null
+    checkOut?: string | null
+    rejectionReason?: string | null
+    state: AccessRowState
+}
+
+const ACCESS_STATE_BADGE: Record<AccessRowState, { label: string; className: string }> = {
+    pending: { label: 'Esperando', className: 'bg-amber-500/10 text-amber-500' },
+    inside: { label: 'Dentro', className: 'bg-emerald-500/10 text-emerald-500' },
+    exited: { label: 'Salió', className: 'bg-sky-500/10 text-sky-400' },
+    rejected: { label: 'Rechazado', className: 'bg-rose-500/10 text-rose-500' },
+    expired: { label: 'Expirado', className: 'bg-zinc-500/10 text-zinc-400' },
+    cancelled: { label: 'Cancelado', className: 'bg-zinc-500/10 text-zinc-400' },
+    delivered: { label: 'Entregado', className: 'bg-emerald-500/10 text-emerald-500' },
+}
+
+const formatTime = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
+
 interface SecurityDashboardClientProps {
     userId?: string
     userEmail?: string
@@ -95,7 +126,10 @@ export default function SecurityDashboardAdminClient({
     const [visitorPasses, setVisitorPasses] = useState<any[]>([])
     const [packageAlerts, setPackageAlerts] = useState<any[]>([])
     const [transportNotices, setTransportNotices] = useState<any[]>([])
-    const [processingTransportId, setProcessingTransportId] = useState<string | null>(null)
+    const [processingRowId, setProcessingRowId] = useState<string | null>(null)
+    const [rejectTarget, setRejectTarget] = useState<{ kind: SecurityAccessKind; id: string; label: string } | null>(null)
+    const [rejectReason, setRejectReason] = useState('')
+    const [tableSearch, setTableSearch] = useState('')
     const [securityIncidents, setSecurityIncidents] = useState<any[]>(initialIncidents)
     const [unitToCondoMap, setUnitToCondoMap] = useState<Record<string, string>>({}) // Map unit_id -> condominium_id
     const [loading, setLoading] = useState(true)
@@ -146,7 +180,7 @@ export default function SecurityDashboardAdminClient({
                     setSecurityIncidents(incidents || [])
                 }
 
-                const transportResult = await getPendingTransportNoticesServer(organizationId)
+                const transportResult = await getPendingTransportNoticesServer(organizationId, { includeResolvedHours: 24 })
                 if (transportResult.success) {
                     setTransportNotices(transportResult.notices || [])
                 }
@@ -215,11 +249,7 @@ export default function SecurityDashboardAdminClient({
                     if (payload.eventType === 'INSERT' && enriched) {
                         setTransportNotices(prev => [enriched, ...prev])
                     } else if (payload.eventType === 'UPDATE' && enriched) {
-                        if (enriched.status === 'closed' || enriched.status === 'rejected') {
-                            setTransportNotices(prev => prev.filter(n => n.id !== enriched.id))
-                        } else {
-                            setTransportNotices(prev => prev.map(n => n.id === enriched.id ? enriched : n))
-                        }
+                        setTransportNotices(prev => prev.map(n => n.id === enriched.id ? enriched : n))
                     } else if (payload.eventType === 'DELETE') {
                         setTransportNotices(prev => prev.filter(n => n.id !== (payload.old as any).id))
                     }
@@ -277,25 +307,35 @@ export default function SecurityDashboardAdminClient({
         return n.condominium_id === selectedCondoId
     })
 
-    const handleTransportAction = async (id: string, status: 'received' | 'closed' | 'rejected') => {
-        setProcessingTransportId(id)
+    const handleAccessEvent = async (kind: SecurityAccessKind, id: string, event: SecurityAccessEvent, reason?: string) => {
+        setProcessingRowId(id)
         try {
-            const result = await updateTransportNoticeStatusAction({ id, status, handledBy: userId })
-            if (!result.success) throw new Error(result.error)
+            const result = await registerSecurityAccessEventAction({ kind, id, event, reason, guardName: userName })
+            if (!result.success || !result.record) throw new Error(result.error)
 
-            if (status === 'closed' || status === 'rejected') {
-                setTransportNotices(prev => prev.filter(n => n.id !== id))
-            } else {
-                setTransportNotices(prev => prev.map(n => n.id === id ? { ...n, status } : n))
-            }
-            toast.success(status === 'received' ? 'Aviso autorizado' : status === 'rejected' ? 'Aviso rechazado' : 'Aviso completado')
-        } catch {
-            toast.error('No se pudo actualizar el aviso.')
+            const merge = (prev: any[]) => prev.map(r => r.id === id ? { ...r, ...result.record } : r)
+            if (kind === 'visit') setVisitorPasses(merge)
+            else if (kind === 'package') setPackageAlerts(merge)
+            else setTransportNotices(merge)
+
+            toast.success(event === 'check_in' ? 'Acceso registrado' : event === 'check_out' ? 'Salida registrada' : 'Rechazo registrado')
+            return true
+        } catch (err: any) {
+            toast.error(err?.message || 'No se pudo actualizar el registro.')
+            return false
         } finally {
-            setProcessingTransportId(null)
+            setProcessingRowId(null)
         }
     }
 
+    const handleConfirmReject = async () => {
+        if (!rejectTarget || !rejectReason.trim()) return
+        const ok = await handleAccessEvent(rejectTarget.kind, rejectTarget.id, 'reject', rejectReason)
+        if (ok) {
+            setRejectTarget(null)
+            setRejectReason('')
+        }
+    }
 
     // Mocks para KPIs operativos en tiempo real
     // KPIs operativos calculados en tiempo real
@@ -358,6 +398,72 @@ export default function SecurityDashboardAdminClient({
         const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
         return dateB - dateA
     }).slice(0, 5)
+
+    // Filas normalizadas de la tabla (visitas / paquetería / transporte) para
+    // que las tres pestañas compartan el flujo Acceso → Salida → Rechazo.
+    const tableRows: AccessRow[] = (
+        activeTab === 'visitas' ? filteredPasses.map((pass): AccessRow => {
+            const checkIn = pass.checked_in_at || pass.used_at || null
+            return {
+                id: pass.id,
+                kind: 'visit',
+                title: pass.visitor_name || 'Visitante',
+                subtitle: `ID: ${String(pass.id).substring(0, 8)}`,
+                avatar: <span>{pass.visitor_name?.charAt(0) || 'V'}</span>,
+                avatarColor: 'text-indigo-400',
+                unit: pass.unit_name,
+                vehicle: pass.vehicle_info,
+                checkIn,
+                checkOut: pass.checked_out_at,
+                rejectionReason: pass.rejection_reason,
+                state: pass.status === 'rejected' ? 'rejected'
+                    : pass.checked_out_at ? 'exited'
+                    : (pass.status === 'used' || pass.status === 'registrado' || checkIn) ? 'inside'
+                    : (pass.status === 'expired' || pass.status === 'expirado') ? 'expired'
+                    : pass.status === 'cancelled' ? 'cancelled'
+                    : 'pending',
+            }
+        })
+        : activeTab === 'paqueteria' ? filteredPackages.map((pkg): AccessRow => ({
+            id: pkg.id,
+            kind: 'package',
+            title: pkg.carrier || 'Paquetería',
+            subtitle: `Residente: ${pkg.resident_name || '—'}`,
+            avatar: <Package size={14} />,
+            avatarColor: 'text-amber-400',
+            unit: pkg.unit_name,
+            vehicle: pkg.vehicle_info,
+            checkIn: pkg.checked_in_at || pkg.received_at || null,
+            checkOut: pkg.checked_out_at,
+            rejectionReason: pkg.rejection_reason,
+            state: pkg.status === 'rejected' ? 'rejected'
+                : pkg.checked_out_at ? 'exited'
+                : pkg.status === 'delivered' ? 'delivered'
+                : (pkg.status === 'received' || pkg.checked_in_at) ? 'inside'
+                : 'pending',
+        }))
+        : filteredTransportNotices.map((notice): AccessRow => ({
+            id: notice.id,
+            kind: 'transport',
+            title: `${notice.platform} — ${notice.direction === 'pickup' ? 'Recogida' : 'Llegada'}`,
+            subtitle: `Residente: ${notice.resident_name || '—'}`,
+            avatar: notice.direction === 'pickup' ? <LogOut size={14} /> : <LogIn size={14} />,
+            avatarColor: 'text-sky-400',
+            unit: notice.unit_name,
+            vehicle: notice.vehicle_info,
+            checkIn: notice.checked_in_at || ((notice.status === 'received' || notice.status === 'closed') ? notice.handled_at : null),
+            checkOut: notice.checked_out_at || (notice.status === 'closed' && !notice.checked_in_at ? notice.handled_at : null),
+            rejectionReason: notice.rejection_reason,
+            state: notice.status === 'rejected' ? 'rejected'
+                : (notice.checked_out_at || notice.status === 'closed') ? 'exited'
+                : notice.status === 'received' ? 'inside'
+                : 'pending',
+        }))
+    ).filter(row => {
+        const q = tableSearch.trim().toLowerCase()
+        if (!q) return true
+        return [row.unit, row.title, row.subtitle, row.vehicle].some(v => v?.toLowerCase().includes(q))
+    })
 
     const container = {
         hidden: { opacity: 0 },
@@ -537,7 +643,9 @@ export default function SecurityDashboardAdminClient({
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                                             <input 
                                                 type="text" 
-                                                placeholder="Buscar por casa..." 
+                                                placeholder="Buscar por casa, nombre o placas..." 
+                                                value={tableSearch}
+                                                onChange={e => setTableSearch(e.target.value)}
                                                 className="bg-zinc-900 border-none rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder:text-zinc-600 outline-none focus:ring-1 focus:ring-indigo-500/50 w-48"
                                             />
                                         </div>
@@ -549,186 +657,120 @@ export default function SecurityDashboardAdminClient({
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b border-zinc-900 bg-zinc-900/20">
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Nombre</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Casa</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Estado</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Hora de Acceso</th>
-                                                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center">Acción</th>
+                                                {['Nombre', 'Casa', 'Color / Placas', 'Estado', 'Hora de Acceso', 'Hora de Salida', 'Acción'].map(h => (
+                                                    <th key={h} className="px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 text-center whitespace-nowrap">{h}</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-zinc-900/50">
-                                            {activeTab === 'visitas' && filteredPasses.map((pass, i) => (
-                                                <tr key={pass.id} className="hover:bg-zinc-900/30 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-col items-center justify-center text-center">
-                                                            <div className="flex items-center gap-3 mb-1">
-                                                                <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-indigo-400 font-bold text-xs">
-                                                                    {pass.visitor_name?.charAt(0) || 'V'}
+                                            {tableRows.map((row) => {
+                                                const badge = ACCESS_STATE_BADGE[row.state]
+                                                const isProcessing = processingRowId === row.id
+                                                return (
+                                                    <tr key={row.id} className="hover:bg-zinc-900/30 transition-colors group">
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex flex-col items-center justify-center text-center">
+                                                                <div className="flex items-center gap-3 mb-1">
+                                                                    <div className={cn("h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs shrink-0", row.avatarColor)}>
+                                                                        {row.avatar}
+                                                                    </div>
+                                                                    <p className="text-sm font-bold text-zinc-200">{row.title}</p>
                                                                 </div>
-                                                                <p className="text-sm font-bold text-zinc-200">{pass.visitor_name}</p>
+                                                                <p className="text-[10px] text-zinc-600">{row.subtitle}</p>
                                                             </div>
-                                                            <p className="text-[10px] text-zinc-600">ID: {pass.id.substring(0, 8)}</p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400 text-center">
-                                                        {pass.unit_name || 'S/N'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className={cn(
-                                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
-                                                            (pass.status === 'registrado' || pass.status === 'used') ? "bg-emerald-500/10 text-emerald-500" :
-                                                            (pass.status === 'pendiente' || pass.status === 'pending') ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
-                                                        )}>
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                                            {(pass.status === 'registrado' || pass.status === 'used') ? 'Registrado' : 
-                                                             (pass.status === 'pendiente' || pass.status === 'pending') ? 'Pendiente' : 
-                                                             pass.status === 'expirado' ? 'Expirado' : pass.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
-                                                        {(pass.status === 'registrado' || pass.status === 'used') ? (
-                                                            pass.updated_at ? new Date(pass.updated_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
-                                                        ) : '--:--'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(79, 70, 229, 0.2)' }}
-                                                                whileTap={{ scale: 0.9 }}
-                                                                onClick={() => setIsQRScannerOpen(true)}
-                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 transition-colors"
-                                                            >
-                                                                <QrCode className="h-4 w-4" />
-                                                            </motion.button>
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(34, 197, 94, 0.2)' }}
-                                                                whileTap={{ scale: 0.9 }}
-                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 transition-colors"
-                                                            >
-                                                                <WhatsAppIcon className="h-5 w-5" />
-                                                            </motion.button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-
-                                            {activeTab === 'paqueteria' && filteredPackages.map((pkg, i) => (
-                                                <tr key={pkg.id} className="hover:bg-zinc-900/30 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-col items-center justify-center text-center">
-                                                            <div className="flex items-center gap-3 mb-1">
-                                                                <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-amber-400 font-bold text-xs">
-                                                                    <Package size={14} />
-                                                                </div>
-                                                                <p className="text-sm font-bold text-zinc-200">{pkg.carrier || 'Paquetería'}</p>
-                                                            </div>
-                                                            <p className="text-[10px] text-zinc-600">Residente: {pkg.resident_name}</p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400 text-center">
-                                                        {pkg.unit_name || 'S/N'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className={cn(
-                                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
-                                                            pkg.status === 'delivered' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
-                                                        )}>
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                                            {pkg.status === 'delivered' ? 'Entregado' : 'Pendiente'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
-                                                        {pkg.status === 'delivered' ? (
-                                                            pkg.updated_at ? new Date(pkg.updated_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'
-                                                        ) : '--:--'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex items-center justify-center">
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.1, backgroundColor: 'rgba(34, 197, 94, 0.2)' }}
-                                                                whileTap={{ scale: 0.9 }}
-                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 transition-colors"
-                                                            >
-                                                                <WhatsAppIcon className="h-5 w-5" />
-                                                            </motion.button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-
-                                            {activeTab === 'transporte' && filteredTransportNotices.map((notice) => (
-                                                <tr key={notice.id} className="hover:bg-zinc-900/30 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-col items-center justify-center text-center">
-                                                            <div className="flex items-center gap-3 mb-1">
-                                                                <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-sky-400 font-bold text-xs">
-                                                                    {notice.direction === 'pickup' ? <LogOut size={14} /> : <LogIn size={14} />}
-                                                                </div>
-                                                                <p className="text-sm font-bold text-zinc-200">
-                                                                    {notice.platform} — {notice.direction === 'pickup' ? 'Recogida' : 'Llegada'}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-sm font-medium text-zinc-400 text-center">
+                                                            {row.unit || 'S/N'}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-xs font-medium text-zinc-300 text-center max-w-[160px]">
+                                                            {row.vehicle ? (
+                                                                <span className="inline-flex items-center gap-1.5">
+                                                                    <Car className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                                                                    <span className="truncate" title={row.vehicle}>{row.vehicle}</span>
+                                                                </span>
+                                                            ) : <span className="text-zinc-600">—</span>}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-center">
+                                                            <span className={cn(
+                                                                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
+                                                                badge.className
+                                                            )}>
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                                                {badge.label}
+                                                            </span>
+                                                            {row.state === 'rejected' && row.rejectionReason && (
+                                                                <p className="mt-1 text-[10px] text-rose-400/80 max-w-[180px] mx-auto line-clamp-2" title={row.rejectionReason}>
+                                                                    {row.rejectionReason}
                                                                 </p>
-                                                            </div>
-                                                            <p className="text-[10px] text-zinc-600">Residente: {notice.resident_name}</p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-sm font-medium text-zinc-400 text-center">
-                                                        {notice.unit_name || 'S/N'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className={cn(
-                                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter",
-                                                            notice.status === 'received' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
-                                                        )}>
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                                            {notice.status === 'received' ? 'Autorizado' : 'Esperando'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-xs font-mono text-zinc-500 text-center">
-                                                        {notice.created_at ? new Date(notice.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            {notice.status === 'pending' ? (
-                                                                <motion.button
-                                                                    whileHover={{ scale: 1.1 }}
-                                                                    whileTap={{ scale: 0.9 }}
-                                                                    disabled={processingTransportId === notice.id}
-                                                                    onClick={() => handleTransportAction(notice.id, 'received')}
-                                                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 transition-colors disabled:opacity-50"
-                                                                    title="Autorizar"
-                                                                >
-                                                                    <CheckCircle2 className="h-4 w-4" />
-                                                                </motion.button>
-                                                            ) : (
-                                                                <motion.button
-                                                                    whileHover={{ scale: 1.1 }}
-                                                                    whileTap={{ scale: 0.9 }}
-                                                                    disabled={processingTransportId === notice.id}
-                                                                    onClick={() => handleTransportAction(notice.id, 'closed')}
-                                                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-sky-500/10 text-sky-500 transition-colors disabled:opacity-50"
-                                                                    title="Completado"
-                                                                >
-                                                                    <CheckCircle2 className="h-4 w-4" />
-                                                                </motion.button>
                                                             )}
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.1 }}
-                                                                whileTap={{ scale: 0.9 }}
-                                                                disabled={processingTransportId === notice.id}
-                                                                onClick={() => handleTransportAction(notice.id, 'rejected')}
-                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 transition-colors disabled:opacity-50"
-                                                                title="Rechazar"
-                                                            >
-                                                                <XCircle className="h-4 w-4" />
-                                                            </motion.button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-xs font-mono text-zinc-500 text-center">
+                                                            {formatTime(row.checkIn)}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-xs font-mono text-zinc-500 text-center">
+                                                            {formatTime(row.checkOut)}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-center">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                {row.state === 'pending' && (
+                                                                    <>
+                                                                        {row.kind === 'visit' && (
+                                                                            <motion.button
+                                                                                whileHover={{ scale: 1.1 }}
+                                                                                whileTap={{ scale: 0.9 }}
+                                                                                onClick={() => setIsQRScannerOpen(true)}
+                                                                                className="h-9 w-9 flex items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 transition-colors"
+                                                                                title="Escanear QR"
+                                                                            >
+                                                                                <QrCode className="h-4 w-4" />
+                                                                            </motion.button>
+                                                                        )}
+                                                                        <motion.button
+                                                                            whileHover={{ scale: 1.05 }}
+                                                                            whileTap={{ scale: 0.95 }}
+                                                                            disabled={isProcessing}
+                                                                            onClick={() => handleAccessEvent(row.kind, row.id, 'check_in')}
+                                                                            className="h-9 px-3 flex items-center gap-1.5 rounded-xl bg-emerald-500/10 text-emerald-500 text-[11px] font-bold transition-colors disabled:opacity-50"
+                                                                            title="Registrar acceso"
+                                                                        >
+                                                                            <LogIn className="h-4 w-4" /> Acceso
+                                                                        </motion.button>
+                                                                        <motion.button
+                                                                            whileHover={{ scale: 1.1 }}
+                                                                            whileTap={{ scale: 0.9 }}
+                                                                            disabled={isProcessing}
+                                                                            onClick={() => { setRejectReason(''); setRejectTarget({ kind: row.kind, id: row.id, label: row.title }) }}
+                                                                            className="h-9 w-9 flex items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 transition-colors disabled:opacity-50"
+                                                                            title="Rechazar"
+                                                                        >
+                                                                            <XCircle className="h-4 w-4" />
+                                                                        </motion.button>
+                                                                    </>
+                                                                )}
+                                                                {row.state === 'inside' && (
+                                                                    <motion.button
+                                                                        whileHover={{ scale: 1.05 }}
+                                                                        whileTap={{ scale: 0.95 }}
+                                                                        disabled={isProcessing}
+                                                                        onClick={() => handleAccessEvent(row.kind, row.id, 'check_out')}
+                                                                        className="h-9 px-3 flex items-center gap-1.5 rounded-xl bg-sky-500/10 text-sky-400 text-[11px] font-bold transition-colors disabled:opacity-50"
+                                                                        title="Registrar salida"
+                                                                    >
+                                                                        <LogOut className="h-4 w-4" /> Salida
+                                                                    </motion.button>
+                                                                )}
+                                                                {row.state !== 'pending' && row.state !== 'inside' && (
+                                                                    <span className="text-zinc-600 text-xs">—</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
 
-                                            {((activeTab === 'visitas' ? filteredPasses : activeTab === 'paqueteria' ? filteredPackages : filteredTransportNotices).length === 0) && (
+                                            {tableRows.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={5} className="px-6 py-12 text-center text-zinc-500 font-medium">
+                                                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500 font-medium">
                                                         No hay registros para mostrar en esta propiedad.
                                                     </td>
                                                 </tr>
@@ -754,6 +796,66 @@ export default function SecurityDashboardAdminClient({
                     </div>
                 </div>
             </motion.div>
+
+            {/* Modal: Motivo de rechazo (queda como evidencia y lo ve el residente) */}
+            <AnimatePresence>
+                {rejectTarget && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                        onClick={() => processingRowId !== rejectTarget.id && setRejectTarget(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, y: 10 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.95, y: 10 }}
+                            onClick={e => e.stopPropagation()}
+                            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-4"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+                                    <XCircle className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Rechazar acceso</h3>
+                                    <p className="text-xs text-zinc-500 mt-0.5">{rejectTarget.label}</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Motivo del rechazo</label>
+                                <textarea
+                                    autoFocus
+                                    value={rejectReason}
+                                    onChange={e => setRejectReason(e.target.value)}
+                                    rows={4}
+                                    maxLength={500}
+                                    placeholder="Ej. El conductor no coincide con los datos del aviso / placas diferentes / sin identificación..."
+                                    className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-3 text-sm text-white placeholder:text-zinc-600 outline-none focus:ring-1 focus:ring-rose-500/50 resize-none"
+                                />
+                                <p className="text-[11px] text-zinc-500">El residente verá este motivo en su panel.</p>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => setRejectTarget(null)}
+                                    disabled={processingRowId === rejectTarget.id}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    onClick={handleConfirmReject}
+                                    disabled={!rejectReason.trim() || processingRowId === rejectTarget.id}
+                                    className="bg-rose-600 hover:bg-rose-500 text-white"
+                                >
+                                    {processingRowId === rejectTarget.id ? 'Guardando...' : 'Confirmar rechazo'}
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Modales Operativos */}
             <QRScannerModal 

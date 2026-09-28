@@ -7,7 +7,7 @@ export async function PUT(req: Request) {
         const { orgId, name } = body
         
         if (!orgId || !name) {
-            return NextResponse.json({ error: 'Missing req properties' }, { status: 400 })
+            return NextResponse.json({ error: 'Escribe el nombre de la organización' }, { status: 400 })
         }
 
         const supabase = await createClient()
@@ -25,20 +25,28 @@ export async function PUT(req: Request) {
         const { createAdminClient } = await import('@/utils/supabase/admin')
         const adminSupabase = createAdminClient()
 
-        // 3. Verify user's role in the organization
-        const { data: orgUser, error: roleError } = await adminSupabase
+        // 3. Verify user's role in the organization (organization_users.role ya
+        //    no existe; el rol vive en role_new). El dueño siempre puede.
+        const { data: org } = await adminSupabase
+            .from('organizations')
+            .select('owner_id')
+            .eq('id', orgId)
+            .maybeSingle()
+
+        const { data: orgUser } = await adminSupabase
             .from('organization_users')
-            .select('role')
+            .select('role_new')
             .eq('organization_id', orgId)
             .eq('user_id', user.id)
-            .single()
+            .maybeSingle()
 
-        if (roleError || !orgUser) {
-            return NextResponse.json({ error: 'User does not belong to this organization' }, { status: 403 })
+        const isOwner = org?.owner_id === user.id
+        if (!isOwner && !orgUser) {
+            return NextResponse.json({ error: 'No perteneces a esta organización' }, { status: 403 })
         }
 
-        if (orgUser.role !== 'owner' && orgUser.role !== 'admin') {
-            return NextResponse.json({ error: 'Insufficient permissions to update organization' }, { status: 403 })
+        if (!isOwner && !['owner', 'admin_condominio', 'admin_propiedad', 'super_admin'].includes(orgUser?.role_new as string)) {
+            return NextResponse.json({ error: 'Solo el dueño o un administrador puede cambiar el nombre de la organización' }, { status: 403 })
         }
 
         // 4. Update the organization name

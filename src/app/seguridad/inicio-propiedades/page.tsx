@@ -48,7 +48,7 @@ export default async function DashboardPage({
   // Check if Admin (Owner/Staff)
   const { data: orgUser } = await adminSupabase
     .from('organization_users')
-    .select('role, organization:organizations(*)')
+    .select('role_new, organization:organizations(*)')
     .eq('user_id', user.id)
     .maybeSingle()
 

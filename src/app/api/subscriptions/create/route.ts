@@ -103,7 +103,7 @@ export async function POST(req: Request) {
                 .insert({
                     user_id: user.id,
                     organization_id: newOrg.id,
-                    role: 'admin',
+                    role_new: 'owner',
                     status: 'active'
                 })
 

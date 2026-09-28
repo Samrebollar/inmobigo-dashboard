@@ -511,7 +511,7 @@ export default function SecurityDashboardAdminClient({
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex gap-1 bg-zinc-900 p-1 rounded-xl">
                                         {[
-                                            { id: 'visitas' as const, label: 'Visitas', icon: UserPlus, activeClasses: 'bg-indigo-500/15 text-indigo-400' },
+                                            { id: 'visitas' as const, label: 'Visitas', icon: UserPlus, activeClasses: 'bg-emerald-500/15 text-emerald-400' },
                                             { id: 'paqueteria' as const, label: 'Paquetería', icon: Package, activeClasses: 'bg-amber-500/15 text-amber-400' },
                                             { id: 'transporte' as const, label: 'Transporte', icon: Car, activeClasses: 'bg-sky-500/15 text-sky-400' },
                                         ].map((tab) => (

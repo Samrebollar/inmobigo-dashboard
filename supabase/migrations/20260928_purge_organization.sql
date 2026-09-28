@@ -30,6 +30,14 @@ begin
         return jsonb_build_object('ok', false, 'error', 'La organización no existe');
     end if;
 
+    -- Hubo organizaciones "temporales" creadas con el mismo id que un
+    -- condominio de otra organización (datos guardados con el id del
+    -- condominio como organization_id). Borrarlas arrastraría en cascada
+    -- esos datos del otro condominio, así que no se tocan.
+    if exists (select 1 from condominiums where id = p_org and organization_id <> p_org) then
+        return jsonb_build_object('ok', false, 'error', 'El id coincide con un condominio de otra organización; no se borra para no afectarlo');
+    end if;
+
     select coalesce(array_agg(id), '{}') into v_condos from condominiums where organization_id = p_org;
     select coalesce(array_agg(id), '{}') into v_units from units where organization_id = p_org or condominium_id = any(v_condos);
     select coalesce(array_agg(id), '{}') into v_residents from residents where condominium_id = any(v_condos) or unit_id = any(v_units);

@@ -8,7 +8,7 @@ import {
     Search, Filter, X, RefreshCw, Download, Printer, ChevronDown,
     DoorOpen, MapPin, User, Building2, Shield, CheckCircle2,
     AlertTriangle, XCircle, MoreVertical, LogOut, Eye, BookOpen,
-    SlidersHorizontal, TrendingUp, FileText, Car,
+    SlidersHorizontal, TrendingUp, FileText, Car, Bell,
 } from 'lucide-react'
 import type { BitacoraEntry, BitacoraKPIs, BitacoraFilters, EventType, BitacoraStatus } from '@/types/bitacora'
 import { EVENT_TYPE_CONFIG, STATUS_CONFIG, VISITOR_TYPE_LABELS, COURIER_ICONS } from '@/types/bitacora'
@@ -105,6 +105,10 @@ function StatusBadge({ status }: { status: BitacoraStatus }) {
     )
 }
 
+// En transporte quien autoriza es el residente que creó el aviso.
+const authorizedBy = (entry: BitacoraEntry) =>
+    entry.authorized_by || (entry.event_type === 'transport' ? entry.person_name : null)
+
 // ─── Timeline ─────────────────────────────────────────────────────────────────
 function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
     entry: BitacoraEntry
@@ -121,16 +125,23 @@ function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
     if (entry.event_type === 'access' && sourceData?.qr_token) {
         events.push({ time: fmtTime(entry.created_at), label: 'QR generado', icon: Shield, color: 'text-indigo-400' })
     }
-    if (entry.checked_in_at) {
+    // El aviso de transporte llega a caseta en cuanto el residente lo crea;
+    // la entrada es un evento aparte que registra seguridad con "Acceso".
+    if (entry.event_type === 'transport' && entry.created_at) {
+        events.push({ time: fmtTime(entry.created_at), label: 'Aviso de transporte recibido', icon: Bell, color: 'text-sky-400' })
+    }
+    // En transporte, checked_in_at cae a created_at en la vista si aún no hay acceso.
+    const transportCheckedIn = entry.event_type !== 'transport' || (entry.status !== 'pending' && entry.status !== 'cancelled')
+    if (entry.checked_in_at && transportCheckedIn) {
         events.push({
             time: fmtTime(entry.checked_in_at),
-            label: entry.event_type === 'delivery' ? 'Entrega llegó' : entry.event_type === 'amenity' ? 'Acceso a amenidad' : entry.event_type === 'transport' ? 'Aviso de transporte recibido' : 'Entrada autorizada',
+            label: entry.event_type === 'delivery' ? 'Entrega llegó' : entry.event_type === 'amenity' ? 'Acceso a amenidad' : entry.event_type === 'transport' ? 'Transporte entrada por seguridad' : 'Entrada autorizada',
             icon: ArrowDownLeft,
             color: 'text-emerald-400',
         })
     }
     if (entry.checked_out_at) {
-        events.push({ time: fmtTime(entry.checked_out_at), label: entry.event_type === 'delivery' ? 'Entrega completada' : entry.event_type === 'transport' ? 'Transporte resuelto por seguridad' : 'Salida registrada', icon: ArrowUpRight, color: 'text-rose-400' })
+        events.push({ time: fmtTime(entry.checked_out_at), label: entry.event_type === 'delivery' ? 'Entrega completada' : entry.event_type === 'transport' ? 'Transporte salida por seguridad' : 'Salida registrada', icon: ArrowUpRight, color: 'text-rose-400' })
         if (entry.duration_minutes) {
             events.push({ time: '', label: `Permanencia total: ${fmtDuration(entry.duration_minutes)}`, icon: Clock, color: 'text-blue-400' })
         }
@@ -167,7 +178,7 @@ function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
                         { label: 'Permanencia', value: fmtDuration(entry.duration_minutes) },
                         { label: 'Guardia', value: entry.guard_name || '—' },
                         { label: 'Caseta', value: entry.checkpoint || '—' },
-                        { label: 'Autorizado por', value: entry.authorized_by || '—' },
+                        { label: 'Autorizado por', value: authorizedBy(entry) || '—' },
                         ...(entry.event_type === 'amenity' ? [{ label: 'Amenidad', value: entry.amenity_name || '—' }] : []),
                         ...(entry.event_type === 'delivery' ? [{ label: 'Empresa', value: entry.company || '—' }] : []),
                         ...(entry.event_type === 'transport' ? [{ label: 'Transporte', value: entry.company || '—' }] : []),
@@ -343,7 +354,7 @@ function PersonInsideCard({ entry, onSelect, onCheckout }: {
                     <div>
                         <p className="text-sm font-black text-white">{entry.person_name}</p>
                         {entry.unit_number && <p className="text-[11px] text-zinc-500">Unidad {entry.unit_number}</p>}
-                        {entry.authorized_by && <p className="text-[11px] text-zinc-600">Autorizado por {entry.authorized_by}</p>}
+                        {authorizedBy(entry) && <p className="text-[11px] text-zinc-600">Autorizado por {authorizedBy(entry)}</p>}
                     </div>
                 </div>
                 <button

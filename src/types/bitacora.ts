@@ -2,7 +2,7 @@
 // TypeScript types for Bitácora Inteligente module
 
 export type EventType = 'access' | 'delivery' | 'amenity' | 'transport'
-export type BitacoraStatus = 'active' | 'pending' | 'completed' | 'expired' | 'cancelled'
+export type BitacoraStatus = 'active' | 'pending' | 'completed' | 'expired' | 'cancelled' | 'rejected'
 export type SourceTable = 'visitor_passes' | 'package_alerts' | 'amenity_reservations' | 'transport_notices'
 export type VisitorType =
     | 'visit' | 'family' | 'friend' | 'provider' | 'technician'
@@ -29,6 +29,8 @@ export interface BitacoraEntry {
     company?: string
     amenity_name?: string
     created_at: string
+    rejection_reason?: string | null
+    vehicle_info?: string | null
 }
 
 export interface BitacoraKPIs {
@@ -117,6 +119,11 @@ export const STATUS_CONFIG: Record<BitacoraStatus, {
     },
     cancelled: {
         label: 'Cancelado',
+        color: 'text-rose-400',
+        bg: 'bg-rose-500/10',
+    },
+    rejected: {
+        label: 'Rechazado',
         color: 'text-rose-400',
         bg: 'bg-rose-500/10',
     },

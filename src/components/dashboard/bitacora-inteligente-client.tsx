@@ -95,7 +95,7 @@ function EventBadge({ type }: { type: EventType }) {
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: BitacoraStatus }) {
-    const cfg = STATUS_CONFIG[status]
+    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending
     const Icon = status === 'active' ? CheckCircle2 : status === 'completed' ? LogOut : status === 'cancelled' ? XCircle : AlertTriangle
     return (
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black ${cfg.bg} ${cfg.color}`}>
@@ -131,14 +131,19 @@ function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
         events.push({ time: fmtTime(entry.created_at), label: 'Aviso de transporte recibido', icon: Bell, color: 'text-sky-400' })
     }
     // En transporte, checked_in_at cae a created_at en la vista si aún no hay acceso.
-    const transportCheckedIn = entry.event_type !== 'transport' || (entry.status !== 'pending' && entry.status !== 'cancelled')
-    if (entry.checked_in_at && transportCheckedIn) {
+    // La vista usa created_at como entrada cuando aún no hay acceso; solo se
+    // muestra la entrada si realmente se registró.
+    const hasRealEntry = !['pending', 'cancelled', 'rejected', 'expired'].includes(entry.status)
+    if (entry.checked_in_at && hasRealEntry) {
         events.push({
             time: fmtTime(entry.checked_in_at),
             label: entry.event_type === 'delivery' ? 'Entrega llegó' : entry.event_type === 'amenity' ? 'Acceso a amenidad' : entry.event_type === 'transport' ? 'Transporte entrada por seguridad' : 'Entrada autorizada',
             icon: ArrowDownLeft,
             color: 'text-emerald-400',
         })
+    }
+    if (entry.status === 'rejected') {
+        events.push({ time: '', label: `Rechazado por seguridad${entry.rejection_reason ? `: ${entry.rejection_reason}` : ''}`, icon: XCircle, color: 'text-rose-400' })
     }
     if (entry.checked_out_at) {
         events.push({ time: fmtTime(entry.checked_out_at), label: entry.event_type === 'delivery' ? 'Entrega completada' : entry.event_type === 'transport' ? 'Transporte salida por seguridad' : 'Salida registrada', icon: ArrowUpRight, color: 'text-rose-400' })
@@ -179,6 +184,7 @@ function EntryTimeline({ entry, sourceData, onClose, onCheckout, userName }: {
                         { label: 'Guardia', value: entry.guard_name || '—' },
                         { label: 'Caseta', value: entry.checkpoint || '—' },
                         { label: 'Autorizado por', value: authorizedBy(entry) || '—' },
+                        ...(entry.vehicle_info ? [{ label: 'Color / Placas', value: entry.vehicle_info }] : []),
                         ...(entry.event_type === 'amenity' ? [{ label: 'Amenidad', value: entry.amenity_name || '—' }] : []),
                         ...(entry.event_type === 'delivery' ? [{ label: 'Empresa', value: entry.company || '—' }] : []),
                         ...(entry.event_type === 'transport' ? [{ label: 'Transporte', value: entry.company || '—' }] : []),

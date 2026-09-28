@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+import { isPasswordError, translateAuthError } from '@/lib/auth-errors'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -54,7 +55,7 @@ export async function resetPasswordWithCodeAction(
     type?: string,
     access_token?: string,
     refresh_token?: string
-) {
+): Promise<{ success: boolean; error?: string; message?: string }> {
     console.log('🔑 [resetPasswordWithCodeAction] Iniciando intento de cambio de contraseña...');
     const supabase = await createClient();
 
@@ -95,7 +96,13 @@ export async function resetPasswordWithCodeAction(
         console.log('   - Ejecutando updateUser...');
         const { error: updateError } = await supabase.auth.updateUser({ password });
 
-        if (updateError) throw updateError;
+        if (updateError) {
+            // La contraseña no cumple las reglas: el enlace sí es válido, hay que decirle por qué
+            if (isPasswordError(updateError.message, updateError.code)) {
+                return { success: false, error: 'WEAK_PASSWORD', message: translateAuthError(updateError.message, updateError.code) };
+            }
+            throw updateError;
+        }
 
         console.log('   🎉 [resetPasswordWithCodeAction] Contraseña actualizada con éxito');
         return { success: true };

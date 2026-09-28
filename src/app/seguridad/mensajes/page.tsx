@@ -22,12 +22,17 @@ export default async function SeguridadMensajesPage() {
     const adminSupabase = createAdminClient()
     const { data: orgUser } = await adminSupabase
         .from('organization_users')
-        .select('organization_id')
+        .select('organization_id, role_new')
         .eq('user_id', user.id)
         .maybeSingle()
 
     if (!orgUser?.organization_id) {
         redirect('/seguridad')
+    }
+
+    // La bandeja es de la administración; el guardia tiene su propio chat en Ayuda
+    if (orgUser.role_new === 'security') {
+        redirect('/seguridad/help')
     }
 
     return (

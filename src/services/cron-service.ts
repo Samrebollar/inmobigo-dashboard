@@ -118,6 +118,8 @@ export const cronService = {
     async dispararWebhookN8N(
         factura: {
             id: string
+            resident_id?: string
+            organization_id?: string
             amount: number
             balance_due?: number
             due_date: string
@@ -152,6 +154,10 @@ export const cronService = {
             condominium: factura.condominiums?.name || '',
             unit: factura.unit_number || 'S/N',
             days_overdue: dias,
+            // Para que n8n registre el envío en communication_logs
+            balance_due: factura.balance_due ?? factura.amount,
+            resident_id: factura.resident_id || null,
+            organization_id: factura.organization_id || null,
         }
 
         try {

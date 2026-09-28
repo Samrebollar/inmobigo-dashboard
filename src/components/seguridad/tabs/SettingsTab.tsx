@@ -16,6 +16,9 @@ import { getAmenitiesByCondominiumAction, saveAmenityAction, deleteAmenityAction
 import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 
+// Días de atraso en que el flujo de cobranza (n8n 05) escribe al residente
+const COBRANZA_DIAS_CLAVE = [7, 15, 30, 45, 60, 90]
+
 export function SettingsTab() {
     const { isPropiedades } = useUserRole()
     const params = useParams()
@@ -28,7 +31,7 @@ export function SettingsTab() {
     const [formData, setFormData] = useState<Partial<UpdateCondominiumDTO>>({})
     const [toggles, setToggles] = useState({
         reminders5: false, reminders3: false, reminders1: false,
-        late1: false, late3: false, late7: false,
+        lateKeyDays: false,
         feeFixed: false, feePercentage: false, feeApply: false
     })
 
@@ -247,9 +250,7 @@ export function SettingsTab() {
                 reminders5: settings.recordatorios_dias_antes?.includes(5) || false,
                 reminders3: settings.recordatorios_dias_antes?.includes(3) || false,
                 reminders1: settings.recordatorios_dias_antes?.includes(1) || false,
-                late1: settings.morosidad_dias_despues?.includes(1) || false,
-                late3: settings.morosidad_dias_despues?.includes(3) || false,
-                late7: settings.morosidad_dias_despues?.includes(7) || false,
+                lateKeyDays: (settings.morosidad_dias_despues?.length || 0) > 0,
                 feeFixed: settings.recargo_tipo === 'fijo',
                 feePercentage: settings.recargo_tipo === 'porcentaje',
                 feeApply: settings.recargo_activo || false
@@ -322,11 +323,7 @@ export function SettingsTab() {
                     ...(toggles.reminders3 ? [3] : []),
                     ...(toggles.reminders1 ? [1] : [])
                 ],
-                morosidad_dias_despues: [
-                    ...(toggles.late1 ? [1] : []),
-                    ...(toggles.late3 ? [3] : []),
-                    ...(toggles.late7 ? [7] : [])
-                ]
+                morosidad_dias_despues: toggles.lateKeyDays ? COBRANZA_DIAS_CLAVE : []
             })
 
             // 7. Refrescar los datos del formulario después de guardar
@@ -708,30 +705,13 @@ export function SettingsTab() {
                             <p className="font-medium text-white flex items-center gap-2">⚠️ Morosidad</p>
                         </div>
                         <div className="text-sm text-zinc-500 w-full pl-6">
-                            <p className="mb-3 text-zinc-400">Enviar:</p>
-                            <ul className="space-y-3">
-                                <li className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                                        <span>1 día después</span>
-                                    </div>
-                                    <Switch checked={toggles.late1} onCheckedChange={(s) => setToggles({...toggles, late1: s})} />
-                                </li>
-                                <li className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                                        <span>3 días después</span>
-                                    </div>
-                                    <Switch checked={toggles.late3} onCheckedChange={(s) => setToggles({...toggles, late3: s})} />
-                                </li>
-                                <li className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                                        <span>7 días después</span>
-                                    </div>
-                                    <Switch checked={toggles.late7} onCheckedChange={(s) => setToggles({...toggles, late7: s})} />
-                                </li>
-                            </ul>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-zinc-400">Cobranza automática por WhatsApp</span>
+                                <Switch checked={toggles.lateKeyDays} onCheckedChange={(s) => setToggles({...toggles, lateKeyDays: s})} />
+                            </div>
+                            <p className="mt-2 text-xs text-zinc-500">
+                                Un solo mensaje con el saldo total a los 7, 15, 30, 45, 60 y 90 días de atraso.
+                            </p>
                         </div>
                     </motion.div>
                     <motion.div 

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-import { LayoutDashboard, Settings, Wrench, LogOut, User, CreditCard, Zap, Bell, MessageCircle, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, Settings, LogOut, User, CreditCard, Zap, Bell, MessageCircle, ClipboardList } from 'lucide-react'
 import { DashboardLayoutClient } from '@/components/seguridad/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
@@ -193,14 +193,6 @@ export default async function DashboardLayout({
                 >
                     <ClipboardList size={18} className="text-indigo-400" />
                     <span>Mis Tareas</span>
-                </Link>
-
-                <Link
-                    href="/seguridad/maintenance"
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
-                >
-                    <Wrench size={18} />
-                    <span>Mantenimiento</span>
                 </Link>
 
                 <Link

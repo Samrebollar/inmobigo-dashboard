@@ -49,7 +49,7 @@ export default async function SecurityDashboardPage() {
       .limit(1)
 
     // Determine final context
-    let finalOrganizationId = orgUser?.organization_id || 
+    const finalOrganizationId = orgUser?.organization_id || 
                              (userCondos && userCondos.length > 0 ? userCondos[0].organization_id : null)
 
     // AUTO-ACTIVATION: If pending, make active
@@ -60,11 +60,8 @@ export default async function SecurityDashboardPage() {
         .eq('user_id', user.id)
     }
 
-    // If still no org, try fallback to any organization for staff/security
-    if (!finalOrganizationId && (orgUser?.role_new === 'security' || profile?.role_new === 'security')) {
-      const { data: anyOrg } = await adminSupabase.from('organizations').select('id').limit(1).maybeSingle()
-      if (anyOrg) finalOrganizationId = anyOrg.id
-    }
+    // Sin organización asignada NO se toma otra (antes se usaba la primera de la
+    // base de datos, lo que podía mostrar datos de otro cliente)
 
     const safeOrgId = finalOrganizationId || 'no-context'
 

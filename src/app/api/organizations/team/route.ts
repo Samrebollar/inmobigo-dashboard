@@ -48,6 +48,13 @@ export async function GET() {
         }
 
         const userIds = teamMembers.map(tm => tm.user_id)
+
+        // El dueño de la organización es el Administrador (su role_new suele ser admin_condominio)
+        const { data: org } = await adminSupabase
+            .from('organizations')
+            .select('owner_id')
+            .eq('id', orgId)
+            .maybeSingle()
         
         // 3. Fetch Profiles
         const { data: profiles } = await adminSupabase
@@ -75,6 +82,7 @@ export async function GET() {
                 user_id: tm.user_id,
                 role: tm.role_new || tm.role || 'viewer',
                 status: tm.status || 'active',
+                is_owner: !!org?.owner_id && tm.user_id === org.owner_id,
                 created_at: tm.created_at,
                 email,
                 first_name,
@@ -84,7 +92,8 @@ export async function GET() {
 
         // Sort: owner/admin at top
         const roleWeight: Record<string, number> = { 'owner': 0, 'admin': 1, 'admin_condominio': 1, 'admin_propiedad': 1, 'manager': 2, 'staff': 3, 'user': 4, 'viewer': 5 }
-        merged.sort((a, b) => (roleWeight[a.role] || 99) - (roleWeight[b.role] || 99))
+        const weight = (m: { role: string; is_owner: boolean }) => m.is_owner ? -1 : (roleWeight[m.role] ?? 99)
+        merged.sort((a, b) => weight(a) - weight(b))
 
         return NextResponse.json(merged)
 

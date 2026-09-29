@@ -20,13 +20,26 @@ export function useDemoMode() {
                     return
                 }
 
-                // Authenticated users: check for an active subscription
-                const { data: subscription, error: subError } = await supabase
+                // Authenticated users: check for an active subscription. La suscripción es de la
+                // organización, así que los miembros del equipo (auxiliares, etc.) también cuentan.
+                const { data: orgUser } = await supabase
+                    .from('organization_users')
+                    .select('organization_id')
+                    .eq('user_id', user.id)
+                    .limit(1)
+                    .maybeSingle()
+
+                const scope = orgUser?.organization_id
+                    ? `user_id.eq.${user.id},organization_id.eq.${orgUser.organization_id}`
+                    : `user_id.eq.${user.id}`
+
+                const { data: subscriptions, error: subError } = await supabase
                     .from('subscriptions')
                     .select('subscription_status')
-                    .eq('user_id', user.id)
+                    .or(scope)
                     .eq('subscription_status', 'active')
-                    .maybeSingle()
+                    .limit(1)
+                const subscription = subscriptions?.[0] ?? null
 
                 // If there's a query error, default to NOT demo (real account benefit-of-doubt)
                 if (subError) {

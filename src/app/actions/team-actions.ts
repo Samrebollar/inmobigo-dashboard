@@ -4,6 +4,43 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { Role } from '@/types/auth'
 
+async function findAuthUserByEmail(adminClient: ReturnType<typeof createAdminClient>, email: string) {
+    const target = email.toLowerCase()
+    const { data: profile } = await adminClient
+        .from('profiles')
+        .select('id')
+        .ilike('email', target)
+        .maybeSingle()
+    if (profile?.id) {
+        const { data } = await adminClient.auth.admin.getUserById(profile.id)
+        if (data?.user) return data.user
+    }
+    // listUsers es paginado: recorremos las páginas hasta encontrarlo
+    for (let page = 1; page <= 20; page++) {
+        const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 })
+        if (error || !data?.users?.length) break
+        const found = data.users.find(u => u.email?.toLowerCase() === target)
+        if (found) return found
+        if (data.users.length < 1000) break
+    }
+    return null
+}
+
+async function notifyExistingMemberAdded(payload: Record<string, string>) {
+    try {
+        const base = process.env.N8N_BASE_URL || 'https://n8n.inmobigo.mx'
+        const res = await fetch(`${base}/webhook/equipo-acceso-agregado`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        return res.ok
+    } catch (err) {
+        console.error('🔴 [notifyExistingMemberAdded]', err)
+        return false
+    }
+}
+
 export async function inviteTeamMemberAction(fullName: string, email: string, role: Role, organizationId: string) {
     if (!email || !role || !organizationId || !fullName) {
         return { success: false, error: 'Datos incompletos para enviar la invitación' }
@@ -59,10 +96,19 @@ export async function inviteTeamMemberAction(fullName: string, email: string, ro
             if (inviteError.message.includes('already exists') || inviteError.status === 422) {
                 console.log('⚠️ [inviteTeamMemberAction] El usuario ya existe en Auth, intentando vinculación directa...');
                 
-                const { data: existingUsers } = await adminClient.auth.admin.listUsers()
-                const existingUser = existingUsers.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-                
+                const existingUser = await findAuthUserByEmail(adminClient, email)
+
                 if (existingUser) {
+                    const { data: org } = await adminClient
+                        .from('organizations')
+                        .select('name, owner_id')
+                        .eq('id', organizationId)
+                        .maybeSingle()
+
+                    if (org?.owner_id === existingUser.id) {
+                        return { success: false, error: 'Ese correo es del administrador de la organización' }
+                    }
+
                     const { error: linkError } = await adminClient
                         .from('organization_users')
                         .upsert({
@@ -74,9 +120,24 @@ export async function inviteTeamMemberAction(fullName: string, email: string, ro
                         }, { onConflict: 'organization_id, user_id' })
 
                     if (linkError) throw linkError
-                    
+
+                    // Supabase no manda correo de invitación a cuentas que ya existen: avisamos por n8n
+                    const emailSent = await notifyExistingMemberAdded({
+                        email,
+                        nombre: fullName.split(' ')[0] || fullName,
+                        organizacion: org?.name || 'tu organización',
+                        rol: roleLabels[role] || role,
+                        descripcion: roleDescriptions[role] || '',
+                        url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.inmobigo.mx'}/login`
+                    })
+
                     revalidatePath('/dashboard/configuracion')
-                    return { success: true, message: 'Usuario existente vinculado a la organización' }
+                    return {
+                        success: true,
+                        message: emailSent
+                            ? 'El correo ya tenía cuenta: se agregó al equipo y se le avisó por correo'
+                            : 'El correo ya tenía cuenta: se agregó al equipo, pero no se pudo enviar el aviso por correo'
+                    }
                 }
             }
             throw inviteError

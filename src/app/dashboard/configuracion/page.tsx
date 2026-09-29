@@ -23,6 +23,7 @@ interface TeamMember {
     user_id: string
     role: Role
     status: 'active' | 'suspended' | 'pending'
+    is_owner?: boolean
     created_at: string
     // Joined user data
     email?: string
@@ -192,7 +193,7 @@ export default function SettingsPage() {
             success: (result) => {
                 if (!result.success) throw new Error(result.error)
                 fetchTeam(orgId) // Refresh the list
-                return `Invitación enviada a ${email}`
+                return ('message' in result && result.message) || `Invitación enviada a ${email}`
             },
             error: (err) => `Error: ${err.message}`
         })
@@ -277,12 +278,14 @@ export default function SettingsPage() {
                                         <div className="flex flex-col items-end gap-2">
                                             <Badge variant="outline" className={`
                                                 px-3 py-1 rounded-lg border font-black text-[9px] uppercase tracking-widest
-                                                ${['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) 
+                                                ${member.is_owner
+                                                    ? 'border-violet-500/40 bg-violet-500/10 text-violet-300 shadow-[0_0_15px_rgba(139,92,246,0.15)]'
+                                                    : ['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) 
                                                     ? 'border-indigo-500/30 bg-indigo-500/5 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
                                                     : 'border-zinc-800 bg-zinc-900 text-zinc-500'}
                                             `}>
                                                 {['admin', 'owner', 'admin_condominio', 'admin_propiedad'].includes(member.role) ? <Shield className="mr-1.5 h-3 w-3" /> : <User className="mr-1.5 h-3 w-3" />}
-                                                {member.role === 'admin_condominio' ? 'AUXILIAR DE CONDOMINIO' : (member.role || 'viewer').toUpperCase().replace('_', ' ')}
+                                                {member.is_owner ? 'ADMINISTRADOR' : member.role === 'admin_condominio' ? 'AUXILIAR DE CONDOMINIO' : member.role === 'security' ? 'SEGURIDAD' : (member.role || 'viewer').toUpperCase().replace('_', ' ')}
                                             </Badge>
                                             
                                             <div className="flex items-center gap-1.5">
@@ -293,7 +296,7 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                         
-                                        {member.role !== 'owner' && (
+                                        {member.role !== 'owner' && !member.is_owner && (
                                             <Button 
                                                 variant="ghost" 
                                                 size="icon" 

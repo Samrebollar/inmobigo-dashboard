@@ -1068,7 +1068,10 @@ export const financeService = {
 
 
         // Populate monthly data for the rolling 12 months chart
-        const monthlyData: Record<string, { cobrado: number, pendiente: number }> = {}
+        // Pendiente = aún dentro de su fecha límite; Morosidad = ya vencido
+        // (misma separación que las tarjetas Deuda Total / Morosidad de arriba).
+        const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+        const monthlyData: Record<string, { cobrado: number, pendiente: number, morosidad: number }> = {}
         ;(invoices || []).forEach((inv: any) => {
             const dateStr = inv.due_date || inv.created_at
             if (!dateStr) return
@@ -1079,7 +1082,7 @@ export const financeService = {
             const key = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' })
 
             if (!monthlyData[key]) {
-                monthlyData[key] = { cobrado: 0, pendiente: 0 }
+                monthlyData[key] = { cobrado: 0, pendiente: 0, morosidad: 0 }
             }
 
             const bal = Number(inv.balance_due || 0)
@@ -1087,8 +1090,11 @@ export const financeService = {
 
             monthlyData[key].cobrado += paid
 
-            if (inv.status === 'overdue' || inv.status === 'pending') {
-                monthlyData[key].pendiente += bal
+            if (bal > 0 && (inv.status === 'overdue' || inv.status === 'pending')) {
+                const due = String(inv.due_date || '').slice(0, 10)
+                const isOverdue = inv.status === 'overdue' || (!!due && due < todayMx)
+                if (isOverdue) monthlyData[key].morosidad += bal
+                else monthlyData[key].pendiente += bal
             }
         })
 
@@ -1099,7 +1105,8 @@ export const financeService = {
             const key = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' })
             const total_cobrado = monthlyData[key]?.cobrado || 0
             const total_pendiente = monthlyData[key]?.pendiente || 0
-            last12Months.push({ month: key, total_cobrado, total_pendiente })
+            const total_morosidad = monthlyData[key]?.morosidad || 0
+            last12Months.push({ month: key, total_cobrado, total_pendiente, total_morosidad })
         }
         stats.incomeSummary = last12Months
 

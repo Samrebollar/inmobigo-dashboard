@@ -20,6 +20,7 @@ interface IncomeComparisonChartProps {
         month: string
         total_cobrado: number
         total_pendiente: number
+        total_morosidad?: number
     }>
     isLoading?: boolean
 }
@@ -38,7 +39,8 @@ export function IncomeComparisonChart({ data, isLoading }: IncomeComparisonChart
         // Filter out items with no data if they are at the beginning
         let processed = data.map(item => ({
             ...item,
-            total_sum: Number(item.total_cobrado || 0) + Number(item.total_pendiente || 0)
+            total_morosidad: Number(item.total_morosidad || 0),
+            total_sum: Number(item.total_cobrado || 0) + Number(item.total_pendiente || 0) + Number(item.total_morosidad || 0)
         }))
 
         // Take last viewRange
@@ -71,8 +73,10 @@ export function IncomeComparisonChart({ data, isLoading }: IncomeComparisonChart
 
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
-            const cobrado = payload.find((p: any) => p.dataKey === 'total_cobrado')?.value || 0
-            const pendiente = payload.find((p: any) => p.dataKey === 'total_pendiente')?.value || 0
+            const valueOf = (key: string): number => Number(payload.find((p: { dataKey?: string; value?: number }) => p.dataKey === key)?.value || 0)
+            const cobrado = valueOf('total_cobrado')
+            const pendiente = valueOf('total_pendiente')
+            const morosidad = valueOf('total_morosidad')
             
             return (
                 <div className="bg-zinc-950/90 backdrop-blur-2xl border border-white/10 p-5 rounded-3xl shadow-2xl shadow-indigo-500/10 min-w-[200px] z-50">
@@ -86,9 +90,13 @@ export function IncomeComparisonChart({ data, isLoading }: IncomeComparisonChart
                             <span className="text-amber-400 text-xs font-medium">Pendiente</span>
                             <span className="text-white font-bold text-sm">${pendiente.toLocaleString()}</span>
                         </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-rose-400 text-xs font-medium">Morosidad</span>
+                            <span className="text-white font-bold text-sm">${morosidad.toLocaleString()}</span>
+                        </div>
                         <div className="pt-3 border-t border-white/5 flex items-center justify-between">
                             <span className="text-zinc-400 text-xs font-black">TOTAL</span>
-                            <span className="text-indigo-400 font-black text-sm">${(cobrado + pendiente).toLocaleString()}</span>
+                            <span className="text-indigo-400 font-black text-sm">${(cobrado + pendiente + morosidad).toLocaleString()}</span>
                         </div>
                     </div>
                 </div>
@@ -135,6 +143,10 @@ export function IncomeComparisonChart({ data, isLoading }: IncomeComparisonChart
                                 <stop offset="0%" stopColor="#f59e0b" />
                                 <stop offset="100%" stopColor="#d97706" />
                             </linearGradient>
+                            <linearGradient id="barMor" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#f43f5e" />
+                                <stop offset="100%" stopColor="#e11d48" />
+                            </linearGradient>
                         </defs>
                         
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.02)" />
@@ -176,6 +188,12 @@ export function IncomeComparisonChart({ data, isLoading }: IncomeComparisonChart
                             dataKey="total_pendiente" 
                             stackId="a" 
                             fill="url(#barPen)" 
+                            barSize={viewRange === 12 ? 15 : 35} 
+                        />
+                        <Bar 
+                            dataKey="total_morosidad" 
+                            stackId="a" 
+                            fill="url(#barMor)" 
                             radius={[6, 6, 0, 0]} 
                             barSize={viewRange === 12 ? 15 : 35} 
                         />
@@ -200,6 +218,10 @@ export function IncomeComparisonChart({ data, isLoading }: IncomeComparisonChart
                 <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]" />
                     <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Pendiente</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.3)]" />
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Morosidad</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.3)]" />

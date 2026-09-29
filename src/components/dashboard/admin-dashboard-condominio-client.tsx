@@ -62,7 +62,7 @@ export default function AdminDashboardCondominioClient({
     const [isLoadingMorosidad, setIsLoadingMorosidad] = useState(true)
     const [morosidadError, setMorosidadError] = useState<string | null>(null)
 
-    const [incomeSummary, setIncomeSummary] = useState<Array<{ month: string, total_cobrado: number, total_pendiente: number }>>([])
+    const [incomeSummary, setIncomeSummary] = useState<Array<{ month: string, total_cobrado: number, total_pendiente: number, total_morosidad?: number }>>([])
     const [isLoadingIncome, setIsLoadingIncome] = useState(true)
     const [incomeError, setIncomeError] = useState<string | null>(null)
 
@@ -307,6 +307,10 @@ export default function AdminDashboardCondominioClient({
                                         <div className="flex items-center gap-1.5">
                                             <div className="w-2 h-2 rounded-full bg-amber-500" />
                                             <span>Pendiente</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-2 h-2 rounded-full bg-rose-500" />
+                                            <span>Morosidad</span>
                                         </div>
                                         <div className="h-4 w-px bg-zinc-800 mx-1" />
                                         <div className="flex items-center gap-1.5 text-indigo-400">

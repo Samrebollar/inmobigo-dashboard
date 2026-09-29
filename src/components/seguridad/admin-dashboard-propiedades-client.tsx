@@ -60,7 +60,7 @@ export default function AdminDashboardPropiedadesClient({
     const [isLoadingMorosidad, setIsLoadingMorosidad] = useState(true)
     const [morosidadError, setMorosidadError] = useState<string | null>(null)
 
-    const [incomeSummary, setIncomeSummary] = useState<Array<{ month: string, total_cobrado: number, total_pendiente: number }>>([])
+    const [incomeSummary, setIncomeSummary] = useState<Array<{ month: string, total_cobrado: number, total_pendiente: number, total_morosidad?: number }>>([])
     const [isLoadingIncome, setIsLoadingIncome] = useState(true)
     const [incomeError, setIncomeError] = useState<string | null>(null)
 

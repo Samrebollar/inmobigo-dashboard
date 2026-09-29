@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, History } from 'lucide-react'
+import { ArrowLeft, Building, Phone, Mail, Plus, AlertTriangle, Search, Filter, Download, Zap, Receipt, CheckCircle, Clock, Sparkles, FilePlus, History, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +24,7 @@ import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/utils/supabase/client'
 import { calculateResidentMonthlyFinancials, calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { AccountStatementModal } from '@/components/finance/account-statement'
 
 const MONTHS = [
     { value: 'all', label: 'Este Año' },
@@ -58,6 +59,7 @@ export default function ResidentMovementsPage() {
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getMonth().toString())
     const [residentStartDate, setResidentStartDate] = useState<Date | null>(null)
     const [sendingReminder, setSendingReminder] = useState(false)
+    const [showStatementModal, setShowStatementModal] = useState(false)
     const [organizationId, setOrganizationId] = useState('')
     const [condominiumName, setCondominiumName] = useState('')
     const [status, setStatus] = useState<{ type: 'success' | 'warning' | 'error', message: string } | null>(null)
@@ -345,6 +347,18 @@ export default function ResidentMovementsPage() {
     }, [resident, invoices, selectedMonth, monthlyFee])
 
     const dynamicStats = financials
+
+    // Estado de cuenta mensual: mismo documento que descarga el residente en su panel
+    const currentMonthFinancials = useMemo(() => calculateResidentMonthlyFinancials({
+        resident,
+        invoices,
+        selectedMonth: String(new Date().getMonth()),
+        monthlyFee
+    }), [resident, invoices, monthlyFee])
+    const statementPayments = useMemo(() => {
+        const descById = new Map(invoices.map(inv => [inv.id, inv.description]))
+        return payments.map(p => ({ ...p, concept: descById.get(p.invoice_id) || 'Cuota de mantenimiento' }))
+    }, [invoices, payments])
     const filteredInvoices = useMemo(() => {
         return financials.filteredInvoices.filter(inv => {
             const matchesSearch = (inv.folio || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -492,6 +506,15 @@ export default function ResidentMovementsPage() {
                         >
                             {sendingReminder ? <Clock className="animate-spin" size={16} /> : <Zap size={16} className={stats.overdueCount > 0 ? "text-amber-500" : ""} />}
                             {sendingReminder ? 'Enviando...' : 'Recordatorio Inteligente'}
+                        </Button>
+
+                        <Button
+                            onClick={() => setShowStatementModal(true)}
+                            variant="outline"
+                            className="bg-zinc-900 border-zinc-700 hover:bg-zinc-800 text-zinc-300 gap-2"
+                        >
+                            <FileText size={16} className="text-indigo-400" />
+                            Estado de cuenta
                         </Button>
 
                         <Button
@@ -1006,6 +1029,19 @@ export default function ResidentMovementsPage() {
                     />
                 )
             }
+            {resident && (
+                <AccountStatementModal
+                    open={showStatementModal}
+                    onClose={() => setShowStatementModal(false)}
+                    residentName={[resident.first_name, resident.last_name].filter(Boolean).join(' ') || 'Residente'}
+                    condoName={condominiumName}
+                    unitNumber={unitNumber || resident.unit_number}
+                    invoices={invoices}
+                    payments={statementPayments}
+                    saldoTotal={stats.totalPending}
+                    saldoFavor={currentMonthFinancials.creditBalance || 0}
+                />
+            )}
         </div >
     )
 }

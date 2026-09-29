@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
     ClipboardList, Play, Check, Loader2, ChevronDown, Camera, Send,
-    Building2, Calendar, CheckCircle2, RefreshCw,
+    Building2, Calendar, CheckCircle2, RefreshCw, AlertTriangle, X,
 } from 'lucide-react'
 import type { TeamTask, TaskChecklistItem, TaskComment, TaskArea } from '@/types/team-tasks'
 import { TASK_AREA_ICONS } from '@/types/team-tasks'
@@ -63,6 +64,8 @@ export function MisTareasClient() {
     const [details, setDetails] = useState<Record<string, Details>>({})
     const [busy, setBusy] = useState<string | null>(null)
     const [comment, setComment] = useState('')
+    // Confirmación al completar con pasos del checklist sin marcar
+    const [confirmTask, setConfirmTask] = useState<{ task: TeamTask; pendingSteps: number } | null>(null)
     const fileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
@@ -104,10 +107,14 @@ export function MisTareasClient() {
         load()
     }
 
-    const handleComplete = async (task: TeamTask) => {
+    const handleComplete = async (task: TeamTask, force = false) => {
         if (!ctx || !me) return
         const pendingSteps = (details[task.id]?.checklist || []).filter(i => !i.is_completed).length
-        if (pendingSteps > 0 && !window.confirm(`Te faltan ${pendingSteps} paso(s) del checklist. ¿Marcar la tarea como completada de todos modos?`)) return
+        if (pendingSteps > 0 && !force) {
+            setConfirmTask({ task, pendingSteps })
+            return
+        }
+        setConfirmTask(null)
         setBusy(task.id)
         const r = await completeTaskAction(task.id, ctx.orgId, me)
         setBusy(null)
@@ -358,6 +365,48 @@ export function MisTareasClient() {
                     {done.length > 0 && renderSection('Completadas (últimos 7 días)', done)}
                 </>
             )}
+
+            <AnimatePresence>
+                {confirmTask && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-7 shadow-2xl"
+                        >
+                            <div className="mb-5 flex items-center justify-between">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-400">
+                                    <AlertTriangle size={22} />
+                                </div>
+                                <button onClick={() => setConfirmTask(null)} className="p-2 text-zinc-500 hover:text-white">
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <h3 className="mb-2 text-lg font-black text-white">
+                                {confirmTask.pendingSteps === 1 ? 'Te falta 1 paso del checklist' : `Te faltan ${confirmTask.pendingSteps} pasos del checklist`}
+                            </h3>
+                            <p className="mb-6 text-sm leading-relaxed text-zinc-400">
+                                ¿Quieres marcar <span className="font-semibold text-zinc-200">&quot;{confirmTask.task.title}&quot;</span> como completada de todos modos? La administración verá los pasos que quedaron sin marcar.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setConfirmTask(null)}
+                                    className="flex-1 rounded-xl border border-zinc-700 py-2.5 text-sm font-semibold text-zinc-300 hover:bg-zinc-800"
+                                >
+                                    Revisar pasos
+                                </button>
+                                <button
+                                    onClick={() => handleComplete(confirmTask.task, true)}
+                                    className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 flex items-center justify-center gap-2"
+                                >
+                                    <Check className="h-4 w-4" /> Completar
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

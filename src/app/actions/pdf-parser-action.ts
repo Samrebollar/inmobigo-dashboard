@@ -1,8 +1,5 @@
 'use server'
 
-import { PDFParse } from 'pdf-parse'
-import path from 'path'
-import { pathToFileURL } from 'url'
 
 export interface PDFExtractedData {
     success: boolean;
@@ -17,9 +14,18 @@ export interface PDFExtractedData {
     error?: string;
 }
 
-// Configuramos el worker para evitar errores en Next.js SSR (Windows requiere file://)
-const workerPath = path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
-PDFParse.setWorker(pathToFileURL(workerPath).href);
+// pdf-parse (pdfjs) se carga solo al leer un PDF: si se importa al inicio del
+// archivo, cualquier server action de la misma página (p. ej. elegir régimen
+// fiscal en Contabilidad) truena en Vercel con "DOMMatrix is not defined".
+// El worker va embebido (data URL) para no depender de rutas de node_modules.
+async function loadPdfParse() {
+    const [{ PDFParse }, { getData }] = await Promise.all([
+        import('pdf-parse'),
+        import('pdf-parse/worker'),
+    ])
+    PDFParse.setWorker(getData())
+    return PDFParse
+}
 
 export async function parseInvoicePDF(formData: FormData): Promise<PDFExtractedData> {
     try {
@@ -29,6 +35,7 @@ export async function parseInvoicePDF(formData: FormData): Promise<PDFExtractedD
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
+        const PDFParse = await loadPdfParse();
         const parser = new PDFParse({ data: buffer });
         const result = await parser.getText();
         const text = result.text;

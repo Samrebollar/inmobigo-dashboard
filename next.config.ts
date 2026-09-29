@@ -2,6 +2,9 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   reactStrictMode: false,
+  // pdf-parse/pdfjs usan @napi-rs/canvas (binario nativo): se cargan desde
+  // node_modules en lugar de empaquetarse, para que Vercel los incluya completos.
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
   typescript: {
     ignoreBuildErrors: true,
   },

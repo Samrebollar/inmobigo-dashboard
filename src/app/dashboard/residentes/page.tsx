@@ -38,6 +38,7 @@ import { demoDb } from '@/utils/demo-db'
 import { unitsService } from '@/services/units-service'
 import { useUserRole } from '@/hooks/use-user-role'
 import { calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { AccountStatementModal, StatementInvoice, StatementPayment } from '@/components/finance/account-statement'
 
 interface Condominium {
     id: string
@@ -75,6 +76,10 @@ function ResidentsContent() {
     const [isBulkOpen, setIsBulkOpen] = useState(false)
     const [invoiceModalResident, setInvoiceModalResident] = useState<ResidentWithFinance | null>(null)
     const [units, setUnits] = useState<any[]>([])
+    // Cargos y pagos del condominio, para el estado de cuenta mensual de cada residente
+    const [condoInvoices, setCondoInvoices] = useState<(StatementInvoice & { id: string; resident_id?: string | null })[]>([])
+    const [condoPayments, setCondoPayments] = useState<(StatementPayment & { invoice_id: string; resident_id: string })[]>([])
+    const [statementResident, setStatementResident] = useState<ResidentWithFinance | null>(null)
     const { checkAction, isDemo, loading: loadingDemo } = useDemoMode()
     const searchParams = useSearchParams()
     const condoIdParam = searchParams.get('condoId')
@@ -172,6 +177,8 @@ function ResidentsContent() {
             })
 
             setUnits(unitsData)
+            setCondoInvoices(invoicesData)
+            setCondoPayments(paymentsData)
 
             // Build a unit map for quick fee lookup
             const unitMap = new Map<string, any>()
@@ -251,6 +258,16 @@ function ResidentsContent() {
         `${resident.first_name} ${resident.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
         resident.unit_number?.toLowerCase().includes(search.toLowerCase())
     )
+
+    const statementData = useMemo(() => {
+        if (!statementResident) return null
+        const invs = condoInvoices.filter(inv => inv.resident_id === statementResident.id)
+        const descById = new Map(invs.map(inv => [inv.id, inv.description]))
+        const pays = condoPayments
+            .filter(p => p.resident_id === statementResident.id)
+            .map(p => ({ ...p, concept: descById.get(p.invoice_id) || 'Cuota de mantenimiento' }))
+        return { invoices: invs, payments: pays }
+    }, [statementResident, condoInvoices, condoPayments])
 
     // Helper for formatting currency
     const formatMoney = (amount: number) => {
@@ -576,6 +593,17 @@ function ResidentsContent() {
                                             <FilePlus className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" />
                                             <span className="lg:hidden xl:inline">Recibo</span><span className="hidden lg:inline xl:hidden">Cobrar</span>
                                         </motion.button>
+
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => setStatementResident(resident)}
+                                            className="flex-1 lg:flex-none w-full flex items-center justify-center lg:justify-start px-4 py-3 rounded-lg text-xs md:text-sm font-semibold transition-all
+                                            bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 hover:border-sky-500/30 shadow-lg shadow-sky-900/5 h-11 md:h-12"
+                                        >
+                                            <FileSpreadsheet className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5" />
+                                            <span className="lg:hidden xl:inline">Estado de cuenta</span><span className="hidden lg:inline xl:hidden">Estado</span>
+                                        </motion.button>
                                     </div>
                                 </div>
                             </CardContent>
@@ -630,6 +658,20 @@ function ResidentsContent() {
                     onClose={() => setIsBulkOpen(false)}
                     onSuccess={() => fetchData(selectedCondo)}
                     condominiumId={selectedCondo}
+                />
+            )}
+
+            {statementResident && statementData && (
+                <AccountStatementModal
+                    open={true}
+                    onClose={() => setStatementResident(null)}
+                    residentName={[statementResident.first_name, statementResident.last_name].filter(Boolean).join(' ') || 'Residente'}
+                    condoName={condominiums.find(c => c.id === selectedCondo)?.name || ''}
+                    unitNumber={statementResident.unit_number}
+                    invoices={statementData.invoices}
+                    payments={statementData.payments}
+                    saldoTotal={statementResident.calculatedDebt}
+                    saldoFavor={statementResident.calculatedCredit}
                 />
             )}
 

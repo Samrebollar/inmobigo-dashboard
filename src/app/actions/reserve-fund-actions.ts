@@ -5,6 +5,42 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { ReserveFund, ReserveFundTransaction } from '@/types/accounting'
 import { revalidatePath } from 'next/cache'
 
+const FUND_ADMIN_ROLES = ['owner', 'admin', 'admin_condominio', 'admin_propiedad']
+
+/**
+ * Estas acciones usan el cliente admin (sin RLS), así que antes de tocar el
+ * fondo se valida que quien llama sea administrador de la organización dueña
+ * del condominio. Sin esto, cualquier sesión podía mover fondos ajenos.
+ */
+async function assertFundAdmin(target: { condominiumId?: string; fundId?: string; transactionId?: string }) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No autorizado')
+
+    const adminClient = createAdminClient()
+    let condominiumId = target.condominiumId
+    let fundId = target.fundId
+    if (!condominiumId && !fundId && target.transactionId) {
+        const { data: tx } = await adminClient.from('reserve_fund_transactions').select('fund_id').eq('id', target.transactionId).maybeSingle()
+        fundId = tx?.fund_id
+    }
+    if (!condominiumId && fundId) {
+        const { data: fund } = await adminClient.from('reserve_fund').select('condominium_id').eq('id', fundId).maybeSingle()
+        condominiumId = fund?.condominium_id
+    }
+    if (!condominiumId) throw new Error('Fondo no encontrado')
+
+    const { data: condo } = await adminClient.from('condominiums').select('organization_id').eq('id', condominiumId).maybeSingle()
+    if (!condo?.organization_id) throw new Error('Condominio no encontrado')
+
+    const [{ data: orgUser }, { data: org }] = await Promise.all([
+        adminClient.from('organization_users').select('role_new').eq('user_id', user.id).eq('organization_id', condo.organization_id).maybeSingle(),
+        adminClient.from('organizations').select('owner_id').eq('id', condo.organization_id).maybeSingle(),
+    ])
+    const isAdmin = org?.owner_id === user.id || FUND_ADMIN_ROLES.includes(String(orgUser?.role_new || ''))
+    if (!isAdmin) throw new Error('No autorizado')
+}
+
 /**
  * Get reserve fund data for a condominium
  */
@@ -57,9 +93,12 @@ export async function getReserveFundData(condominiumId: string) {
  * Configure or Create Reserve Fund
  */
 export async function configureReserveFund(condominiumId: string, data: Partial<ReserveFund>) {
+    try {
+        await assertFundAdmin({ condominiumId })
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'No autorizado' }
+    }
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
     // Get org id for the condo
     const { data: condo } = await supabase
@@ -130,6 +169,11 @@ export async function recordFundTransaction(condominiumId: string, data: {
     expense_id?: string,
     invoice_id?: string
 }) {
+    try {
+        await assertFundAdmin({ condominiumId })
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'No autorizado' }
+    }
     const adminClient = createAdminClient()
     
     try {
@@ -184,6 +228,11 @@ export async function recordFundTransaction(condominiumId: string, data: {
  * Delete a fund transaction and revert the balance
  */
 export async function deleteFundTransaction(transactionId: string) {
+    try {
+        await assertFundAdmin({ transactionId })
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'No autorizado' }
+    }
     const adminClient = createAdminClient()
     
     try {
@@ -242,6 +291,11 @@ export async function updateFundTransaction(transactionId: string, data: {
     reason: string,
     description?: string
 }) {
+    try {
+        await assertFundAdmin({ transactionId })
+    } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'No autorizado' }
+    }
     const adminClient = createAdminClient()
     
     try {

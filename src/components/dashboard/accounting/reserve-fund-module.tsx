@@ -366,6 +366,7 @@ export function ReserveFundModule({ fundData, condominiumId, isAdmin = false }: 
             </div>
 
             <ConfigureFundModal 
+                key={isConfigModalOpen ? `open-${fund?.balance ?? 0}-${fund?.updated_at ?? ''}` : 'closed'}
                 isOpen={isConfigModalOpen}
                 onClose={() => setIsConfigModalOpen(false)}
                 condominiumId={condominiumId}

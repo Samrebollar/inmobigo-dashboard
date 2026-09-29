@@ -66,9 +66,11 @@ export function SatTaxProjection({ records, regime, condominiums = [] }: SatTaxP
         {
             title: "IVA por Pagar",
             amount: taxes.ivaPayable,
-            description: taxes.ivaPayable === 0 
-                ? "Totalmente compensado por egresos"
-                : `IVA Trasladado minus Acreditable`,
+            description: taxes.isExempt
+                ? "Cuotas de mantenimiento sin IVA"
+                : taxes.ivaPayable === 0
+                    ? "Compensado con IVA acreditable"
+                    : "IVA trasladado menos acreditable",
             icon: Scale,
             color: "text-blue-400",
             bg: "bg-blue-500/10",
@@ -77,7 +79,7 @@ export function SatTaxProjection({ records, regime, condominiums = [] }: SatTaxP
         {
             title: "ISR Estimado",
             amount: taxes.isrEstimated,
-            description: taxes.isExempt ? "No genera ISR (Cuotas sociales)" : "Proyección mensual SAT",
+            description: taxes.isExempt ? "No genera ISR (cuotas de condóminos)" : "Estimación acumulada del año",
             icon: Calculator,
             color: taxes.isExempt ? "text-emerald-400" : "text-purple-400",
             bg: taxes.isExempt ? "bg-emerald-500/10" : "bg-purple-500/10",
@@ -96,13 +98,13 @@ export function SatTaxProjection({ records, regime, condominiums = [] }: SatTaxP
 
     const getIATip = () => {
         if (taxes.isExempt) {
-            return "💡 IA Tip: Tu régimen de Condominio no lucrativo está exento de ISR en cuotas sociales. Asegúrate de que tus gastos operativos tengan CFDI para acreditar el IVA."
+            return "💡 IA Tip: Tu régimen de Condominio no lucrativo no paga IVA ni ISR por las cuotas de mantenimiento. Aun así, pide CFDI de tus gastos: son el respaldo de tus egresos ante los condóminos y el SAT."
         }
         if (regime === 'arrendamiento') {
             return "💡 IA Tip: Se está aplicando la deducción ciega del 35%. Si tus gastos de mantenimiento reales superan este porcentaje, podrías reducir tu carga fiscal registrándolos detalladamente."
         }
-        if (taxes.ivaPayable > 0 && records.filter(r => r.type === 'egreso').length === 0) {
-            return "⚠️ Alerta SAT: No se han registrado egresos deducibles. Esto incrementará tu pago de IVA al 16% total sobre tus ingresos."
+        if (taxes.ivaPayable > 0 && taxes.ivaAcreditable === 0) {
+            return "⚠️ Alerta SAT: No hay IVA acreditable capturado en tus gastos. Registra el IVA de cada factura (CFDI) al dar de alta el gasto para reducir tu pago de IVA."
         }
         return "✨ Estado Fiscal: Tu flujo de efectivo actual mantiene una base gravable saludable. Recuerda realizar tus pagos provisionales antes del día 17."
     }

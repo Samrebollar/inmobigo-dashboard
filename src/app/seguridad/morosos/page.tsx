@@ -45,6 +45,7 @@ export default function MorososPage() {
           .maybeSingle()
 
         let orgId = orgUserData?.organization_id
+        let realCondoId: string | null = null
 
         if (!orgId) {
           const { data: ownerOrg } = await supabase
@@ -64,11 +65,12 @@ export default function MorososPage() {
             .limit(1)
 
           if (condos && condos.length > 0) {
-            setCondominiumId(condos[0].id)
+            realCondoId = condos[0].id
+            setCondominiumId(realCondoId)
           }
         }
 
-        if (isDemo && !condominiumId) {
+        if (isDemo && !realCondoId) {
           const demoCondos = demoDb.getProperties()
           setCondominiumId(demoCondos.length > 0 ? demoCondos[0].id : 'demo-condo-1')
         }

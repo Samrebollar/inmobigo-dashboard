@@ -859,7 +859,7 @@ export default function ResidentPaymentsClient({
                     </label>
                 </div>
 
-                <div className="rounded-2xl border border-white/[0.06] bg-zinc-900/40 overflow-hidden">
+                <div className="rounded-2xl border border-indigo-500/30 bg-zinc-900/40 overflow-hidden shadow-[0_0_0_1px_rgba(99,102,241,0.05),0_16px_40px_-20px_rgba(99,102,241,0.35)] hover:border-indigo-500/50 transition-colors duration-300">
                     {periodFinancials.filteredInvoices.length === 0 ? (
                         <div className="py-14 px-6 flex flex-col items-center gap-2 text-center">
                             <Receipt size={26} className="text-zinc-700" />
@@ -869,7 +869,7 @@ export default function ResidentPaymentsClient({
                     ) : (
                         <>
                             {/* Encabezados (solo escritorio) */}
-                            <div className="hidden md:grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 px-6 py-3 border-b border-white/[0.06] bg-white/[0.02] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                            <div className="hidden md:grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 px-6 py-3 border-b border-indigo-500/20 bg-indigo-500/[0.04] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                                 <span>Concepto</span>
                                 <span>Vencimiento</span>
                                 <span>Estado</span>
@@ -1029,7 +1029,7 @@ export default function ResidentPaymentsClient({
                     </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/[0.06] bg-zinc-900/40 overflow-hidden">
+                <div className="rounded-2xl border border-emerald-500/30 bg-zinc-900/40 overflow-hidden shadow-[0_0_0_1px_rgba(16,185,129,0.05),0_16px_40px_-20px_rgba(16,185,129,0.35)] hover:border-emerald-500/50 transition-colors duration-300">
                     {directPayments.length === 0 ? (
                         <div className="py-14 px-6 flex flex-col items-center gap-2 text-center">
                             <Receipt size={26} className="text-zinc-700" />
@@ -1295,30 +1295,51 @@ export default function ResidentPaymentsClient({
 
 function MetricCard({ title, value, subtitle, icon: Icon, color, delay }: any) {
     const colorVariants: any = {
-        indigo: { icon: "text-indigo-400 bg-indigo-500/10", bar: "bg-indigo-500" },
-        emerald: { icon: "text-emerald-400 bg-emerald-500/10", bar: "bg-emerald-500" },
-        amber: { icon: "text-amber-400 bg-amber-500/10", bar: "bg-amber-500" },
-        rose: { icon: "text-rose-400 bg-rose-500/10", bar: "bg-rose-500" },
-        purple: { icon: "text-purple-400 bg-purple-500/10", bar: "bg-purple-500" },
+        indigo: { icon: "text-indigo-400 bg-indigo-500/10", bar: "bg-indigo-500", hover: "hover:border-indigo-500/40 hover:shadow-[0_12px_32px_-12px_rgba(99,102,241,0.45)]", glow: "bg-indigo-500" },
+        emerald: { icon: "text-emerald-400 bg-emerald-500/10", bar: "bg-emerald-500", hover: "hover:border-emerald-500/40 hover:shadow-[0_12px_32px_-12px_rgba(16,185,129,0.45)]", glow: "bg-emerald-500" },
+        amber: { icon: "text-amber-400 bg-amber-500/10", bar: "bg-amber-500", hover: "hover:border-amber-500/40 hover:shadow-[0_12px_32px_-12px_rgba(245,158,11,0.45)]", glow: "bg-amber-500" },
+        rose: { icon: "text-rose-400 bg-rose-500/10", bar: "bg-rose-500", hover: "hover:border-rose-500/40 hover:shadow-[0_12px_32px_-12px_rgba(244,63,94,0.45)]", glow: "bg-rose-500" },
+        purple: { icon: "text-purple-400 bg-purple-500/10", bar: "bg-purple-500", hover: "hover:border-purple-500/40 hover:shadow-[0_12px_32px_-12px_rgba(168,85,247,0.45)]", glow: "bg-purple-500" },
     }
     const variants = colorVariants[color] || colorVariants.indigo
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay, duration: 0.4 }}
-            className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-4 sm:p-5 hover:border-white/[0.12] transition-colors last:col-span-2 lg:last:col-span-1"
+            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay, duration: 0.45, ease: 'easeOut' }}
+            whileHover={{ y: -4 }}
+            className={cn(
+                "group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-4 sm:p-5 transition-[border-color,box-shadow] duration-300 last:col-span-2 lg:last:col-span-1",
+                variants.hover
+            )}
         >
-            <div className={cn("absolute left-0 top-0 h-full w-1", variants.bar)} />
-            <div className="flex items-center gap-2.5">
-                <div className={cn("h-8 w-8 shrink-0 rounded-lg flex items-center justify-center", variants.icon)}>
+            {/* Barra lateral: crece de arriba hacia abajo al entrar */}
+            <motion.div
+                initial={{ scaleY: 0 }}
+                animate={{ scaleY: 1 }}
+                transition={{ delay: delay + 0.15, duration: 0.5, ease: 'easeOut' }}
+                className={cn("absolute left-0 top-0 h-full w-1 origin-top", variants.bar)}
+            />
+            {/* Brillo de color al pasar el mouse */}
+            <div className={cn("pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full blur-3xl opacity-0 group-hover:opacity-25 transition-opacity duration-500", variants.glow)} />
+
+            <div className="relative flex items-center gap-2.5">
+                <div className={cn("h-8 w-8 shrink-0 rounded-lg flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6", variants.icon)}>
                     <Icon size={16} />
                 </div>
                 <p className="text-xs font-semibold text-zinc-400 leading-tight">{title}</p>
             </div>
-            <p className="mt-3 text-2xl sm:text-[28px] font-bold text-white tracking-tight tabular-nums">{value}</p>
-            <p className="mt-1 text-xs text-zinc-500 truncate" title={subtitle}>{subtitle}</p>
+            <motion.p
+                key={String(value)}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: delay + 0.1, duration: 0.35 }}
+                className="relative mt-3 text-2xl sm:text-[28px] font-bold text-white tracking-tight tabular-nums"
+            >
+                {value}
+            </motion.p>
+            <p className="relative mt-1 text-xs text-zinc-500 truncate" title={subtitle}>{subtitle}</p>
         </motion.div>
     )
 }

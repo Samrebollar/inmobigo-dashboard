@@ -1366,7 +1366,12 @@ export function ControlOperativoClient() {
     ].map(p => {
         const own = openTasks.filter(t => t.assigned_to === p.id)
         return { ...p, tasks: own, overdue: own.filter(t => isOverdue(t)).length }
-    }).sort((a, b) => b.tasks.length - a.tasks.length)
+    })
+        // Con filtro de propiedad o área solo se muestra a quien tiene tareas ahí
+        // (abiertas o completadas); sin filtro se muestra a todo el equipo
+        .filter(p => !(taskFilters.property_id || taskFilters.area) || filteredTasks.some(t => t.assigned_to === p.id))
+        .sort((a, b) => b.tasks.length - a.tasks.length)
+    const filteredPlaceName = ctx?.properties.find(pr => pr.id === taskFilters.property_id)?.name
     const unassigned = openTasks.filter(t => !t.assigned_to)
 
     const openCreate = () => { setCreateTaskPrefill(null); setShowCreateModal(true) }
@@ -1523,6 +1528,14 @@ export function ControlOperativoClient() {
                             ) : taskView === 'persona' ? (
                                 /* ── VISTA POR PERSONA ── */
                                 <div className="space-y-4">
+                                    {people.length === 0 && unassigned.length === 0 && (
+                                        <div className="rounded-2xl border border-dashed border-white/[0.1] p-8 text-center">
+                                            <p className="text-sm font-bold text-zinc-400">
+                                                Nadie tiene tareas {filteredPlaceName ? `en ${filteredPlaceName}` : 'con estos filtros'}
+                                            </p>
+                                            <p className="text-xs text-zinc-600 mt-1">Crea una tarea para esta propiedad con “Nueva tarea”.</p>
+                                        </div>
+                                    )}
                                     {people.map(p => (
                                         <div key={p.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
                                             <div className="flex items-center gap-3 mb-3">

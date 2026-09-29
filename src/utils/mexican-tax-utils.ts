@@ -21,57 +21,63 @@ export function calculateMexicanTaxes(
     // El usuario prefiere mantener solo lo cobrado (Pagados)
     const activeRecords = records.filter(r => r.status === 'pagado'); 
     
-    const grossIncome = activeRecords
+    // Los montos se registran tal como se cobran/pagan (IVA incluido cuando aplica).
+    const cobrado = activeRecords
         .filter(r => r.type === 'ingreso')
         .reduce((sum, r) => sum + Number(r.amount), 0);
-        
-    const deductibleExpenses = activeRecords
-        .filter(r => r.type === 'egreso')
-        .reduce((sum, r) => sum + Number(r.amount), 0);
 
-    const ivaTrasladado = grossIncome * 0.16;
-    
-    // IVA Acreditable: Use real data from CFDI/Manual if exists, else estimate
-    const ivaAcreditable = activeRecords
-        .filter(r => r.type === 'egreso')
-        .reduce((sum, r) => sum + (Number(r.iva_amount) || (Number(r.amount) * 0.16)), 0);
+    const egresos = activeRecords.filter(r => r.type === 'egreso');
+    // IVA acreditable: solo el capturado del comprobante (CFDI). Antes se
+    // estimaba 16% sobre el total del gasto cuando no había dato, lo que
+    // inflaba el IVA acreditable (y el 16% sobre un monto que ya lo incluye).
+    const ivaAcreditableRegistrado = egresos.reduce((sum, r) => sum + (Number(r.iva_amount) || 0), 0);
+    const egresosTotales = egresos.reduce((sum, r) => sum + Number(r.amount), 0);
 
-    const ivaPayable = Math.max(0, ivaTrasladado - ivaAcreditable);
-    
+    let grossIncome = cobrado;
+    let deductibleExpenses = egresosTotales;
+    let ivaTrasladado = 0;
+    let ivaAcreditable = 0;
     let isrEstimated = 0;
     let taxableBase = 0;
-    let utilidadFiscal = grossIncome - deductibleExpenses;
     let isExempt = false;
 
     switch (regime) {
         case 'condominio_no_lucrativo':
-            // El usuario solicitó calcular la base gravable de los ingresos (Pregunta 1: No a simple Ingresos-Egresos, 
-            // implicando que quiere ver el impacto sobre ingresos o remanente)
-            // Mostramos utilidad fiscal como base informativa
-            taxableBase = Math.max(0, grossIncome - deductibleExpenses);
-            // Tasa informativa del 30% para PM No Lucrativas sobre remanente ficto/excedente
-            isrEstimated = taxableBase * 0.30;
-            isExempt = true; // Sigue siendo exento en cuotas, pero mostramos proyección
+            // Las cuotas de mantenimiento de un condominio habitacional no causan
+            // IVA ni ISR para la asociación (persona moral con fines no lucrativos):
+            // no hay IVA trasladado ni base gravable. Antes se mostraba 16% de IVA
+            // y 30% de "ISR" sobre las cuotas como "Total a Pagar".
+            isExempt = true;
             break;
-            
+
         case 'arrendamiento':
-            // Aplicamos Deducción Ciega (35% fijo) como estimación profesional
-            const deduccionCiega = grossIncome * 0.35;
-            taxableBase = grossIncome - deduccionCiega;
+            // Ingreso neto de IVA (se asume que lo cobrado incluye IVA al 16%).
+            grossIncome = cobrado / 1.16;
+            ivaTrasladado = cobrado - grossIncome;
+            ivaAcreditable = ivaAcreditableRegistrado;
+            deductibleExpenses = egresosTotales - ivaAcreditableRegistrado;
+            // Deducción ciega (35% del ingreso) como estimación profesional
+            taxableBase = grossIncome * 0.65;
             // Tasa progresiva simplificada (aprox 20% para una base media)
             isrEstimated = taxableBase * 0.20;
             break;
-            
+
         case 'actividad_empresarial':
+            grossIncome = cobrado / 1.16;
+            ivaTrasladado = cobrado - grossIncome;
+            ivaAcreditable = ivaAcreditableRegistrado;
+            deductibleExpenses = egresosTotales - ivaAcreditableRegistrado;
             taxableBase = Math.max(0, grossIncome - deductibleExpenses);
             // Tasa estándar PM 30% como punto de partida profesional
             isrEstimated = taxableBase * 0.30;
             break;
-            
+
         default:
-            isrEstimated = 0;
-            taxableBase = 0;
+            break;
     }
+
+    const ivaPayable = Math.max(0, ivaTrasladado - ivaAcreditable);
+    const utilidadFiscal = grossIncome - deductibleExpenses;
 
     return {
         grossIncome,

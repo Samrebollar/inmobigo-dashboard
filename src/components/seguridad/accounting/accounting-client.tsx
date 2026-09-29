@@ -22,6 +22,7 @@ import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { FinancialRecord, FiscalRegime, REGIME_LABELS } from '@/types/accounting'
 import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateMexicanTaxes } from '@/utils/mexican-tax-utils'
 import { FinancialSummary } from './financial-summary'
 import { MovementManager } from './movement-manager'
 import { ReserveFundModule } from './reserve-fund-module'
@@ -167,8 +168,8 @@ export function AccountingClient({
     // Un condominio no lucrativo no causa ISR sobre las cuotas de mantenimiento
     // que cobra para su propia operación — solo Arrendamiento/Actividad
     // Empresarial son regímenes lucrativos sujetos a esta estimación.
-    const isBusinessRegime = !!regime && regime !== 'condominio_no_lucrativo'
-    const isrEstimado = isBusinessRegime ? Math.max(0, utilidad * 0.30) : 0
+    // Misma estimación que la vista Fiscal (SAT), para que ambas cuadren.
+    const isrEstimado = regime ? calculateMexicanTaxes(filteredRecordsForMetrics, regime).isrEstimated : 0
 
     const metrics = {
         totalCollected,

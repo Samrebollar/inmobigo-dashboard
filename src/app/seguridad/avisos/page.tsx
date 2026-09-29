@@ -42,17 +42,14 @@ export default async function AvisosPage() {
       .limit(1)
 
     // Determine final context
-    let finalOrganizationId = orgUser?.organization_id || 
+    const finalOrganizationId = orgUser?.organization_id || 
                              resident?.condominiums?.organization_id ||
                              (userCondos && userCondos.length > 0 ? userCondos[0].organization_id : null)
 
     let userRole = orgUser?.role_new || (resident ? 'resident' : 'security')
 
-    // If still no org, try fallback to any organization to avoid null crash
-    if (!finalOrganizationId) {
-      const { data: anyOrg } = await adminSupabase.from('organizations').select('id').limit(1).maybeSingle()
-      if (anyOrg) finalOrganizationId = anyOrg.id
-    }
+    // Sin organización asignada NO se toma otra (antes se usaba la primera de la
+    // base de datos, lo que podía mostrar datos de otro cliente)
 
     const safeOrgId = finalOrganizationId || 'no-context'
 

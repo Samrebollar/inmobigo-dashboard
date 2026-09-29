@@ -41,12 +41,10 @@ export default async function SeguridadBitacoraPage() {
         .or(`admin_id.eq.${user.id},security_user_id.eq.${user.id}`)
         .limit(1)
 
-    let orgId = orgUser?.organization_id || (userCondos && userCondos.length > 0 ? userCondos[0].organization_id : null)
+    const orgId = orgUser?.organization_id || (userCondos && userCondos.length > 0 ? userCondos[0].organization_id : null)
 
-    if (!orgId && (orgUser?.role_new === 'security' || profile?.role_new === 'security')) {
-        const { data: anyOrg } = await adminSupabase.from('organizations').select('id').limit(1).maybeSingle()
-        if (anyOrg) orgId = anyOrg.id
-    }
+    // Sin organización asignada NO se toma otra (antes se usaba la primera de la
+    // base de datos, lo que podía mostrar datos de otro cliente)
 
     if (!orgId) {
         return (

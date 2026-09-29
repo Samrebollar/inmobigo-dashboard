@@ -20,6 +20,11 @@ function getAdminClient() {
     )
 }
 
+/** Fecha de hoy en México (YYYY-MM-DD); el servidor corre en UTC. */
+function todayMx() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ACCESO — las acciones usan service role, así que se valida aquí que quien
 // llama pertenece a la organización (antes se confiaba en el organizationId
@@ -324,9 +329,17 @@ export async function updateTaskAction(
 
         const { data: previous } = await supabase
             .from('team_tasks')
-            .select('assigned_to')
+            .select('assigned_to, status, due_date, recurrence_rule')
             .eq('id', taskId)
             .maybeSingle()
+
+        // Una ocurrencia de tarea recurrente es para su día: el equipo no puede
+        // iniciarla ni completarla por adelantado (antes se podían completar
+        // los recorridos de toda la semana en unos minutos)
+        if (caller.role === 'security' && previous?.recurrence_rule && previous.due_date && previous.due_date > todayMx()) {
+            const fecha = new Date(`${previous.due_date}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+            return { success: false, error: `Esta tarea es para el ${fecha}` }
+        }
 
         const payload: any = { ...dto, updated_at: new Date().toISOString() }
         if (payload.recurrence_rule !== undefined) {
@@ -352,6 +365,11 @@ export async function updateTaskAction(
         else if (dto.status === 'cancelled') action = 'cancel'
         else if (dto.assigned_to) action = 'reassign'
 
+        // Solo cuenta como "se acaba de completar" si antes no lo estaba: evita
+        // que un doble clic o volver a marcar una tarea ya completada genere
+        // (o se salte) ocurrencias recurrentes
+        const justCompleted = action === 'complete' && previous?.status !== 'completed'
+
         await recordTaskHistory(supabase, {
             task_id: taskId,
             organization_id: organizationId,
@@ -369,7 +387,7 @@ export async function updateTaskAction(
         // completar, la incidencia se resuelve sola — antes había que crear la tarea
         // Y ADEMÁS acordarse de ir a Incidencias a cerrarla a mano (cosa que ni
         // siquiera era posible: no existía ninguna acción para cambiar su estado).
-        if (action === 'complete' && task.source_incident_id) {
+        if (justCompleted && task.source_incident_id) {
             await supabase
                 .from('tickets')
                 .update({ status: 'resolved' })
@@ -390,7 +408,7 @@ export async function updateTaskAction(
         // siguiente ocurrencia — antes "Recurrencia" en el formulario no hacía
         // nada: la tarea completada simplemente desaparecía del tablero y
         // alguien tenía que acordarse de volver a crearla a mano.
-        if (action === 'complete' && task.recurrence_rule) {
+        if (justCompleted && task.recurrence_rule) {
             try {
                 const rule: RecurrenceRule = JSON.parse(task.recurrence_rule)
                 await generateNextRecurrence(supabase, task, rule, updatedBy)
@@ -446,6 +464,20 @@ async function generateNextRecurrence(supabase: any, completedTask: any, rule: R
         ...rest
     } = completedTask
 
+    // Si ya existe la ocurrencia de esa fecha, no se duplica
+    let existingQuery = supabase
+        .from('team_tasks')
+        .select('id')
+        .eq('organization_id', completedTask.organization_id)
+        .eq('title', completedTask.title)
+        .eq('due_date', nextDueDate)
+        .limit(1)
+    existingQuery = completedTask.assigned_to
+        ? existingQuery.eq('assigned_to', completedTask.assigned_to)
+        : existingQuery.is('assigned_to', null)
+    const { data: existing } = await existingQuery
+    if (existing && existing.length > 0) return
+
     const { data: newTask, error } = await supabase
         .from('team_tasks')
         .insert({
@@ -458,7 +490,10 @@ async function generateNextRecurrence(supabase: any, completedTask: any, rule: R
         .select()
         .single()
 
-    if (error || !newTask) return
+    if (error || !newTask) {
+        console.error('[generateNextRecurrence] no se pudo crear la siguiente ocurrencia:', error, { taskId: completedTask.id, nextDueDate })
+        return
+    }
 
     // El checklist se copia como plantilla (sin marcar) — la ocurrencia nueva
     // arranca desde cero, no con las casillas ya completadas de la anterior.
@@ -756,7 +791,11 @@ export async function getMyTasksAction() {
             .eq('id', caller.userId)
             .maybeSingle()
 
-        const tasks: TeamTask[] = (data || []).map((t: any) => ({ ...t, property_name: t.condominiums?.name }))
+        // Las ocurrencias futuras de una tarea recurrente aparecen hasta su día
+        const today = todayMx()
+        const tasks: TeamTask[] = (data || [])
+            .filter((t: any) => !(t.recurrence_rule && t.status === 'pending' && t.due_date && t.due_date > today))
+            .map((t: any) => ({ ...t, property_name: t.condominiums?.name }))
         return {
             success: true,
             tasks,

@@ -718,7 +718,7 @@ export default function ResidentPaymentsClient({
                                 <span>Vencimiento</span>
                                 <span>Estado</span>
                                 <span className="text-right">Monto</span>
-                                <span className="w-[88px] text-right">Acción</span>
+                                <span className="w-[136px] text-right">Acción</span>
                             </div>
 
                             <div className="divide-y divide-white/[0.05]">
@@ -742,7 +742,7 @@ export default function ResidentPaymentsClient({
                                         const statusDot = isPaid ? 'bg-emerald-400' : inv.status === 'overdue' ? 'bg-rose-400' : 'bg-amber-400'
 
                                         const actions = (
-                                            <div className="flex justify-end gap-2">
+                                            <div className="flex justify-end gap-2 shrink-0">
                                                 {inv.evidence_url && (
                                                     <a
                                                         href={inv.evidence_url}
@@ -844,7 +844,7 @@ export default function ResidentPaymentsClient({
                                                 </div>
 
                                                 {/* Estado + acciones en móvil / acciones en escritorio */}
-                                                <div className="mt-3 md:mt-0 pl-12 md:pl-0 flex items-center justify-between md:justify-end gap-3 md:w-[88px]">
+                                                <div className="mt-3 md:mt-0 pl-12 md:pl-0 flex items-center justify-between md:justify-end gap-3 md:w-[136px]">
                                                     <span className={cn("md:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold", statusClass)}>
                                                         <span className={cn("h-1.5 w-1.5 rounded-full", statusDot)} />
                                                         {statusLabel}

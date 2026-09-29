@@ -156,6 +156,143 @@ export async function generateReceiptForResident(payment: any, residentName: str
     }
 }
 
+const money = (n: number) => `$${Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/**
+ * Estado de cuenta completo del residente en PDF: resumen con los mismos
+ * números de la pantalla, todos los cargos (cuotas) y todos los pagos.
+ */
+export function generateAccountStatementPdf(params: {
+    residentName: string
+    condoName: string
+    unitNumber?: string
+    invoices: any[]
+    payments: any[]
+    summary: { saldoTotal: number; vencido: number; pendiente: number; saldoFavor: number; saldoAnterior: number }
+}) {
+    const { residentName, condoName, unitNumber, invoices, payments, summary } = params
+    const doc = new jsPDF()
+    const emision = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+
+    // Encabezado (mismo estilo que el recibo de pago)
+    doc.setFillColor(79, 70, 229)
+    doc.rect(0, 0, 210, 35, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(22)
+    doc.text('ESTADO DE CUENTA', 14, 22)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text('InmobiGo', 196, 16, { align: 'right' })
+    doc.text(`Emitido: ${emision}`, 196, 23, { align: 'right' })
+
+    // Datos del residente
+    doc.setTextColor(40, 40, 40)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('RESIDENTE', 14, 48)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(`Nombre: ${residentName}`, 14, 56)
+    if (condoName) doc.text(`Condominio: ${condoName}`, 14, 62)
+    if (unitNumber) doc.text(`Unidad: ${unitNumber}`, 14, 68)
+
+    // Resumen
+    autoTable(doc, {
+        startY: 76,
+        head: [['Resumen', 'Monto']],
+        body: [
+            ['Cuotas vencidas', money(summary.vencido)],
+            ...(summary.saldoAnterior > 0 ? [['Saldo anterior / ajustes', money(summary.saldoAnterior)]] : []),
+            ['Pendiente del mes (dentro de plazo)', money(summary.pendiente)],
+            ['Saldo a favor', money(summary.saldoFavor)],
+            [{ content: 'SALDO TOTAL A PAGAR', styles: { fontStyle: 'bold' } }, { content: money(summary.saldoTotal), styles: { fontStyle: 'bold', textColor: summary.saldoTotal > 0 ? [190, 18, 60] : [5, 150, 105] } }],
+        ],
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [79, 70, 229] },
+        columnStyles: { 1: { halign: 'right', cellWidth: 50 } },
+        margin: { left: 14, right: 14 },
+    })
+
+    // Cargos
+    let y = (doc as any).lastAutoTable.finalY + 12
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(40, 40, 40)
+    doc.text('CARGOS', 14, y)
+    const cargos = [...invoices]
+        .filter(i => i.status !== 'cancelled')
+        .sort((a, b) => String(a.due_date || a.created_at).localeCompare(String(b.due_date || b.created_at)))
+    autoTable(doc, {
+        startY: y + 4,
+        head: [['Vencimiento', 'Folio', 'Concepto', 'Cargo', 'Pagado', 'Saldo', 'Estado']],
+        body: cargos.length === 0
+            ? [[{ content: 'Sin cargos registrados', colSpan: 7, styles: { halign: 'center', textColor: [120, 120, 120] } }]]
+            : cargos.map(i => {
+                const cargo = Number(i.amount || 0)
+                const saldo = i.status === 'paid' ? 0 : Number(i.balance_due ?? cargo)
+                return [
+                    formatDate(i.due_date || i.created_at),
+                    i.folio || '—',
+                    i.description || 'Cuota de mantenimiento',
+                    money(cargo),
+                    money(Math.max(0, cargo - saldo)),
+                    money(saldo),
+                    mapStatus(i.status),
+                ]
+            }),
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [79, 70, 229] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } },
+        margin: { left: 14, right: 14 },
+    })
+
+    // Pagos
+    y = (doc as any).lastAutoTable.finalY + 12
+    if (y > 250) { doc.addPage(); y = 20 }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.text('PAGOS RECIBIDOS', 14, y)
+    const pagos = [...payments].sort((a, b) => String(a.paid_at || a.created_at).localeCompare(String(b.paid_at || b.created_at)))
+    const totalPagado = pagos.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    autoTable(doc, {
+        startY: y + 4,
+        head: [['Fecha', 'Folio', 'Concepto', 'Forma de pago', 'Monto']],
+        body: pagos.length === 0
+            ? [[{ content: 'Sin pagos registrados', colSpan: 5, styles: { halign: 'center', textColor: [120, 120, 120] } }]]
+            : [
+                ...pagos.map(p => [
+                    formatDate(p.paid_at || p.created_at),
+                    p.folio || '—',
+                    p.concept || 'Cuota de mantenimiento',
+                    formatReceiptPaymentMethod(p.payment_method),
+                    money(p.amount),
+                ]),
+                [{ content: 'Total pagado', colSpan: 4, styles: { fontStyle: 'bold' } }, { content: money(totalPagado), styles: { fontStyle: 'bold' } }],
+            ],
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [5, 150, 105] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: { 4: { halign: 'right' } },
+        margin: { left: 14, right: 14 },
+    })
+
+    // Pie de página en todas las hojas
+    const pages = doc.getNumberOfPages()
+    for (let i = 1; i <= pages; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text('Documento informativo generado por InmobiGo. Para cualquier aclaración, contacta a la administración de tu condominio.', 14, 287)
+        doc.text(`Página ${i} de ${pages}`, 196, 287, { align: 'right' })
+    }
+
+    const fecha = new Date().toLocaleDateString('en-CA')
+    doc.save(`Estado_de_cuenta_${(unitNumber || residentName).replace(/\s+/g, '_')}_${fecha}.pdf`)
+}
+
 export default function ResidentPaymentsClient({
     resident,
     invoices: dbInvoices = [],
@@ -440,6 +577,29 @@ export default function ResidentPaymentsClient({
     const heroIsUpToDate = !heroIsOverdue && !heroIsPending
     const heroDebt = heroIsUpToDate ? 0 : montoPendienteTotal + montoMorosidadTotal + carriedOverDebt
 
+    const handleDownloadStatement = () => {
+        try {
+            generateAccountStatementPdf({
+                residentName: [resident.first_name, resident.last_name].filter(Boolean).join(' ') || 'Residente',
+                condoName: resident.condominiums?.name || '',
+                unitNumber: unit?.unit_number,
+                invoices: rawSource,
+                payments: directPayments,
+                summary: {
+                    saldoTotal: heroDebt,
+                    vencido: montoMorosidadTotal,
+                    pendiente: montoPendienteTotal,
+                    saldoFavor: currentMonthFinancials.creditBalance || 0,
+                    saldoAnterior: carriedOverDebt,
+                },
+            })
+            toast.success('Estado de cuenta descargado')
+        } catch (e) {
+            console.error('[Residente] Error al generar estado de cuenta:', e)
+            toast.error('No se pudo generar el estado de cuenta')
+        }
+    }
+
     return (
         <div className="mx-auto max-w-7xl space-y-12 p-6 md:p-10 animate-in fade-in duration-500 bg-[#09090b] min-h-screen font-sans">
             
@@ -571,6 +731,17 @@ export default function ResidentPaymentsClient({
                                     <p className="text-white text-sm font-black uppercase tracking-widest">Pago 100% seguro</p>
                                     <p className="text-sky-300/80 text-xs font-bold uppercase tracking-wider">Procesado por Mercado Pago</p>
                                 </div>
+                            </motion.div>
+
+                            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                                <Button
+                                    onClick={handleDownloadStatement}
+                                    variant="outline"
+                                    className="h-14 sm:h-20 md:h-20 px-5 sm:px-8 md:px-8 rounded-2xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white font-black text-sm md:text-sm uppercase tracking-widest flex items-center gap-3"
+                                >
+                                    <FileText className="h-5 w-5 text-indigo-300" />
+                                    Descargar estado de cuenta
+                                </Button>
                             </motion.div>
                         </div>
                     </div>

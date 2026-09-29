@@ -916,6 +916,7 @@ function CreateTaskModal({
     prefill?: Partial<{
         property_id: string; title: string; description: string;
         priority: TaskPriority; source_incident_id: string; images: string[]
+        assigned_to: string; assigned_name: string; area: TaskArea
     }>
 }) {
     const areas = Object.keys(AREA_LABELS) as TaskArea[]
@@ -923,10 +924,10 @@ function CreateTaskModal({
         title: prefill?.title || '',
         description: prefill?.description || '',
         property_id: prefill?.property_id || (properties[0]?.id || ''),
-        area: 'maintenance' as TaskArea,
+        area: (prefill?.area || 'maintenance') as TaskArea,
         priority: (prefill?.priority || 'medium') as TaskPriority,
-        assigned_to: '',
-        assigned_name: '',
+        assigned_to: prefill?.assigned_to || '',
+        assigned_name: prefill?.assigned_name || '',
         due_date: '',
         scheduled_at: '',
         checklist_input: '',
@@ -1393,11 +1394,22 @@ export function ControlOperativoClient() {
     )
 
     const KPIS = [
-        { label: 'Pendientes', value: kpis.pending, icon: ClipboardList, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-        { label: 'En proceso', value: kpis.in_progress, icon: Play, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-        { label: 'Vencidas', value: kpis.overdue, icon: Clock, color: 'text-orange-400', bg: 'bg-orange-500/10' },
-        { label: 'Completadas hoy', value: kpis.completed_today, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    ]
+        { label: 'Pendientes', value: kpis.pending, hint: 'Por iniciar', icon: ClipboardList, color: 'amber' },
+        { label: 'En proceso', value: kpis.in_progress, hint: 'Trabajando ahora', icon: Play, color: 'blue' },
+        { label: 'Vencidas', value: kpis.overdue, hint: kpis.overdue > 0 ? 'Pasaron su fecha límite' : 'Todo a tiempo', icon: Clock, color: 'rose' },
+        { label: 'Completadas hoy', value: kpis.completed_today, hint: kpis.completed_today > 0 ? '¡Buen trabajo!' : 'Aún ninguna hoy', icon: CheckCircle2, color: 'emerald' },
+    ] as const
+
+    const hasFilters = !!(taskFilters.search || taskFilters.area || taskFilters.property_id || taskFilters.status)
+    const assignTo = (member: { id: string; name: string; role: string }) => {
+        setCreateTaskPrefill({
+            assigned_to: member.id,
+            assigned_name: member.name,
+            area: member.role === 'security' ? 'security' : undefined,
+            property_id: taskFilters.property_id || undefined,
+        })
+        setShowCreateModal(true)
+    }
 
     return (
         <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans">
@@ -1429,17 +1441,9 @@ export function ControlOperativoClient() {
                 </motion.div>
 
                 {/* ─ Indicadores ─ */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    {KPIS.map(k => (
-                        <div key={k.label} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-                            <div>
-                                <p className={`text-2xl font-black ${k.color}`}>{tasksLoading ? '—' : k.value}</p>
-                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">{k.label}</p>
-                            </div>
-                            <div className={`p-2.5 rounded-xl ${k.bg}`}>
-                                <k.icon size={18} className={k.color} />
-                            </div>
-                        </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {KPIS.map((k, i) => (
+                        <OpsStatCard key={k.label} label={k.label} value={tasksLoading ? '—' : k.value} hint={k.hint} icon={k.icon} color={k.color} delay={i * 0.07} />
                     ))}
                 </div>
 
@@ -1448,8 +1452,8 @@ export function ControlOperativoClient() {
                     <div className={`flex-1 min-w-0 transition-all duration-300 ${selectedTask ? 'max-w-[calc(100%-380px)]' : 'w-full'}`}>
                         <div className="space-y-4">
                             {/* Toolbar */}
-                            <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex items-center gap-1 p-1 bg-white/[0.04] border border-white/[0.06] rounded-xl">
+                            <div className="flex flex-wrap items-center gap-2 p-2 rounded-2xl border border-white/[0.06] bg-zinc-900/40">
+                                <div className="flex items-center gap-1 p-1 bg-black/30 border border-white/[0.06] rounded-xl">
                                     {([
                                         { key: 'persona', label: 'Por persona', icon: Users },
                                         { key: 'list', label: 'Lista', icon: LayoutList },
@@ -1461,11 +1465,11 @@ export function ControlOperativoClient() {
                                         </button>
                                     ))}
                                 </div>
-                                <div className="relative">
-                                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                                <div className="relative flex-1 min-w-[180px]">
+                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                                     <input value={taskFilters.search} onChange={e => setTaskFilters(prev => ({ ...prev, search: e.target.value }))}
                                         placeholder="Buscar tarea o persona..."
-                                        className="pl-8 pr-4 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/40 transition-colors w-52" />
+                                        className="w-full pl-9 pr-4 py-2 bg-black/30 border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 transition-colors" />
                                 </div>
                                 {taskView === 'list' && (
                                     <CustomDropdown
@@ -1509,6 +1513,14 @@ export function ControlOperativoClient() {
                                         className="w-48"
                                     />
                                 )}
+                                {hasFilters && (
+                                    <button
+                                        onClick={() => setTaskFilters({ status: '', area: '', property_id: '', search: '' })}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+                                    >
+                                        <X size={13} /> Limpiar
+                                    </button>
+                                )}
                             </div>
 
                             {tasksLoading ? (
@@ -1529,42 +1541,78 @@ export function ControlOperativoClient() {
                                 /* ── VISTA POR PERSONA ── */
                                 <div className="space-y-4">
                                     {people.length === 0 && unassigned.length === 0 && (
-                                        <div className="rounded-2xl border border-dashed border-white/[0.1] p-8 text-center">
+                                        <div className="rounded-2xl border border-dashed border-white/[0.1] p-10 flex flex-col items-center gap-2 text-center">
+                                            <Users size={28} className="text-zinc-700" />
                                             <p className="text-sm font-bold text-zinc-400">
                                                 Nadie tiene tareas {filteredPlaceName ? `en ${filteredPlaceName}` : 'con estos filtros'}
                                             </p>
-                                            <p className="text-xs text-zinc-600 mt-1">Crea una tarea para esta propiedad con “Nueva tarea”.</p>
+                                            <p className="text-xs text-zinc-600">Crea una tarea para esta propiedad con “Nueva tarea”.</p>
                                         </div>
                                     )}
-                                    {people.map(p => (
-                                        <div key={p.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-9 h-9 rounded-full bg-indigo-500/15 flex items-center justify-center text-indigo-300 font-black text-sm">
-                                                    {(p.name || '?').trim().charAt(0).toUpperCase()}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-white truncate">{p.name}</p>
-                                                    {p.role && <p className="text-[10px] text-zinc-500">{ROLE_LABELS[p.role] || p.role}</p>}
-                                                </div>
-                                                <div className="flex items-center gap-2 text-[10px] font-bold">
-                                                    <span className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400">{p.tasks.length} abiertas</span>
-                                                    {p.overdue > 0 && <span className="px-2 py-1 rounded-lg bg-orange-500/10 text-orange-400">{p.overdue} vencidas</span>}
-                                                </div>
-                                            </div>
-                                            {p.tasks.length === 0 ? (
-                                                <p className="text-xs text-zinc-600 pl-12">Sin tareas pendientes ✅</p>
-                                            ) : (
-                                                <div className="space-y-2">{p.tasks.map(renderRow)}</div>
-                                            )}
-                                        </div>
-                                    ))}
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        {people.map((p, idx) => {
+                                            const own = filteredTasks.filter(t => t.assigned_to === p.id)
+                                            const inProgress = own.filter(t => t.status === 'in_progress').length
+                                            const doneToday = own.filter(t => t.status === 'completed' && t.completed_at && new Date(t.completed_at).toLocaleDateString('en-CA') === todayStr).length
+                                            const initials = (p.name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+                                            return (
+                                                <motion.div
+                                                    key={p.id}
+                                                    initial={{ opacity: 0, y: 12 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: idx * 0.05 }}
+                                                    className={`rounded-2xl border bg-zinc-900/40 p-4 sm:p-5 transition-[border-color,box-shadow] duration-300 ${
+                                                        p.overdue > 0
+                                                            ? 'border-rose-500/30 hover:border-rose-500/50 hover:shadow-[0_12px_32px_-16px_rgba(244,63,94,0.45)]'
+                                                            : 'border-indigo-500/25 hover:border-indigo-500/45 hover:shadow-[0_12px_32px_-16px_rgba(99,102,241,0.45)]'
+                                                    } ${p.tasks.length === 0 ? 'xl:col-span-1' : 'xl:col-span-2'}`}
+                                                >
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-indigo-500/20">
+                                                            {initials}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-base font-bold text-white truncate">{p.name}</p>
+                                                            {p.role && <p className="text-xs text-zinc-500">{ROLE_LABELS[p.role] || p.role}</p>}
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+                                                            <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">{p.tasks.length} abiertas</span>
+                                                            {inProgress > 0 && <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">{inProgress} en proceso</span>}
+                                                            {p.overdue > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">{p.overdue} vencidas</span>}
+                                                            {doneToday > 0 && <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{doneToday} hoy ✓</span>}
+                                                        </div>
+                                                        {p.role !== '' && (
+                                                            <button
+                                                                onClick={() => assignTo(p)}
+                                                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-colors"
+                                                            >
+                                                                <Plus size={13} /> Asignar tarea
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {p.tasks.length === 0 ? (
+                                                        <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 px-3 py-2.5 text-xs text-emerald-300/90">
+                                                            <CheckCircle2 size={14} className="text-emerald-400" />
+                                                            Sin tareas pendientes
+                                                        </div>
+                                                    ) : (
+                                                        <div className="mt-4 space-y-2">{p.tasks.map(renderRow)}</div>
+                                                    )}
+                                                </motion.div>
+                                            )
+                                        })}
+                                    </div>
                                     {unassigned.length > 0 && (
-                                        <div className="rounded-2xl border border-dashed border-white/[0.1] p-4">
-                                            <p className="text-sm font-bold text-zinc-300 mb-3">Sin asignar <span className="text-zinc-600 font-normal">· {unassigned.length}</span></p>
+                                        <div className="rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/[0.03] p-4 sm:p-5">
+                                            <p className="text-sm font-bold text-amber-300 mb-3 flex items-center gap-2">
+                                                <User size={14} /> Sin asignar <span className="text-zinc-500 font-normal">· {unassigned.length}</span>
+                                            </p>
                                             <div className="space-y-2">{unassigned.map(renderRow)}</div>
                                         </div>
                                     )}
-                                    <p className="text-[11px] text-zinc-600">Aquí solo aparecen las tareas abiertas. Las completadas están en la vista de Lista o Por estado.</p>
+                                    <p className="flex items-center gap-1.5 text-[11px] text-zinc-600">
+                                        <ClipboardList size={12} /> Aquí se ven las tareas abiertas. Las completadas están en <button onClick={() => setTaskView('list')} className="text-zinc-400 hover:text-white underline underline-offset-2">Lista</button> o <button onClick={() => setTaskView('kanban')} className="text-zinc-400 hover:text-white underline underline-offset-2">Por estado</button>.
+                                    </p>
                                 </div>
                             ) : filteredTasks.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-16 gap-2">
@@ -1641,5 +1689,53 @@ export function ControlOperativoClient() {
                 )}
             </AnimatePresence>
         </div>
+    )
+}
+
+// ─── Tarjeta de indicador (mismo estilo que Pagos del residente) ─────────────
+
+const OPS_STAT_COLORS: Record<string, { icon: string; bar: string; hover: string; glow: string; value: string }> = {
+    amber: { icon: 'text-amber-400 bg-amber-500/10', bar: 'bg-amber-500', hover: 'hover:border-amber-500/40 hover:shadow-[0_12px_32px_-12px_rgba(245,158,11,0.45)]', glow: 'bg-amber-500', value: 'text-white' },
+    blue: { icon: 'text-blue-400 bg-blue-500/10', bar: 'bg-blue-500', hover: 'hover:border-blue-500/40 hover:shadow-[0_12px_32px_-12px_rgba(59,130,246,0.45)]', glow: 'bg-blue-500', value: 'text-white' },
+    rose: { icon: 'text-rose-400 bg-rose-500/10', bar: 'bg-rose-500', hover: 'hover:border-rose-500/40 hover:shadow-[0_12px_32px_-12px_rgba(244,63,94,0.45)]', glow: 'bg-rose-500', value: 'text-white' },
+    emerald: { icon: 'text-emerald-400 bg-emerald-500/10', bar: 'bg-emerald-500', hover: 'hover:border-emerald-500/40 hover:shadow-[0_12px_32px_-12px_rgba(16,185,129,0.45)]', glow: 'bg-emerald-500', value: 'text-white' },
+}
+
+function OpsStatCard({ label, value, hint, icon: Icon, color, delay }: {
+    label: string; value: number | string; hint: string; icon: React.ElementType; color: string; delay: number
+}) {
+    const c = OPS_STAT_COLORS[color] || OPS_STAT_COLORS.amber
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay, duration: 0.45, ease: 'easeOut' }}
+            whileHover={{ y: -4 }}
+            className={`group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-4 sm:p-5 transition-[border-color,box-shadow] duration-300 ${c.hover}`}
+        >
+            <motion.div
+                initial={{ scaleY: 0 }}
+                animate={{ scaleY: 1 }}
+                transition={{ delay: delay + 0.15, duration: 0.5, ease: 'easeOut' }}
+                className={`absolute left-0 top-0 h-full w-1 origin-top ${c.bar}`}
+            />
+            <div className={`pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full blur-3xl opacity-0 group-hover:opacity-25 transition-opacity duration-500 ${c.glow}`} />
+            <div className="relative flex items-center gap-2.5">
+                <div className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6 ${c.icon}`}>
+                    <Icon size={16} />
+                </div>
+                <p className="text-xs font-semibold text-zinc-400">{label}</p>
+            </div>
+            <motion.p
+                key={String(value)}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: delay + 0.1, duration: 0.35 }}
+                className={`relative mt-3 text-3xl font-bold tracking-tight tabular-nums ${c.value}`}
+            >
+                {value}
+            </motion.p>
+            <p className="relative mt-1 text-xs text-zinc-500 truncate">{hint}</p>
+        </motion.div>
     )
 }

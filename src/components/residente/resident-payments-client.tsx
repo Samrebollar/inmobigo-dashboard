@@ -16,7 +16,6 @@ import {
     DollarSign,
     ShieldCheck,
     AlertCircle,
-    ArrowUpRight,
     History,
     Receipt,
     Loader2,
@@ -601,7 +600,7 @@ export default function ResidentPaymentsClient({
     }
 
     return (
-        <div className="mx-auto max-w-7xl space-y-12 p-6 md:p-10 animate-in fade-in duration-500 bg-[#09090b] min-h-screen font-sans">
+        <div className="mx-auto max-w-7xl space-y-8 md:space-y-10 p-4 sm:p-6 md:p-10 animate-in fade-in duration-500 bg-[#09090b] min-h-screen font-sans">
             
             {/* 1. HERO PRINCIPAL: ESTADO FINANCIERO */}
             <motion.div 
@@ -782,7 +781,7 @@ export default function ResidentPaymentsClient({
                 panel del administrador (Cuota Mensual, Total Pagado, Saldo Pendiente,
                 Cuotas Vencidas, Saldo a Favor), con la misma fórmula, para que
                 coincidan exacto. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
                 <MetricCard
                     title="Cuota Mensual"
                     value={`$${periodFinancials.cuotaMensual.toLocaleString('es-MX')}`}
@@ -832,263 +831,244 @@ export default function ResidentPaymentsClient({
             </div>
 
             {/* 3. ACTIVIDAD FINANCIERA */}
-            <div className="space-y-8">
-                <div className="flex flex-col md:flex-row items-center justify-between border-b border-white/5 pb-8 gap-4">
-                    <h2 className="text-3xl font-black text-white italic tracking-tight flex items-center gap-4">
-                        <History className="h-8 w-8 text-indigo-400" />
-                        Actividad Financiera
-                    </h2>
-                    
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.03] border border-white/10 group/select transition-all hover:border-white/20 shadow-xl">
-                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Periodo:</span>
-                            <select 
-                                value={selectedMonth}
-                                onChange={(e) => setSelectedMonth(e.target.value)}
-                                className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer appearance-none px-2 min-w-[100px]"
-                            >
-                                {availableMonths.map(m => (
-                                    <option key={m} value={m} className="bg-[#09090b]">{m}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={14} className="text-zinc-500 group-hover/select:text-white transition-colors" />
+            <div className="space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                            <History className="h-5 w-5 text-indigo-400" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-white tracking-tight">Actividad financiera</h2>
+                            <p className="text-xs text-zinc-500">Tus cuotas y cargos del periodo seleccionado</p>
                         </div>
                     </div>
+
+                    <label className="relative flex items-center gap-2 self-start sm:self-auto pl-4 pr-3 h-10 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-colors cursor-pointer">
+                        <Calendar size={14} className="text-zinc-500" />
+                        <span className="text-xs text-zinc-500">Periodo</span>
+                        <select
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="bg-transparent text-white text-sm font-semibold outline-none cursor-pointer appearance-none pr-5"
+                        >
+                            {availableMonths.map(m => (
+                                <option key={m} value={m} className="bg-[#09090b]">{m}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="text-zinc-500 absolute right-3 pointer-events-none" />
+                    </label>
                 </div>
 
-                <div className="bg-zinc-900/30 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[1100px]">
-                        <thead>
-                            <tr className="bg-white/[0.02]">
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha de Movimiento</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Folio</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Concepto</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Estado</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Monto</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Vencimiento</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Método de Pago</th>
-                                <th className="px-10 py-8 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Días de atraso</th>
-                                <th className="px-10 py-8 text-right text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/[0.03]">
-                            <AnimatePresence mode='popLayout'>
-                                {periodFinancials.filteredInvoices.map((inv: any, i: number) => {
-                                    const isPaid = inv.status === 'paid'
-                                    const dueDate = inv.due_date ? new Date(inv.due_date) : null
-                                    let atrasoDias = 0
-                                    if (isPaid && inv.paid_at && dueDate) {
-                                        atrasoDias = Math.max(0, Math.floor((new Date(inv.paid_at).getTime() - dueDate.getTime()) / 86400000))
-                                    } else if (!isPaid && dueDate && today > dueDate) {
-                                        atrasoDias = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / 86400000))
-                                    }
-                                    const isRealPaidReceipt = isPaid && inv.folio && !String(inv.id).startsWith('virtual-')
+                <div className="rounded-2xl border border-white/[0.06] bg-zinc-900/40 overflow-hidden">
+                    {periodFinancials.filteredInvoices.length === 0 ? (
+                        <div className="py-14 px-6 flex flex-col items-center gap-2 text-center">
+                            <Receipt size={26} className="text-zinc-700" />
+                            <p className="text-sm font-semibold text-zinc-400">Sin movimientos en {selectedMonth === 'Todos' ? 'tu cuenta' : selectedMonth}</p>
+                            <p className="text-xs text-zinc-600">Elige otro periodo para ver tus cuotas.</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Encabezados (solo escritorio) */}
+                            <div className="hidden md:grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 px-6 py-3 border-b border-white/[0.06] bg-white/[0.02] text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                                <span>Concepto</span>
+                                <span>Vencimiento</span>
+                                <span>Estado</span>
+                                <span className="text-right">Monto</span>
+                                <span className="w-[88px] text-right">Acción</span>
+                            </div>
 
-                                    return (
-                                    <motion.tr
-                                        key={inv.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        transition={{ delay: i * 0.05 }}
-                                        className="group hover:bg-white/[0.02] transition-colors"
-                                    >
-                                        <td className="px-10 py-8">
-                                            <span className="text-zinc-400 font-medium">{formatDate(inv.created_at)}</span>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <span className="text-white font-bold tracking-tight">{inv.folio}</span>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                                                    <Receipt size={16} />
-                                                </div>
-                                                <span className="text-zinc-400 font-medium">{inv.description}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <Badge className={cn(
-                                                "px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest border",
-                                                inv.status === 'paid'
-                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                    : inv.status === 'overdue'
-                                                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                            )}>
-                                                {inv.status === 'paid' ? 'Pagado' : inv.status === 'overdue' ? 'Vencida' : 'Pendiente'}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <span className="text-2xl font-black text-white tracking-tighter italic">
-                                                ${Number(inv.monto || 0).toLocaleString('es-MX')}
-                                            </span>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <span className="text-zinc-400 font-medium">{dueDate ? formatDate(inv.due_date) : '—'}</span>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <span className="text-zinc-500 text-sm">{inv.payment_method || '—'}</span>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            {atrasoDias > 0 ? (
-                                                <span className={cn(
-                                                    "text-xs font-bold tabular-nums",
-                                                    atrasoDias > 15 ? "text-rose-400" : "text-amber-400"
-                                                )}>
-                                                    {atrasoDias} día{atrasoDias !== 1 ? 's' : ''}
-                                                </span>
-                                            ) : (
-                                                <span className="text-zinc-600 text-xs font-bold">—</span>
-                                            )}
-                                        </td>
-                                        <td className="px-10 py-8">
+                            <div className="divide-y divide-white/[0.05]">
+                                <AnimatePresence mode='popLayout'>
+                                    {periodFinancials.filteredInvoices.map((inv: any, i: number) => {
+                                        const isPaid = inv.status === 'paid'
+                                        const dueDate = inv.due_date ? new Date(inv.due_date) : null
+                                        let atrasoDias = 0
+                                        if (isPaid && inv.paid_at && dueDate) {
+                                            atrasoDias = Math.max(0, Math.floor((new Date(inv.paid_at).getTime() - dueDate.getTime()) / 86400000))
+                                        } else if (!isPaid && dueDate && today > dueDate) {
+                                            atrasoDias = Math.max(0, Math.floor((today.getTime() - dueDate.getTime()) / 86400000))
+                                        }
+                                        const isRealPaidReceipt = isPaid && inv.folio && !String(inv.id).startsWith('virtual-')
+                                        const statusLabel = isPaid ? 'Pagado' : inv.status === 'overdue' ? 'Vencida' : 'Pendiente'
+                                        const statusClass = isPaid
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                            : inv.status === 'overdue'
+                                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                        const statusDot = isPaid ? 'bg-emerald-400' : inv.status === 'overdue' ? 'bg-rose-400' : 'bg-amber-400'
+
+                                        const actions = (
                                             <div className="flex justify-end gap-2">
                                                 {inv.evidence_url && (
-                                                    <motion.a
+                                                    <a
                                                         href={inv.evidence_url}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         title="Ver evidencia (PDF)"
-                                                        whileHover={{ scale: 1.2, rotate: -12 }}
-                                                        whileTap={{ scale: 0.9 }}
-                                                        className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition-all shadow-[0_0_20px_rgba(244,63,94,0)] hover:shadow-[0_0_20px_rgba(244,63,94,0.2)]"
+                                                        className="h-9 w-9 rounded-lg bg-white/[0.04] border border-white/10 text-zinc-300 hover:text-white hover:bg-white/[0.08] flex items-center justify-center transition-colors"
                                                     >
-                                                        <FileText size={20} />
-                                                    </motion.a>
+                                                        <FileText size={16} />
+                                                    </a>
                                                 )}
                                                 {!isPaid ? (
-                                                    <motion.button
+                                                    <button
                                                         title={`Pagar esta cuota ($${Number(inv.monto || 0).toLocaleString('es-MX')})`}
-                                                        whileHover={{ scale: 1.2, rotate: -12 }}
-                                                        whileTap={{ scale: 0.9 }}
                                                         onClick={() => handlePayInvoiceClick(inv)}
-                                                        className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/30 transition-all shadow-[0_0_20px_rgba(99,102,241,0)] hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                                                        className="h-9 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                                     >
-                                                        <CreditCard size={20} />
-                                                    </motion.button>
+                                                        <CreditCard size={14} /> Pagar
+                                                    </button>
                                                 ) : isRealPaidReceipt ? (
-                                                    <motion.button
+                                                    <button
                                                         title={`Descargar recibo ${inv.folio}`}
-                                                        whileHover={{ scale: 1.2, rotate: 12 }}
-                                                        whileTap={{ scale: 0.9 }}
                                                         onClick={() => generateReceiptForResident(
                                                             { folio: inv.folio, amount: inv.monto, payment_method: inv.payment_method, date: formatDate(inv.paid_at || inv.due_date || inv.created_at) },
                                                             resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
                                                             resident.condominiums?.name || '',
                                                             unit?.unit_number
                                                         )}
-                                                        className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all shadow-[0_0_20px_rgba(16,185,129,0)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                                                        className="h-9 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
                                                     >
-                                                        <Receipt size={20} />
-                                                    </motion.button>
+                                                        <Receipt size={14} /> Recibo
+                                                    </button>
                                                 ) : (
-                                                    <div
+                                                    <span
                                                         title="Recibo disponible solo cuando el pago esté confirmado"
-                                                        className="p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/30 text-zinc-600 cursor-default"
+                                                        className="h-9 px-3 rounded-lg bg-zinc-800/50 border border-zinc-700/30 text-zinc-600 text-xs font-semibold flex items-center gap-1.5 cursor-default"
                                                     >
-                                                        <Receipt size={20} />
-                                                    </div>
+                                                        <Receipt size={14} /> Recibo
+                                                    </span>
                                                 )}
                                             </div>
-                                        </td>
-                                    </motion.tr>
-                                    )
-                                })}
-                            </AnimatePresence>
-                        </tbody>
-                    </table>
+                                        )
+
+                                        return (
+                                            <motion.div
+                                                key={inv.id}
+                                                initial={{ opacity: 0, y: 6 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0 }}
+                                                transition={{ delay: i * 0.03 }}
+                                                className="px-4 md:px-6 py-4 hover:bg-white/[0.02] transition-colors md:grid md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:gap-4 md:items-center"
+                                            >
+                                                {/* Concepto */}
+                                                <div className="flex items-start gap-3 min-w-0">
+                                                    <div className="h-9 w-9 shrink-0 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                                                        <Receipt size={16} />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <p className="text-sm font-semibold text-white leading-snug line-clamp-2" title={inv.description}>{inv.description}</p>
+                                                            {/* Monto en móvil */}
+                                                            <span className="md:hidden text-base font-bold text-white tabular-nums whitespace-nowrap">
+                                                                ${Number(inv.monto || 0).toLocaleString('es-MX')}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                                                            <span className="font-mono">{inv.folio}</span>
+                                                            <span className="mx-1.5 text-zinc-700">·</span>
+                                                            {formatDate(inv.created_at)}
+                                                            {inv.payment_method && (
+                                                                <><span className="mx-1.5 text-zinc-700">·</span>{inv.payment_method}</>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Vencimiento */}
+                                                <div className="mt-3 md:mt-0 flex md:block items-center gap-2 pl-12 md:pl-0">
+                                                    <span className="text-xs text-zinc-500 md:hidden">Vence</span>
+                                                    <p className="text-sm text-zinc-300">{dueDate ? formatDate(inv.due_date) : '—'}</p>
+                                                    {atrasoDias > 0 && (
+                                                        <p className={cn("text-xs font-semibold tabular-nums", atrasoDias > 15 ? "text-rose-400" : "text-amber-400")}>
+                                                            {atrasoDias} día{atrasoDias !== 1 ? 's' : ''} de atraso
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Estado */}
+                                                <div className="hidden md:block">
+                                                    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold", statusClass)}>
+                                                        <span className={cn("h-1.5 w-1.5 rounded-full", statusDot)} />
+                                                        {statusLabel}
+                                                    </span>
+                                                </div>
+
+                                                {/* Monto (escritorio) */}
+                                                <div className="hidden md:block text-right">
+                                                    <span className="text-base font-bold text-white tabular-nums">${Number(inv.monto || 0).toLocaleString('es-MX')}</span>
+                                                </div>
+
+                                                {/* Estado + acciones en móvil / acciones en escritorio */}
+                                                <div className="mt-3 md:mt-0 pl-12 md:pl-0 flex items-center justify-between md:justify-end gap-3 md:w-[88px]">
+                                                    <span className={cn("md:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold", statusClass)}>
+                                                        <span className={cn("h-1.5 w-1.5 rounded-full", statusDot)} />
+                                                        {statusLabel}
+                                                    </span>
+                                                    {actions}
+                                                </div>
+                                            </motion.div>
+                                        )
+                                    })}
+                                </AnimatePresence>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
             {/* 3.5. HISTORIAL DE PAGOS REALIZADOS (ABONOS INDIVIDUALES) */}
-            <div className="space-y-6 pt-4">
-                <div className="flex flex-col md:flex-row items-center justify-between border-b border-white/5 pb-6 gap-4">
-                    <h2 className="text-2xl font-black text-white italic tracking-tight flex items-center gap-3">
-                        <div className="p-2.5 bg-emerald-500/10 rounded-2xl text-emerald-400 border border-emerald-500/20">
-                            <CreditCard className="h-6 w-6" />
-                        </div>
-                        Historial de Pagos Realizados (Transacciones)
-                    </h2>
-                    <span className="text-xs font-bold text-zinc-400 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl">
-                        Abonos individuales registrados
-                    </span>
+            <div className="space-y-5">
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                        <CreditCard className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold text-white tracking-tight">Pagos realizados</h2>
+                        <p className="text-xs text-zinc-500">Cada abono que registraste, con su recibo</p>
+                    </div>
                 </div>
 
-                <div className="bg-zinc-900/30 border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
+                <div className="rounded-2xl border border-white/[0.06] bg-zinc-900/40 overflow-hidden">
                     {directPayments.length === 0 ? (
-                        <div className="py-12 px-6 text-center">
-                            <div className="flex flex-col items-center justify-center gap-3">
-                                <div className="p-4 bg-zinc-900 rounded-full text-zinc-600 border border-zinc-800">
-                                    <Receipt size={28} />
-                                </div>
-                                <p className="text-zinc-400 font-bold text-sm">No hay transacciones registradas en el historial directo.</p>
-                                <p className="text-zinc-600 text-xs">Los pagos efectuados por Mercado Pago o Transferencia se registrarán aquí.</p>
-                            </div>
+                        <div className="py-14 px-6 flex flex-col items-center gap-2 text-center">
+                            <Receipt size={26} className="text-zinc-700" />
+                            <p className="text-sm font-semibold text-zinc-400">Aún no hay pagos registrados</p>
+                            <p className="text-xs text-zinc-600">Los pagos por Mercado Pago o transferencia aparecerán aquí.</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-white/[0.02]">
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Fecha</th>
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Concepto</th>
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Método de Pago</th>
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em]">Folio / Transacción</th>
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-right">Monto</th>
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-center">Estado</th>
-                                        <th className="px-8 py-6 text-zinc-500 font-black text-xs uppercase tracking-[0.2em] text-right">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/[0.03]">
-                                    {directPayments.map((pay: any, idx: number) => (
-                                        <tr key={pay.id || idx} className="group hover:bg-white/[0.02] transition-colors">
-                                            <td className="px-8 py-6">
-                                                <span className="text-zinc-300 font-bold text-xs">{formatDate(pay.paid_at || pay.created_at)}</span>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <span className="text-white font-medium text-xs">{pay.concept || 'Cuota de Mantenimiento'}</span>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <Badge className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold text-[10px] uppercase tracking-wider">
-                                                    {pay.payment_method || 'N/A'}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <span className="text-zinc-400 font-mono text-xs">{pay.folio}</span>
-                                            </td>
-                                            <td className="px-8 py-6 text-right">
-                                                <span className="text-emerald-400 font-black text-lg tracking-tight">
-                                                    ${Number(pay.amount || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-6 text-center">
-                                                <Badge className="px-4 py-1 rounded-xl font-black text-[10px] uppercase tracking-widest border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                                                    Completado
-                                                </Badge>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <div className="flex justify-end">
-                                                    <motion.button
-                                                        title={`Ver recibo ${pay.folio || ''}`}
-                                                        whileHover={{ scale: 1.15, rotate: 8 }}
-                                                        whileTap={{ scale: 0.9 }}
-                                                        onClick={() => generateReceiptForResident(
-                                                            { folio: pay.folio, concept: pay.concept, amount: pay.amount, payment_method: pay.payment_method, date: formatDate(pay.paid_at || pay.created_at) },
-                                                            resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
-                                                            resident.condominiums?.name || '',
-                                                            unit?.unit_number
-                                                        )}
-                                                        className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all"
-                                                    >
-                                                        <Receipt size={16} />
-                                                    </motion.button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="divide-y divide-white/[0.05]">
+                            {directPayments.map((pay: any, idx: number) => (
+                                <div key={pay.id || idx} className="px-4 md:px-6 py-4 flex items-center gap-3 hover:bg-white/[0.02] transition-colors">
+                                    <div className="h-9 w-9 shrink-0 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                                        <CheckCircle2 size={16} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-semibold text-white truncate">{pay.concept || 'Cuota de Mantenimiento'}</p>
+                                        <p className="text-xs text-zinc-500 truncate">
+                                            {formatDate(pay.paid_at || pay.created_at)}
+                                            <span className="mx-1.5 text-zinc-700">·</span>
+                                            {pay.payment_method || 'N/A'}
+                                            {pay.folio && (<><span className="mx-1.5 text-zinc-700">·</span><span className="font-mono">{pay.folio}</span></>)}
+                                        </p>
+                                    </div>
+                                    <span className="text-base font-bold text-emerald-400 tabular-nums whitespace-nowrap">
+                                        ${Number(pay.amount || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                    </span>
+                                    <button
+                                        title={`Ver recibo ${pay.folio || ''}`}
+                                        onClick={() => generateReceiptForResident(
+                                            { folio: pay.folio, concept: pay.concept, amount: pay.amount, payment_method: pay.payment_method, date: formatDate(pay.paid_at || pay.created_at) },
+                                            resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
+                                            resident.condominiums?.name || '',
+                                            unit?.unit_number
+                                        )}
+                                        className="h-9 px-3 shrink-0 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Receipt size={14} /> <span className="hidden sm:inline">Recibo</span>
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -1098,24 +1078,24 @@ export default function ResidentPaymentsClient({
             <motion.div 
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-indigo-600/5 border border-indigo-500/20 p-10 rounded-[3rem] space-y-8 relative overflow-hidden group"
+                className="bg-indigo-600/5 border border-indigo-500/20 p-5 sm:p-6 rounded-2xl space-y-5 relative overflow-hidden group"
             >
                 <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-transparent to-transparent" />
                 
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
                     <div className="space-y-2 text-center md:text-left">
-                        <h4 className="text-sm font-black text-indigo-400 uppercase tracking-[0.4em]">Cumplimiento Financiero Anual</h4>
-                        <p className="text-3xl font-black text-white italic tracking-tight">
+                        <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Cumplimiento anual</h4>
+                        <p className="text-xl font-bold text-white tracking-tight">
                             {cuotasPagadas} de 12 cuotas liquidadas
                         </p>
                     </div>
                     <div className="text-right">
-                        <span className="text-5xl font-black text-indigo-400 tracking-tighter">{cumplimientoPorcentaje}%</span>
+                        <span className="text-3xl font-bold text-indigo-400 tracking-tight tabular-nums">{cumplimientoPorcentaje}%</span>
                         <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mt-1 text-center md:text-right">Progreso Fiscal 2026</p>
                     </div>
                 </div>
 
-                <div className="relative h-4 w-full bg-white/5 rounded-full overflow-hidden p-1 border border-white/5 relative z-10">
+                <div className="relative h-2.5 w-full bg-white/5 rounded-full overflow-hidden z-10">
                     <motion.div 
                         initial={{ width: 0 }}
                         animate={{ width: `${cumplimientoPorcentaje}%` }}
@@ -1315,86 +1295,30 @@ export default function ResidentPaymentsClient({
 
 function MetricCard({ title, value, subtitle, icon: Icon, color, delay }: any) {
     const colorVariants: any = {
-        indigo: {
-            icon: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
-            border: "border-indigo-500/30 hover:border-indigo-500/50",
-            glow: "shadow-[0_0_20px_-12px_rgba(99,102,241,0.5)] hover:shadow-[0_0_30px_-10px_rgba(99,102,241,0.6)]",
-            accent: "bg-indigo-500"
-        },
-        emerald: {
-            icon: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-            border: "border-emerald-500/30 hover:border-emerald-500/50",
-            glow: "shadow-[0_0_20px_-12px_rgba(16,185,129,0.5)] hover:shadow-[0_0_30px_-10px_rgba(16,185,129,0.6)]",
-            accent: "bg-emerald-500"
-        },
-        amber: {
-            icon: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-            border: "border-amber-500/30 hover:border-amber-500/50",
-            glow: "shadow-[0_0_20px_-12px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_-10px_rgba(245,158,11,0.6)]",
-            accent: "bg-amber-500"
-        },
-        rose: {
-            icon: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-            border: "border-rose-500/30 hover:border-rose-500/50",
-            glow: "shadow-[0_0_20px_-12px_rgba(244,63,94,0.5)] hover:shadow-[0_0_30px_-10px_rgba(244,63,94,0.6)]",
-            accent: "bg-rose-500"
-        },
-        purple: {
-            icon: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-            border: "border-purple-500/30 hover:border-purple-500/50",
-            glow: "shadow-[0_0_20px_-12px_rgba(168,85,247,0.5)] hover:shadow-[0_0_30px_-10px_rgba(168,85,247,0.6)]",
-            accent: "bg-purple-500"
-        }
+        indigo: { icon: "text-indigo-400 bg-indigo-500/10", bar: "bg-indigo-500" },
+        emerald: { icon: "text-emerald-400 bg-emerald-500/10", bar: "bg-emerald-500" },
+        amber: { icon: "text-amber-400 bg-amber-500/10", bar: "bg-amber-500" },
+        rose: { icon: "text-rose-400 bg-rose-500/10", bar: "bg-rose-500" },
+        purple: { icon: "text-purple-400 bg-purple-500/10", bar: "bg-purple-500" },
     }
-
     const variants = colorVariants[color] || colorVariants.indigo
 
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ delay, duration: 0.5 }}
-            whileHover={{ y: -5, scale: 1.01 }}
-            className={cn(
-                "relative bg-zinc-900/40 border p-8 rounded-[2.5rem] space-y-6 backdrop-blur-md group transition-all duration-500 overflow-hidden",
-                variants.border,
-                variants.glow
-            )}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay, duration: 0.4 }}
+            className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-4 sm:p-5 hover:border-white/[0.12] transition-colors last:col-span-2 lg:last:col-span-1"
         >
-            {/* SaaS Animated Background Glow */}
-            <div className={cn(
-                "absolute -top-24 -right-24 h-64 w-64 rounded-full blur-[100px] opacity-0 group-hover:opacity-20 transition-all duration-1000 scale-150",
-                variants.accent
-            )} />
-            
-            <div className="flex items-center justify-between relative z-10">
-                <div className={cn("p-4 rounded-2xl border transition-all duration-500 group-hover:scale-110 group-hover:rotate-6", variants.icon)}>
-                    <Icon size={24} />
+            <div className={cn("absolute left-0 top-0 h-full w-1", variants.bar)} />
+            <div className="flex items-center gap-2.5">
+                <div className={cn("h-8 w-8 shrink-0 rounded-lg flex items-center justify-center", variants.icon)}>
+                    <Icon size={16} />
                 </div>
-                <div className="p-2 rounded-xl bg-white/[0.02] border border-white/5 text-zinc-600 group-hover:text-white group-hover:bg-white/5 transition-all">
-                    <ArrowUpRight size={16} />
-                </div>
+                <p className="text-xs font-semibold text-zinc-400 leading-tight">{title}</p>
             </div>
-
-            <div className="space-y-3 relative z-10">
-                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] group-hover:text-zinc-400 transition-colors">
-                    {title}
-                </p>
-                <div className="flex items-baseline gap-1">
-                    <h3 className="text-4xl font-black text-white tracking-tighter italic transition-all group-hover:scale-[1.02] origin-left">
-                        {value}
-                    </h3>
-                </div>
-                <p className="text-xs font-bold text-zinc-600 tracking-tight group-hover:text-zinc-500 transition-colors">
-                    {subtitle}
-                </p>
-            </div>
-
-            {/* Bottom Glow Line */}
-            <div className={cn(
-                "absolute bottom-0 left-0 h-[2px] w-0 group-hover:w-full transition-all duration-700 ease-in-out",
-                variants.accent
-            )} />
+            <p className="mt-3 text-2xl sm:text-[28px] font-bold text-white tracking-tight tabular-nums">{value}</p>
+            <p className="mt-1 text-xs text-zinc-500 truncate" title={subtitle}>{subtitle}</p>
         </motion.div>
     )
 }

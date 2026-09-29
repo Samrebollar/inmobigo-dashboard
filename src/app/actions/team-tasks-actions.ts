@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createSessionClient } from '@/utils/supabase/server'
 import type {
     CreateTaskDTO,
     UpdateTaskDTO,
@@ -20,6 +21,79 @@ function getAdminClient() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ACCESO — las acciones usan service role, así que se valida aquí que quien
+// llama pertenece a la organización (antes se confiaba en el organizationId
+// que mandaba el navegador).
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Caller = { userId: string; organizationId: string; role: string | null }
+
+async function getCaller(): Promise<Caller | null> {
+    const session = await createSessionClient()
+    const { data: { user } } = await session.auth.getUser()
+    if (!user) return null
+    const { data: orgUser } = await getAdminClient()
+        .from('organization_users')
+        .select('organization_id, role_new')
+        .eq('user_id', user.id)
+        .maybeSingle()
+    if (!orgUser?.organization_id) return null
+    return { userId: user.id, organizationId: orgUser.organization_id, role: orgUser.role_new || null }
+}
+
+/** Administración de la organización (el guardia usa las acciones de Mis Tareas). */
+async function assertOrgAdmin(organizationId: string) {
+    const caller = await getCaller()
+    if (!caller || caller.organizationId !== organizationId || caller.role === 'security') {
+        throw new Error('No autorizado')
+    }
+    return caller
+}
+
+/** Tarea de la organización del usuario; un guardia solo puede tocar las suyas. */
+async function assertTaskAccess(taskId: string) {
+    const caller = await getCaller()
+    if (!caller) throw new Error('No autorizado')
+    const { data: task } = await getAdminClient()
+        .from('team_tasks')
+        .select('id, organization_id, assigned_to')
+        .eq('id', taskId)
+        .maybeSingle()
+    if (!task || task.organization_id !== caller.organizationId) throw new Error('No autorizado')
+    if (caller.role === 'security' && task.assigned_to !== caller.userId) throw new Error('No autorizado')
+    return caller
+}
+
+async function assertChecklistItemAccess(itemId: string) {
+    const { data: item } = await getAdminClient()
+        .from('task_checklist_items')
+        .select('task_id')
+        .eq('id', itemId)
+        .maybeSingle()
+    if (!item) throw new Error('No autorizado')
+    return assertTaskAccess(item.task_id)
+}
+
+/**
+ * Aviso por WhatsApp al responsable (flujo n8n 34). n8n busca el teléfono en
+ * la base de datos a partir del task_id, así que el webhook no puede usarse
+ * para escribir a números arbitrarios.
+ */
+async function notifyTaskAssigned(taskId: string) {
+    try {
+        const base = process.env.N8N_BASE_URL || 'https://n8n.inmobigo.mx'
+        await fetch(`${base}/webhook/tarea-asignada-equipo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: taskId }),
+            signal: AbortSignal.timeout(5000),
+        })
+    } catch (err) {
+        console.error('[notifyTaskAssigned]', err)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // QUERIES
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -36,6 +110,7 @@ export async function getTeamTasksAction(
     }
 ) {
     try {
+        await assertOrgAdmin(organizationId)
         const supabase = getAdminClient()
 
         let query = supabase
@@ -72,6 +147,7 @@ export async function getTeamTasksAction(
 
 export async function getTeamTaskByIdAction(taskId: string) {
     try {
+        await assertTaskAccess(taskId)
         const supabase = getAdminClient()
 
         const [taskResult, checklistResult, commentsResult, historyResult] = await Promise.all([
@@ -116,6 +192,7 @@ export async function getTeamTaskByIdAction(taskId: string) {
 
 export async function getOperationsKPIsAction(organizationId: string, propertyId?: string) {
     try {
+        await assertOrgAdmin(organizationId)
         const supabase = getAdminClient()
 
         const today = new Date().toISOString().split('T')[0]
@@ -182,6 +259,7 @@ export async function createTaskAction(
     createdBy: { id: string; name: string }
 ) {
     try {
+        await assertOrgAdmin(dto.organization_id)
         const supabase = getAdminClient()
 
         const { checklist_items, ...taskPayload } = dto
@@ -220,6 +298,8 @@ export async function createTaskAction(
             details: `Tarea creada: "${task.title}"`,
         })
 
+        if (task.assigned_to) await notifyTaskAssigned(task.id)
+
         return { success: true, task }
     } catch (err: any) {
         return { success: false, error: err.message }
@@ -234,9 +314,21 @@ export async function updateTaskAction(
     changeDetails?: string
 ) {
     try {
+        const caller = await assertTaskAccess(taskId)
+        if (caller.organizationId !== organizationId) throw new Error('No autorizado')
+        // El guardia solo puede avanzar su propia tarea (iniciar / completar)
+        if (caller.role === 'security' && Object.keys(dto).some(k => !['status', 'started_at', 'completed_at'].includes(k))) {
+            throw new Error('No autorizado')
+        }
         const supabase = getAdminClient()
 
-        const payload: any = { ...dto }
+        const { data: previous } = await supabase
+            .from('team_tasks')
+            .select('assigned_to')
+            .eq('id', taskId)
+            .maybeSingle()
+
+        const payload: any = { ...dto, updated_at: new Date().toISOString() }
         if (payload.recurrence_rule !== undefined) {
             payload.recurrence_rule = payload.recurrence_rule
                 ? JSON.stringify(payload.recurrence_rule)
@@ -268,6 +360,10 @@ export async function updateTaskAction(
             action,
             details: changeDetails || `Tarea actualizada`,
         })
+
+        if (dto.assigned_to && dto.assigned_to !== previous?.assigned_to) {
+            await notifyTaskAssigned(taskId)
+        }
 
         // Si esta tarea vino de una incidencia (source_incident_id) y se acaba de
         // completar, la incidencia se resuelve sola — antes había que crear la tarea
@@ -421,6 +517,7 @@ export async function completeTaskAction(
 
 export async function deleteTaskAction(taskId: string, organizationId: string) {
     try {
+        await assertOrgAdmin(organizationId)
         const supabase = getAdminClient()
         const { error } = await supabase
             .from('team_tasks')
@@ -442,12 +539,14 @@ export async function duplicateTaskAction(
     createdBy: { id: string; name: string }
 ) {
     try {
+        await assertOrgAdmin(organizationId)
         const supabase = getAdminClient()
 
         const { data: original, error: fetchErr } = await supabase
             .from('team_tasks')
             .select('*')
             .eq('id', taskId)
+            .eq('organization_id', organizationId)
             .single()
 
         if (fetchErr || !original) return { success: false, error: fetchErr?.message || 'Tarea no encontrada' }
@@ -510,6 +609,7 @@ export async function addChecklistItemAction(
     label: string
 ) {
     try {
+        await assertOrgAdmin(organizationId)
         const supabase = getAdminClient()
         const { data, error } = await supabase
             .from('task_checklist_items')
@@ -530,6 +630,7 @@ export async function toggleChecklistItemAction(
     completedBy: { id: string; name: string }
 ) {
     try {
+        await assertChecklistItemAccess(itemId)
         const supabase = getAdminClient()
         const payload = completed
             ? { is_completed: true, completed_by: completedBy.id, completed_by_name: completedBy.name, completed_at: new Date().toISOString() }
@@ -551,6 +652,8 @@ export async function toggleChecklistItemAction(
 
 export async function deleteChecklistItemAction(itemId: string) {
     try {
+        const caller = await assertChecklistItemAccess(itemId)
+        if (caller.role === 'security') throw new Error('No autorizado')
         const supabase = getAdminClient()
         const { error } = await supabase.from('task_checklist_items').delete().eq('id', itemId)
         if (error) return { success: false, error: error.message }
@@ -572,6 +675,8 @@ export async function addTaskCommentAction(
     attachments?: string[]
 ) {
     try {
+        const caller = await assertTaskAccess(taskId)
+        if (caller.organizationId !== organizationId) throw new Error('No autorizado')
         const supabase = getAdminClient()
         const { data, error } = await supabase
             .from('task_comments')
@@ -622,3 +727,105 @@ async function recordTaskHistory(
     return supabase.from('task_history').insert(entry)
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MIS TAREAS — vista del miembro del equipo (guardia, auxiliar, etc.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Tareas asignadas al usuario de la sesión: abiertas + completadas en 7 días. */
+export async function getMyTasksAction() {
+    try {
+        const caller = await getCaller()
+        if (!caller) return { success: false, error: 'No autorizado', tasks: [] as TeamTask[] }
+
+        const supabase = getAdminClient()
+        const since = new Date(Date.now() - 7 * 86400000).toISOString()
+        const { data, error } = await supabase
+            .from('team_tasks')
+            .select('*, condominiums ( name )')
+            .eq('organization_id', caller.organizationId)
+            .eq('assigned_to', caller.userId)
+            .or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte."${since}")`)
+            .order('due_date', { ascending: true, nullsFirst: false })
+
+        if (error) return { success: false, error: error.message, tasks: [] as TeamTask[] }
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', caller.userId)
+            .maybeSingle()
+
+        const tasks: TeamTask[] = (data || []).map((t: any) => ({ ...t, property_name: t.condominiums?.name }))
+        return {
+            success: true,
+            tasks,
+            organizationId: caller.organizationId,
+            userId: caller.userId,
+            userName: profile?.full_name || 'Equipo',
+        }
+    } catch (err: any) {
+        return { success: false, error: err.message, tasks: [] as TeamTask[] }
+    }
+}
+
+/**
+ * Foto de evidencia de una tarea: se guarda en task_evidence y se agrega como
+ * comentario con la imagen adjunta (la ve la administración en la tarea).
+ */
+export async function addTaskEvidenceAction(formData: FormData) {
+    try {
+        const taskId = String(formData.get('task_id') || '')
+        const file = formData.get('file')
+        const note = String(formData.get('note') || '').trim()
+        if (!taskId || !(file instanceof File)) return { success: false, error: 'Falta la foto' }
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return { success: false, error: 'Formato de imagen no válido' }
+        if (file.size > 5 * 1024 * 1024) return { success: false, error: 'La foto pesa más de 5 MB' }
+
+        const caller = await assertTaskAccess(taskId)
+        const supabase = getAdminClient()
+
+        const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+        const path = `${caller.organizationId}/${taskId}/${crypto.randomUUID()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+            .from('task_evidence')
+            .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type })
+        if (uploadError) return { success: false, error: 'No se pudo subir la foto' }
+
+        const { data: { publicUrl } } = supabase.storage.from('task_evidence').getPublicUrl(path)
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', caller.userId)
+            .maybeSingle()
+        const authorName = profile?.full_name || 'Equipo'
+
+        const { data: comment, error } = await supabase
+            .from('task_comments')
+            .insert({
+                task_id: taskId,
+                organization_id: caller.organizationId,
+                author_id: caller.userId,
+                author_name: authorName,
+                body: note || '📷 Foto de evidencia',
+                attachments: [publicUrl],
+            })
+            .select()
+            .single()
+        if (error) return { success: false, error: error.message }
+
+        await recordTaskHistory(supabase, {
+            task_id: taskId,
+            organization_id: caller.organizationId,
+            user_id: caller.userId,
+            user_name: authorName,
+            action: 'comment',
+            details: 'Subió una foto de evidencia',
+        })
+
+        return { success: true, comment }
+    } catch (err: any) {
+        return { success: false, error: err.message }
+    }
+}

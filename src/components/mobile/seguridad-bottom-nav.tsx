@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, ScanLine, Package, User } from 'lucide-react'
+import { Home, ScanLine, Package, User, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
     { href: '/mobile/seguridad', label: 'Inicio', icon: Home, exact: true },
+    { href: '/seguridad/tareas', label: 'Tareas', icon: ClipboardList },
     { href: '/mobile/seguridad/escanear', label: 'Escanear', icon: ScanLine, isCenter: true },
     { href: '/mobile/seguridad/paqueteria', label: 'Paquetes', icon: Package },
     { href: '/mobile/seguridad/perfil', label: 'Perfil', icon: User },

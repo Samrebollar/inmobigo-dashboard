@@ -1321,13 +1321,18 @@ export function ControlOperativoClient() {
         loadTasks()
     }
 
-    // ── Indicadores (siempre sobre todas las tareas) ──
+    // ── Indicadores: respetan la propiedad y el área elegidas (no el estado ni
+    // la búsqueda, para que siempre muestren el panorama de esa propiedad) ──
     const todayStr = new Date().toLocaleDateString('en-CA')
+    const kpiTasks = tasks.filter(t =>
+        (!taskFilters.property_id || t.property_id === taskFilters.property_id) &&
+        (!taskFilters.area || t.area === taskFilters.area)
+    )
     const kpis = {
-        pending: tasks.filter(t => t.status === 'pending').length,
-        in_progress: tasks.filter(t => t.status === 'in_progress').length,
-        overdue: tasks.filter(t => isOverdue(t)).length,
-        completed_today: tasks.filter(t => t.status === 'completed' && t.completed_at
+        pending: kpiTasks.filter(t => t.status === 'pending').length,
+        in_progress: kpiTasks.filter(t => t.status === 'in_progress').length,
+        overdue: kpiTasks.filter(t => isOverdue(t)).length,
+        completed_today: kpiTasks.filter(t => t.status === 'completed' && t.completed_at
             && new Date(t.completed_at).toLocaleDateString('en-CA') === todayStr).length,
     }
 

@@ -5,19 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/utils/supabase/client'
 import { toast } from 'sonner'
 import {
-    Activity, ShieldAlert, ClipboardList, AlertTriangle,
+    Activity, ClipboardList,
     CheckCircle2, Users, Clock, LayoutList, Kanban,
     Plus, RefreshCw, X, Search,
-    MapPin, User, Calendar,
-    MoreVertical, Copy, Trash2, Play, Check, ArrowRight,
-    Building2, Maximize2, ChevronDown
+    User, Calendar,
+    MoreVertical, Copy, Trash2, Play, Check,
+    Building2, ChevronDown
 } from 'lucide-react'
-import { PremiumCard } from '@/components/ui/PremiumCard'
-import type { TeamTask, OperationsKPIs, TaskArea, TaskPriority, TaskStatus } from '@/types/team-tasks'
+import type { TeamTask, TaskArea, TaskPriority, TaskStatus } from '@/types/team-tasks'
 import { TASK_AREA_LABELS as AREA_LABELS, TASK_AREA_ICONS } from '@/types/team-tasks'
 import {
     getTeamTasksAction,
-    getOperationsKPIsAction,
+    getTeamTaskByIdAction,
     createTaskAction,
     updateTaskAction,
     startTaskAction,
@@ -28,9 +27,6 @@ import {
     toggleChecklistItemAction,
     addChecklistItemAction,
 } from '@/app/actions/team-tasks-actions'
-import { addIncidentCommentAction, getIncidentCommentsAction } from '@/app/actions/incident-comments-actions'
-import { updateIncidentStatusAction } from '@/app/actions/security-incident-actions'
-import { getIncidentSLAServer } from '@/app/actions/security-ops-actions'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -48,25 +44,16 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; glow
     urgent: { label: 'Urgente',  color: 'text-rose-400',   glow: 'rose' },
 }
 
-type IncidentStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
-
-const INCIDENT_STATUS_CONFIG: Record<IncidentStatus, { label: string; color: string; bg: string }> = {
-    open:        { label: 'Abierta',     color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/30' },
-    in_progress: { label: 'En atención', color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/30' },
-    resolved:    { label: 'Resuelta',    color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' },
-    closed:      { label: 'Cerrada',     color: 'text-zinc-500',    bg: 'bg-zinc-800/50 border-zinc-700/30' },
-}
-
-// El formulario de reporte del guardia (seguridad/incidencias) solo genera
-// 'low'|'medium'|'high'|'urgent' — 'critical' no es alcanzable desde ahí hoy,
-// pero se deja mapeado igual que 'urgent' por si algún día llega un ticket
-// con ese valor (dato legado, otra integración): así no se ve como "Baja".
-const INCIDENT_PRIORITY_CONFIG: Record<string, { label: string; color: string; glow: string }> = {
-    urgent:   { label: '🚨 Urgente', color: 'text-rose-400',   glow: 'rose' },
-    critical: { label: '🚨 Crítica', color: 'text-rose-400',   glow: 'rose' },
-    high:     { label: '🟠 Alta',    color: 'text-orange-400', glow: 'amber' },
-    medium:   { label: '🟡 Media',   color: 'text-amber-400',  glow: 'amber' },
-    low:      { label: '⚪ Baja',    color: 'text-zinc-400',   glow: 'zinc' },
+const ROLE_LABELS: Record<string, string> = {
+    security: 'Seguridad',
+    admin_condominio: 'Auxiliar de condominio',
+    admin_propiedad: 'Administrador de propiedad',
+    owner: 'Administrador',
+    admin: 'Administrador',
+    manager: 'Gerente',
+    accountant: 'Contador',
+    staff: 'Personal',
+    viewer: 'Observador',
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -86,8 +73,7 @@ interface ParsedIncident {
     isNew?: boolean
 }
 
-type ActiveTab = 'incidencias' | 'tareas'
-type TaskView = 'list' | 'kanban'
+type TaskView = 'persona' | 'list' | 'kanban'
 
 interface UserContext {
     userId: string
@@ -121,11 +107,9 @@ function parseIncident(t: any): ParsedIncident {
 
 function fmtDate(d?: string | null) {
     if (!d) return '—'
-    return new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' })
-}
-function fmtTime(d?: string | null) {
-    if (!d) return '—'
-    return new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    // Las fechas límite vienen como 'YYYY-MM-DD'; sin hora se leerían en UTC y
+    // en México se mostrarían un día antes
+    return new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 function fmtDateTime(d?: string | null) {
     if (!d) return '—'
@@ -134,7 +118,7 @@ function fmtDateTime(d?: string | null) {
 function isOverdue(task: TeamTask) {
     if (!task.due_date) return false
     if (task.status === 'completed' || task.status === 'cancelled') return false
-    return task.due_date < new Date().toISOString().split('T')[0]
+    return task.due_date < new Date().toLocaleDateString('en-CA')
 }
 
 function recurrenceLabel(rule?: string | null): string | null {
@@ -155,38 +139,6 @@ function recurrenceLabel(rule?: string | null): string | null {
     } catch {
         return null
     }
-}
-
-// ─── KPI Bar ──────────────────────────────────────────────────────────────────
-
-function KPIBar({ kpis, loading }: { kpis: OperationsKPIs | null; loading: boolean }) {
-    const cards = [
-        { label: 'Incidencias activas', value: kpis?.active_incidents ?? 0, icon: ShieldAlert, color: 'text-blue-400', bg: 'bg-blue-500/10', glow: 'blue' },
-        { label: 'Incidencias críticas', value: kpis?.critical_incidents ?? 0, icon: AlertTriangle, color: 'text-rose-400', bg: 'bg-rose-500/10', glow: 'rose' },
-        { label: 'Tareas pendientes', value: kpis?.pending_tasks ?? 0, icon: ClipboardList, color: 'text-amber-400', bg: 'bg-amber-500/10', glow: 'amber' },
-        { label: 'Tareas vencidas', value: kpis?.overdue_tasks ?? 0, icon: Clock, color: 'text-orange-400', bg: 'bg-orange-500/10', glow: 'amber' },
-        { label: 'Completadas hoy', value: kpis?.completed_today ?? 0, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', glow: 'emerald' },
-        { label: 'Personal trabajando', value: kpis?.staff_working ?? 0, icon: Users, color: 'text-indigo-400', bg: 'bg-indigo-500/10', glow: 'indigo' },
-    ]
-    return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {cards.map((c, i) => (
-                <PremiumCard key={c.label} glowColor={c.glow} delay={i * 0.05} hover={false} className="!p-4">
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 truncate">{c.label}</p>
-                            <h3 className={`text-3xl font-black tracking-tighter mt-1 ${c.color}`}>
-                                {loading ? <span className="inline-block w-6 h-6 bg-white/10 rounded animate-pulse" /> : c.value}
-                            </h3>
-                        </div>
-                        <div className={`p-2 rounded-xl ${c.bg} shrink-0`}>
-                            <c.icon size={18} className={c.color} />
-                        </div>
-                    </div>
-                </PremiumCard>
-            ))}
-        </div>
-    )
 }
 
 // ─── Custom Premium Dropdown ──────────────────────────────────────────────────
@@ -514,215 +466,6 @@ function DatePickerField({
                 )}
             </AnimatePresence>
         </div>
-    )
-}
-
-// ─── Incident Detail Panel ────────────────────────────────────────────────────
-
-function IncidentDetailPanel({
-    incident,
-    onClose,
-    onCreateTask,
-    onStatusChange,
-    orgId,
-    userId,
-    userName,
-}: {
-    incident: ParsedIncident
-    onClose: () => void
-    onCreateTask: (incident: ParsedIncident) => void
-    onStatusChange: (incident: ParsedIncident, status: IncidentStatus) => void
-    orgId: string
-    userId: string
-    userName: string
-}) {
-    const [comments, setComments] = useState<any[]>([])
-    const [newComment, setNewComment] = useState('')
-    const [sendingComment, setSendingComment] = useState(false)
-    const [selectedImage, setSelectedImage] = useState<string | null>(null)
-    const [changingStatus, setChangingStatus] = useState(false)
-    const cfg = INCIDENT_PRIORITY_CONFIG[incident.priority] || INCIDENT_PRIORITY_CONFIG.low
-
-    useEffect(() => {
-        getIncidentCommentsAction(incident.id).then(r => {
-            if (r.success) setComments(r.comments || [])
-        })
-    }, [incident.id])
-
-    const sendComment = async () => {
-        if (!newComment.trim()) return
-        setSendingComment(true)
-        const r = await addIncidentCommentAction(incident.id, orgId, { id: userId, name: userName }, newComment.trim())
-        if (r.success && r.comment) {
-            setComments(prev => [...prev, r.comment!])
-            setNewComment('')
-        } else toast.error('Error al enviar comentario')
-        setSendingComment(false)
-    }
-
-    const statusLabel: Record<string, string> = {
-        open: 'Abierta', in_progress: 'En atención', resolved: 'Resuelta', closed: 'Cerrada', pending: 'Pendiente',
-    }
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 40 }}
-            className="flex flex-col h-full bg-[#0d0d12]/95 border-l border-white/[0.06] overflow-hidden"
-        >
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4 p-5 border-b border-white/[0.06] shrink-0">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[9px] font-black uppercase tracking-widest ${cfg.color}`}>
-                            {cfg.label}
-                        </span>
-                        <span className="text-[9px] font-bold text-zinc-600 uppercase">
-                            {statusLabel[incident.status] || incident.status}
-                        </span>
-                    </div>
-                    <h3 className="text-base font-black text-white uppercase italic leading-tight truncate">
-                        {incident.title}
-                    </h3>
-                </div>
-                <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-500 hover:text-white transition-colors shrink-0">
-                    <X size={16} />
-                </button>
-            </div>
-
-            {/* Scrollable Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                {/* Status quick-change */}
-                <div>
-                    <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2">Estado</p>
-                    <div className="flex flex-wrap gap-2">
-                        {(Object.keys(INCIDENT_STATUS_CONFIG) as IncidentStatus[]).map(s => (
-                            <button
-                                key={s}
-                                disabled={changingStatus}
-                                onClick={async () => {
-                                    if (s === incident.status) return
-                                    setChangingStatus(true)
-                                    await onStatusChange(incident, s)
-                                    setChangingStatus(false)
-                                }}
-                                className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all disabled:opacity-40 ${
-                                    incident.status === s
-                                        ? `${INCIDENT_STATUS_CONFIG[s].bg} ${INCIDENT_STATUS_CONFIG[s].color}`
-                                        : 'bg-white/[0.02] border-white/[0.06] text-zinc-600 hover:text-zinc-300 hover:border-white/10'
-                                }`}>
-                                {INCIDENT_STATUS_CONFIG[s].label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Meta */}
-                <div className="grid grid-cols-2 gap-2">
-                    {[
-                        { icon: MapPin, label: 'Ubicación', value: incident.location },
-                        { icon: User, label: 'Reportado por', value: incident.guard },
-                        { icon: Building2, label: 'Propiedad', value: incident.condominium || '—' },
-                        { icon: Clock, label: 'Fecha', value: fmtDateTime(incident.created_at) },
-                    ].map(m => (
-                        <div key={m.label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                            <div className="flex items-center gap-1.5 mb-1">
-                                <m.icon size={10} className="text-zinc-600" />
-                                <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{m.label}</span>
-                            </div>
-                            <p className="text-xs font-bold text-zinc-300 truncate">{m.value}</p>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Description */}
-                <div>
-                    <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2">Descripción</p>
-                    <p className="text-sm text-zinc-400 leading-relaxed">{incident.description}</p>
-                </div>
-
-                {/* Evidence */}
-                {incident.images && incident.images.length > 0 && (
-                    <div>
-                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2">Evidencias ({incident.images.length})</p>
-                        <div className="grid grid-cols-3 gap-2">
-                            {incident.images.map((img, idx) => (
-                                <motion.div key={idx} whileHover={{ scale: 1.05 }} onClick={() => setSelectedImage(img)}
-                                    className="aspect-square rounded-xl overflow-hidden cursor-zoom-in border border-white/10 relative group">
-                                    <img src={img} alt={`ev-${idx}`} className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <Maximize2 size={16} className="text-white" />
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Comments */}
-                <div>
-                    <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-3">
-                        Comentarios internos ({comments.length})
-                    </p>
-                    <div className="space-y-2 mb-3">
-                        {comments.length === 0 ? (
-                            <p className="text-xs text-zinc-600 italic">Sin comentarios aún.</p>
-                        ) : comments.map((c: any) => (
-                            <div key={c.id} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[9px] font-black text-indigo-400">{c.author_name}</span>
-                                    <span className="text-[9px] text-zinc-600">{fmtDateTime(c.created_at)}</span>
-                                </div>
-                                <p className="text-xs text-zinc-300">{c.body}</p>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="flex gap-2">
-                        <input
-                            value={newComment}
-                            onChange={e => setNewComment(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendComment() }}}
-                            placeholder="Escribe un comentario..."
-                            className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 transition-colors"
-                        />
-                        <button onClick={sendComment} disabled={sendingComment || !newComment.trim()}
-                            className="px-3 py-2 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-colors">
-                            {sendingComment ? '...' : 'Enviar'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Footer: Create Task button */}
-            <div className="p-4 border-t border-white/[0.06] shrink-0">
-                <motion.button
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                    onClick={() => onCreateTask(incident)}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-500/20"
-                >
-                    <Plus size={14} />
-                    Crear Tarea desde Incidencia
-                    <ArrowRight size={14} />
-                </motion.button>
-            </div>
-
-            {/* Image Lightbox */}
-            <AnimatePresence>
-                {selectedImage && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        onClick={() => setSelectedImage(null)}
-                        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-sm p-8">
-                        <button onClick={() => setSelectedImage(null)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-rose-500 text-white rounded-xl transition-colors">
-                            <X size={20} />
-                        </button>
-                        <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }} src={selectedImage}
-                            alt="Vista ampliada" onClick={e => e.stopPropagation()}
-                            className="max-w-full max-h-[85vh] object-contain rounded-2xl border border-white/10 shadow-2xl" />
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </motion.div>
     )
 }
 
@@ -1101,6 +844,15 @@ function TaskDetailPanel({
                                     <span className="text-[9px] text-zinc-600">{fmtDateTime(c.created_at)}</span>
                                 </div>
                                 <p className="text-xs text-zinc-300">{c.body}</p>
+                                {c.attachments?.length > 0 && (
+                                    <div className="flex gap-2 mt-2">
+                                        {c.attachments.map((url: string, i: number) => (
+                                            <a key={i} href={url} target="_blank" rel="noreferrer" className="w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+                                                <img src={url} alt="evidencia" className="w-full h-full object-cover" />
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -1316,7 +1068,7 @@ function CreateTaskModal({
                                 { value: '', label: 'Sin asignar', icon: <User size={12} className="text-zinc-500" /> },
                                 ...teamMembers.map(m => ({
                                     value: m.id,
-                                    label: `${m.full_name} — ${m.role}`,
+                                    label: `${m.full_name} — ${ROLE_LABELS[m.role] || m.role}`,
                                     icon: <User size={12} className="text-indigo-400" />,
                                 }))
                             ]}
@@ -1437,37 +1189,24 @@ function CreateTaskModal({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function ControlOperativoClient() {
-    const [activeTab, setActiveTab] = useState<ActiveTab>('incidencias')
-    const [taskView, setTaskView] = useState<TaskView>('list')
+    // Vista por persona por defecto: de un vistazo, cuánto tiene pendiente cada quien
+    const [taskView, setTaskView] = useState<TaskView>('persona')
 
     // Data
-    const [kpis, setKpis] = useState<OperationsKPIs | null>(null)
-    const [incidents, setIncidents] = useState<ParsedIncident[]>([])
     const [tasks, setTasks] = useState<TeamTask[]>([])
-    const [incidentsError, setIncidentsError] = useState<string | null>(null)
-
-    // Loading
-    const [kpisLoading, setKpisLoading] = useState(true)
-    const [incidentsLoading, setIncidentsLoading] = useState(true)
     const [tasksLoading, setTasksLoading] = useState(true)
 
     // User context
     const [ctx, setCtx] = useState<UserContext | null>(null)
 
     // UI State
-    const [selectedIncident, setSelectedIncident] = useState<ParsedIncident | null>(null)
     const [selectedTask, setSelectedTask] = useState<TeamTask | null>(null)
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [createTaskPrefill, setCreateTaskPrefill] = useState<any>(null)
 
-    // Filters
+    // Filters (se aplican en el navegador para que los indicadores de arriba
+    // siempre reflejen el total del equipo)
     const [taskFilters, setTaskFilters] = useState({ status: '', area: '', property_id: '', search: '' })
-    const [incidentSearch, setIncidentSearch] = useState('')
-    const [incidentPropertyFilter, setIncidentPropertyFilter] = useState('')
-
-    // New incident toast
-    const [newIncidentToast, setNewIncidentToast] = useState<ParsedIncident | null>(null)
-    const toastTimer = useRef<any>(null)
 
     // ── Load user context ──
     useEffect(() => {
@@ -1494,12 +1233,15 @@ export function ControlOperativoClient() {
                 if (teamResponse.ok) {
                     const teamData = await teamResponse.json()
                     if (Array.isArray(teamData)) {
-                        teamMembers = teamData.map((m: any) => ({
-                            id: m.user_id,
-                            full_name: `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email || 'Sin nombre',
-                            email: m.email || '',
-                            role: m.role || 'staff',
-                        }))
+                        teamMembers = teamData
+                            // El administrador no se asigna tareas a sí mismo
+                            .filter((m: any) => m.user_id !== user.id)
+                            .map((m: any) => ({
+                                id: m.user_id,
+                                full_name: `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email || 'Sin nombre',
+                                email: m.email || '',
+                                role: m.role || 'staff',
+                            }))
                     }
                 }
             } catch (err) {
@@ -1517,144 +1259,60 @@ export function ControlOperativoClient() {
                 teamMembers,
             })
 
+            // "Asignar como tarea" desde Mantenimiento: /dashboard/control-operativo?incidencia=<id>
+            const incidentId = new URLSearchParams(window.location.search).get('incidencia')
+            if (incidentId) {
+                window.history.replaceState(null, '', window.location.pathname)
+                const { data: ticket } = await supabase
+                    .from('tickets').select('*').eq('id', incidentId).eq('organization_id', orgId).maybeSingle()
+                if (ticket) {
+                    const incident = parseIncident(ticket)
+                    setCreateTaskPrefill({
+                        title: `Atender: ${incident.title}`,
+                        description: incident.description,
+                        property_id: incident.condominium_id,
+                        priority: (incident.priority === 'urgent' || incident.priority === 'critical') ? 'urgent'
+                            : incident.priority === 'high' ? 'high' : 'medium',
+                        source_incident_id: incident.id,
+                        images: incident.images || [],
+                    })
+                    setShowCreateModal(true)
+                }
+            }
         }
         load()
     }, [])
 
-    // ── Load data when ctx is ready ──
-    const loadKPIs = useCallback(async () => {
-        if (!ctx) return
-        setKpisLoading(true)
-        const r = await getOperationsKPIsAction(ctx.orgId)
-        if (r.success) setKpis(r.kpis ?? null)
-        setKpisLoading(false)
-    }, [ctx])
-
-    const loadIncidents = useCallback(async () => {
-        if (!ctx) return
-        setIncidentsLoading(true)
-        setIncidentsError(null)
-        const supabase = createClient()
-        // Se evita el embed relacional condominiums(name) — bastan los datos que
-        // ya tenemos en ctx.properties (mismo origen), y así una incidencia no
-        // desaparece silenciosamente si el embed choca con RLS de otra tabla.
-        const { data, error } = await supabase
-            .from('tickets')
-            .select('*')
-            .eq('organization_id', ctx.orgId)
-            .in('status', ['open', 'in_progress'])
-            .order('created_at', { ascending: false })
-            .limit(50)
-
-        if (error) {
-            console.error('Error cargando incidencias:', error)
-            setIncidentsError(error.message)
-            toast.error(`No se pudieron cargar las incidencias: ${error.message}`)
-            setIncidents([])
-            setIncidentsLoading(false)
-            return
-        }
-
-        const propertyNames = new Map(ctx.properties.map(p => [p.id, p.name]))
-        setIncidents((data || []).map(t => parseIncident({ ...t, condominiums: { name: propertyNames.get(t.condominium_id) } })))
-        setIncidentsLoading(false)
-    }, [ctx])
-
     const loadTasks = useCallback(async () => {
         if (!ctx) return
         setTasksLoading(true)
-        const r = await getTeamTasksAction(ctx.orgId, {
-            property_id: taskFilters.property_id || undefined,
-            area: taskFilters.area || undefined,
-            status: taskFilters.status || undefined,
-        })
+        const r = await getTeamTasksAction(ctx.orgId)
         if (r.success) setTasks(r.tasks || [])
+        else toast.error(r.error || 'No se pudieron cargar las tareas')
         setTasksLoading(false)
-    }, [ctx, taskFilters])
-
-    useEffect(() => { loadKPIs(); loadIncidents(); loadTasks() }, [loadKPIs, loadIncidents, loadTasks])
-
-    // SLA de incidencias (últimos 30 días) — independiente de `incidents` (que
-    // solo trae las abiertas) porque necesita también las ya resueltas para
-    // calcular el tiempo promedio de resolución.
-    const [incidentSLA, setIncidentSLA] = useState<{ avgResolutionHours: number | null; resolvedCount: number; openOver48h: number } | null>(null)
-    useEffect(() => {
-        if (!ctx) return
-        getIncidentSLAServer(ctx.orgId, 30).then(r => {
-            if (r.success) setIncidentSLA({ avgResolutionHours: r.avgResolutionHours, resolvedCount: r.resolvedCount, openOver48h: r.openOver48h })
-        })
     }, [ctx])
 
-    // ── Realtime subscription ──
-    useEffect(() => {
-        if (!ctx) return
-        const supabase = createClient()
-        const channel = supabase
-            .channel(`ops-v2-${ctx.orgId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets', filter: `organization_id=eq.${ctx.orgId}` },
-                (payload: any) => {
-                    const inc = { ...parseIncident(payload.new), isNew: true }
-                    setIncidents(prev => [inc, ...prev])
-                    setNewIncidentToast(inc)
-                    if (toastTimer.current) clearTimeout(toastTimer.current)
-                    toastTimer.current = setTimeout(() => setNewIncidentToast(null), 6000)
-                    try { new Audio('/notification.mp3').play().catch(() => {}) } catch {}
-                }
-            )
-            .subscribe()
-        return () => { channel.unsubscribe() }
-    }, [ctx])
+    useEffect(() => { loadTasks() }, [loadTasks])
 
     // ── Handlers ──
-    const handleCreateTaskFromIncident = (incident: ParsedIncident) => {
-        setCreateTaskPrefill({
-            title: `Atender: ${incident.title}`,
-            description: incident.description,
-            property_id: incident.condominium_id,
-            priority: (incident.priority === 'urgent' || incident.priority === 'critical') ? 'urgent'
-                : incident.priority === 'high' ? 'high' : 'medium',
-            source_incident_id: incident.id,
-            images: incident.images || [],
-        })
-        setShowCreateModal(true)
-    }
-
-    const handleIncidentStatusChange = async (incident: ParsedIncident, status: IncidentStatus) => {
-        if (!ctx) return
-        const r = await updateIncidentStatusAction(incident.id, ctx.orgId, status, { id: ctx.userId, name: ctx.userName })
-        if (!r.success) {
-            toast.error(r.error || 'Error al actualizar la incidencia')
-            return
-        }
-        toast.success(`Incidencia marcada como "${INCIDENT_STATUS_CONFIG[status].label}"`)
-        // 'open'/'in_progress' se quedan en la lista de activas; 'resolved'/'closed'
-        // salen de ella — por eso recargamos en vez de solo mutar el estado local.
-        if (status === 'resolved' || status === 'closed') {
-            setSelectedIncident(null)
-        } else {
-            setSelectedIncident(prev => prev && prev.id === incident.id ? { ...prev, status } : prev)
-        }
-        loadIncidents()
-        loadKPIs()
-    }
-
     const handleStartTask = async (taskId: string) => {
         if (!ctx) return
         await startTaskAction(taskId, ctx.orgId, { id: ctx.userId, name: ctx.userName })
         toast.success('Tarea iniciada')
-        loadTasks(); loadKPIs()
+        loadTasks()
     }
     const handleCompleteTask = async (taskId: string) => {
         if (!ctx) return
         await completeTaskAction(taskId, ctx.orgId, { id: ctx.userId, name: ctx.userName })
         toast.success('Tarea completada')
-        loadTasks(); loadKPIs()
+        loadTasks()
     }
     const handleDeleteTask = async (taskId: string) => {
         if (!ctx) return
         await deleteTaskAction(taskId, ctx.orgId)
         toast.success('Tarea eliminada')
-        loadTasks(); loadKPIs()
+        if (selectedTask?.id === taskId) setSelectedTask(null)
+        loadTasks()
     }
     const handleDuplicateTask = async (task: TeamTask) => {
         if (!ctx) return
@@ -1663,8 +1321,21 @@ export function ControlOperativoClient() {
         loadTasks()
     }
 
+    // ── Indicadores (siempre sobre todas las tareas) ──
+    const todayStr = new Date().toLocaleDateString('en-CA')
+    const kpis = {
+        pending: tasks.filter(t => t.status === 'pending').length,
+        in_progress: tasks.filter(t => t.status === 'in_progress').length,
+        overdue: tasks.filter(t => isOverdue(t)).length,
+        completed_today: tasks.filter(t => t.status === 'completed' && t.completed_at
+            && new Date(t.completed_at).toLocaleDateString('en-CA') === todayStr).length,
+    }
+
     // ── Filtered tasks ──
     const filteredTasks = tasks.filter(t => {
+        if (taskFilters.status && t.status !== taskFilters.status) return false
+        if (taskFilters.area && t.area !== taskFilters.area) return false
+        if (taskFilters.property_id && t.property_id !== taskFilters.property_id) return false
         if (taskFilters.search) {
             const q = taskFilters.search.toLowerCase()
             if (!t.title.toLowerCase().includes(q) && !(t.assigned_name || '').toLowerCase().includes(q)) return false
@@ -1679,14 +1350,44 @@ export function ControlOperativoClient() {
         cancelled: filteredTasks.filter(t => t.status === 'cancelled'),
     }
 
-    const filteredIncidents = incidents.filter(i => {
-        if (incidentPropertyFilter && i.condominium_id !== incidentPropertyFilter) return false
-        if (!incidentSearch) return true
-        const q = incidentSearch.toLowerCase()
-        return i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.location.toLowerCase().includes(q)
-    })
+    // ── Vista por persona: tareas abiertas agrupadas por responsable ──
+    const openTasks = filteredTasks.filter(t => t.status === 'pending' || t.status === 'in_progress')
+    const people = [
+        ...(ctx?.teamMembers || []).map(m => ({ id: m.id, name: m.full_name, role: m.role })),
+        // Responsables que ya no están en el equipo pero conservan tareas
+        ...Array.from(new Set(openTasks.map(t => t.assigned_to).filter((id): id is string => !!id)))
+            .filter(id => !(ctx?.teamMembers || []).some(m => m.id === id))
+            .map(id => ({ id, name: openTasks.find(t => t.assigned_to === id)?.assigned_name || 'Sin nombre', role: '' })),
+    ].map(p => {
+        const own = openTasks.filter(t => t.assigned_to === p.id)
+        return { ...p, tasks: own, overdue: own.filter(t => isOverdue(t)).length }
+    }).sort((a, b) => b.tasks.length - a.tasks.length)
+    const unassigned = openTasks.filter(t => !t.assigned_to)
 
-    const hasSidePanel = selectedIncident || selectedTask
+    const openCreate = () => { setCreateTaskPrefill(null); setShowCreateModal(true) }
+    // La lista no trae checklist, comentarios ni historial: se cargan al abrir la tarea
+    const selectTask = async (task: TeamTask) => {
+        if (selectedTask?.id === task.id) return setSelectedTask(null)
+        setSelectedTask(task)
+        const r = await getTeamTaskByIdAction(task.id)
+        if (r.success && r.task) setSelectedTask(prev => prev?.id === task.id ? r.task! : prev)
+    }
+    const renderRow = (task: TeamTask) => (
+        <TaskRow key={task.id} task={task}
+            onClick={() => selectTask(task)}
+            onStart={() => handleStartTask(task.id)}
+            onComplete={() => handleCompleteTask(task.id)}
+            onDuplicate={() => handleDuplicateTask(task)}
+            onDelete={() => handleDeleteTask(task.id)}
+        />
+    )
+
+    const KPIS = [
+        { label: 'Pendientes', value: kpis.pending, icon: ClipboardList, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+        { label: 'En proceso', value: kpis.in_progress, icon: Play, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+        { label: 'Vencidas', value: kpis.overdue, icon: Clock, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+        { label: 'Completadas hoy', value: kpis.completed_today, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    ]
 
     return (
         <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans">
@@ -1698,24 +1399,18 @@ export function ControlOperativoClient() {
                             <Activity size={24} />
                         </div>
                         <div>
-                            <h1 className="text-3xl font-black tracking-tight text-white uppercase italic">Control Operativo</h1>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                                </span>
-                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Centro de operaciones en tiempo real</p>
-                            </div>
+                            <h1 className="text-3xl font-black tracking-tight text-white">Control Operativo</h1>
+                            <p className="text-sm text-zinc-500 mt-0.5">Asigna tareas a tu equipo y sigue su avance. Cada quien las ve en <span className="text-zinc-300 font-semibold">Mis Tareas</span> de su panel.</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button onClick={() => { loadKPIs(); loadIncidents(); loadTasks() }}
+                        <button onClick={loadTasks}
                             className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white border border-white/10 hover:border-white/20 rounded-xl transition-all">
                             <RefreshCw size={12} />
                             Actualizar
                         </button>
                         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                            onClick={() => { setCreateTaskPrefill(null); setShowCreateModal(true) }}
+                            onClick={openCreate}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-500/20">
                             <Plus size={14} />
                             Nueva Tarea
@@ -1723,274 +1418,173 @@ export function ControlOperativoClient() {
                     </div>
                 </motion.div>
 
-                {/* ─ KPI Bar ─ */}
-                <KPIBar kpis={kpis} loading={kpisLoading} />
-
-                {/* ─ Tabs ─ */}
-                <div className="flex items-center gap-1 p-1 bg-white/[0.03] border border-white/[0.06] rounded-2xl w-fit">
-                    {([
-                        { key: 'incidencias', label: 'Incidencias', icon: ShieldAlert, count: incidents.filter(i => i.isNew).length },
-                        { key: 'tareas', label: 'Tareas del Equipo', icon: ClipboardList, count: 0 },
-                    ] as const).map(tab => (
-                        <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-200 ${
-                                activeTab === tab.key
-                                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05]'
-                            }`}>
-                            <tab.icon size={14} />
-                            {tab.label}
-                            {tab.count > 0 && (
-                                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-[8px] font-black text-white flex items-center justify-center animate-pulse">
-                                    {tab.count}
-                                </span>
-                            )}
-                        </button>
+                {/* ─ Indicadores ─ */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {KPIS.map(k => (
+                        <div key={k.label} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
+                            <div>
+                                <p className={`text-2xl font-black ${k.color}`}>{tasksLoading ? '—' : k.value}</p>
+                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">{k.label}</p>
+                            </div>
+                            <div className={`p-2.5 rounded-xl ${k.bg}`}>
+                                <k.icon size={18} className={k.color} />
+                            </div>
+                        </div>
                     ))}
                 </div>
 
                 {/* ─ Content Area ─ */}
-                <div className={`flex gap-5 transition-all duration-300 ${hasSidePanel ? 'items-start' : ''}`}>
-                    {/* Main Panel */}
-                    <div className={`flex-1 min-w-0 transition-all duration-300 ${hasSidePanel ? 'max-w-[calc(100%-380px)]' : 'w-full'}`}>
-                        <AnimatePresence mode="wait">
-                            {/* ══════════ INCIDENCIAS TAB ══════════ */}
-                            {activeTab === 'incidencias' && (
-                                <motion.div key="inc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-                                    {/* SLA (últimos 30 días) */}
-                                    {incidentSLA && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                                                <p className="text-lg font-black text-indigo-400">
-                                                    {incidentSLA.avgResolutionHours != null ? `${incidentSLA.avgResolutionHours.toFixed(1)} h` : '—'}
-                                                </p>
-                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Tiempo promedio de resolución</p>
-                                            </div>
-                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                                                <p className="text-lg font-black text-emerald-400">{incidentSLA.resolvedCount}</p>
-                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Resueltas (30 días)</p>
-                                            </div>
-                                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                                                <p className={`text-lg font-black ${incidentSLA.openOver48h > 0 ? 'text-rose-400' : 'text-zinc-400'}`}>{incidentSLA.openOver48h}</p>
-                                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Abiertas hace más de 48h</p>
-                                            </div>
-                                        </div>
-                                    )}
+                <div className={`flex gap-5 transition-all duration-300 ${selectedTask ? 'items-start' : ''}`}>
+                    <div className={`flex-1 min-w-0 transition-all duration-300 ${selectedTask ? 'max-w-[calc(100%-380px)]' : 'w-full'}`}>
+                        <div className="space-y-4">
+                            {/* Toolbar */}
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex items-center gap-1 p-1 bg-white/[0.04] border border-white/[0.06] rounded-xl">
+                                    {([
+                                        { key: 'persona', label: 'Por persona', icon: Users },
+                                        { key: 'list', label: 'Lista', icon: LayoutList },
+                                        { key: 'kanban', label: 'Por estado', icon: Kanban },
+                                    ] as const).map(v => (
+                                        <button key={v.key} onClick={() => setTaskView(v.key)}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${taskView === v.key ? 'bg-indigo-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                                            <v.icon size={13} /> {v.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="relative">
+                                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                                    <input value={taskFilters.search} onChange={e => setTaskFilters(prev => ({ ...prev, search: e.target.value }))}
+                                        placeholder="Buscar tarea o persona..."
+                                        className="pl-8 pr-4 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/40 transition-colors w-52" />
+                                </div>
+                                {taskView === 'list' && (
+                                    <CustomDropdown
+                                        options={[
+                                            { value: '', label: 'Todos los estados' },
+                                            { value: 'pending', label: 'Pendiente', icon: <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> },
+                                            { value: 'in_progress', label: 'En proceso', icon: <span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> },
+                                            { value: 'completed', label: 'Completada', icon: <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> },
+                                            { value: 'cancelled', label: 'Cancelada', icon: <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" /> },
+                                        ]}
+                                        value={taskFilters.status}
+                                        onChange={val => setTaskFilters(prev => ({ ...prev, status: val }))}
+                                        className="w-44"
+                                    />
+                                )}
+                                <CustomDropdown
+                                    options={[
+                                        { value: '', label: 'Todas las áreas' },
+                                        ...(Object.keys(AREA_LABELS) as TaskArea[]).map(a => ({
+                                            value: a,
+                                            label: AREA_LABELS[a],
+                                            icon: TASK_AREA_ICONS[a],
+                                        }))
+                                    ]}
+                                    value={taskFilters.area}
+                                    onChange={val => setTaskFilters(prev => ({ ...prev, area: val as TaskArea | '' }))}
+                                    className="w-44"
+                                />
+                                {ctx && ctx.properties.length > 1 && (
+                                    <CustomDropdown
+                                        options={[
+                                            { value: '', label: 'Todas las propiedades' },
+                                            ...ctx.properties.map(p => ({
+                                                value: p.id,
+                                                label: p.name,
+                                                icon: <Building2 size={12} className="text-zinc-500" />,
+                                            }))
+                                        ]}
+                                        value={taskFilters.property_id}
+                                        onChange={val => setTaskFilters(prev => ({ ...prev, property_id: val }))}
+                                        className="w-48"
+                                    />
+                                )}
+                            </div>
 
-                                    {/* Search */}
-                                    <div className="flex items-center gap-2">
-                                        <div className="relative flex-1 max-w-sm">
-                                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-                                            <input value={incidentSearch} onChange={e => setIncidentSearch(e.target.value)}
-                                                placeholder="Buscar incidencia..."
-                                                className="w-full pl-9 pr-4 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/40 transition-colors" />
-                                        </div>
-                                        {ctx && ctx.properties.length > 1 && (
-                                            <CustomDropdown
-                                                options={[
-                                                    { value: '', label: 'Todas las propiedades' },
-                                                    ...ctx.properties.map(p => ({
-                                                        value: p.id,
-                                                        label: p.name,
-                                                        icon: <Building2 size={12} className="text-zinc-500" />,
-                                                    }))
-                                                ]}
-                                                value={incidentPropertyFilter}
-                                                onChange={val => setIncidentPropertyFilter(val)}
-                                                className="w-48"
-                                            />
-                                        )}
-                                        <span className="text-[9px] text-zinc-600 font-bold uppercase ml-auto">{filteredIncidents.length} activas</span>
-                                    </div>
-
-                                    {/* Incident List */}
-                                    {incidentsLoading ? (
-                                        <div className="flex flex-col items-center justify-center py-20 gap-4">
-                                            <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-                                            <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Cargando...</p>
-                                        </div>
-                                    ) : incidentsError ? (
-                                        <div className="flex flex-col items-center justify-center py-20 gap-3">
-                                            <AlertTriangle size={32} className="text-rose-500/60" />
-                                            <p className="text-sm font-bold text-rose-400">No se pudieron cargar las incidencias</p>
-                                            <p className="text-xs text-zinc-600 max-w-md text-center">{incidentsError}</p>
-                                            <button onClick={loadIncidents}
-                                                className="mt-2 flex items-center gap-2 px-4 py-2 bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
-                                                <RefreshCw size={12} /> Reintentar
-                                            </button>
-                                        </div>
-                                    ) : filteredIncidents.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-20 gap-3">
-                                            <ShieldAlert size={32} className="text-zinc-800" />
-                                            <p className="text-sm font-bold text-zinc-600">Sin incidencias activas</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {filteredIncidents.map((inc, i) => {
-                                                const cfg = INCIDENT_PRIORITY_CONFIG[inc.priority] || INCIDENT_PRIORITY_CONFIG.low
-                                                return (
-                                                    <motion.div key={inc.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                                                        onClick={() => { setSelectedTask(null); setSelectedIncident(selectedIncident?.id === inc.id ? null : inc) }}
-                                                        className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                                                            inc.isNew ? 'border-rose-500/40 bg-rose-500/5' :
-                                                            selectedIncident?.id === inc.id ? 'border-indigo-500/50 bg-indigo-500/5' :
-                                                            'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]'
-                                                        }`}>
-                                                        <div className="flex items-start justify-between gap-4">
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                                                    <span className={`text-[9px] font-black uppercase tracking-widest ${cfg.color}`}>{cfg.label}</span>
-                                                                    {inc.isNew && <span className="px-2 py-0.5 bg-rose-500 text-[9px] font-black text-white rounded uppercase animate-pulse">Nueva</span>}
-                                                                    <span className="text-[9px] text-zinc-600 uppercase">{inc.status}</span>
-                                                                </div>
-                                                                <h4 className="text-sm font-black text-white uppercase italic leading-tight truncate">{inc.title}</h4>
-                                                                <p className="text-xs text-zinc-500 mt-1 line-clamp-1">{inc.description}</p>
-                                                            </div>
-                                                            <div className="shrink-0 text-right">
-                                                                <div className="flex items-center gap-1 justify-end text-[9px] text-zinc-600 mb-1">
-                                                                    <MapPin size={9} /> {inc.location}
-                                                                </div>
-                                                                <div className="text-[9px] text-zinc-700">{fmtDateTime(inc.created_at)}</div>
-                                                                {inc.condominium && <div className="text-[9px] text-zinc-700 mt-0.5">{inc.condominium}</div>}
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
-                                                )
-                                            })}
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )}
-
-                            {/* ══════════ TAREAS TAB ══════════ */}
-                            {activeTab === 'tareas' && (
-                                <motion.div key="tasks" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-                                    {/* Toolbar */}
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        {/* Search */}
-                                        <div className="relative">
-                                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-                                            <input value={taskFilters.search} onChange={e => setTaskFilters(prev => ({ ...prev, search: e.target.value }))}
-                                                placeholder="Buscar tarea..."
-                                                className="pl-8 pr-4 py-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/40 transition-colors w-44" />
-                                        </div>
-                                        {/* Status filter */}
-                                        <CustomDropdown
-                                            options={[
-                                                { value: '', label: 'Todos los estados' },
-                                                { value: 'pending', label: 'Pendiente', icon: <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> },
-                                                { value: 'in_progress', label: 'En proceso', icon: <span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> },
-                                                { value: 'completed', label: 'Completada', icon: <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> },
-                                                { value: 'cancelled', label: 'Cancelada', icon: <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" /> },
-                                            ]}
-                                            value={taskFilters.status}
-                                            onChange={val => setTaskFilters(prev => ({ ...prev, status: val }))}
-                                            className="w-44"
-                                        />
-                                        {/* Area filter */}
-                                        <CustomDropdown
-                                            options={[
-                                                { value: '', label: 'Todas las áreas' },
-                                                ...(Object.keys(AREA_LABELS) as TaskArea[]).map(a => ({
-                                                    value: a,
-                                                    label: AREA_LABELS[a],
-                                                    icon: TASK_AREA_ICONS[a],
-                                                }))
-                                            ]}
-                                            value={taskFilters.area}
-                                            onChange={val => setTaskFilters(prev => ({ ...prev, area: val as TaskArea | '' }))}
-                                            className="w-44"
-                                        />
-                                        {/* Property filter */}
-                                        {ctx && ctx.properties.length > 1 && (
-                                            <CustomDropdown
-                                                options={[
-                                                    { value: '', label: 'Todas las propiedades' },
-                                                    ...ctx.properties.map(p => ({
-                                                        value: p.id,
-                                                        label: p.name,
-                                                        icon: <Building2 size={12} className="text-zinc-500" />,
-                                                    }))
-                                                ]}
-                                                value={taskFilters.property_id}
-                                                onChange={val => setTaskFilters(prev => ({ ...prev, property_id: val }))}
-                                                className="w-48"
-                                            />
-                                        )}
-                                        <span className="text-[9px] text-zinc-600 font-bold uppercase ml-auto">{filteredTasks.length} tareas</span>
-                                        {/* View toggle */}
-                                        <div className="flex items-center gap-1 p-1 bg-white/[0.04] border border-white/[0.06] rounded-xl">
-                                            <button onClick={() => setTaskView('list')}
-                                                className={`p-1.5 rounded-lg transition-all ${taskView === 'list' ? 'bg-indigo-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                                                <LayoutList size={14} />
-                                            </button>
-                                            <button onClick={() => setTaskView('kanban')}
-                                                className={`p-1.5 rounded-lg transition-all ${taskView === 'kanban' ? 'bg-indigo-500 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                                                <Kanban size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Loading */}
-                                    {tasksLoading ? (
-                                        <div className="flex flex-col items-center justify-center py-20 gap-4">
-                                            <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-                                        </div>
-                                    ) : filteredTasks.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-20 gap-3">
-                                            <ClipboardList size={32} className="text-zinc-800" />
-                                            <p className="text-sm font-bold text-zinc-600">Sin tareas</p>
-                                            <button onClick={() => { setCreateTaskPrefill(null); setShowCreateModal(true) }}
-                                                className="mt-2 flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/20 rounded-xl text-xs font-bold transition-all">
-                                                <Plus size={12} /> Crear primera tarea
-                                            </button>
-                                        </div>
-                                    ) : taskView === 'list' ? (
-                                        /* ── LIST VIEW ── */
-                                        <div className="space-y-2">
-                                            {filteredTasks.map(task => (
-                                                <TaskRow key={task.id} task={task}
-                                                    onClick={() => { setSelectedIncident(null); setSelectedTask(selectedTask?.id === task.id ? null : task) }}
-                                                    onStart={() => handleStartTask(task.id)}
-                                                    onComplete={() => handleCompleteTask(task.id)}
-                                                    onDuplicate={() => handleDuplicateTask(task)}
-                                                    onDelete={() => handleDeleteTask(task.id)}
-                                                />
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        /* ── KANBAN VIEW ── */
-                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto">
-                                            {(Object.keys(STATUS_CONFIG) as TaskStatus[]).map(status => (
-                                                <div key={status} className="min-w-[200px]">
-                                                    <div className={`flex items-center gap-2 mb-3 px-3 py-2 rounded-xl border ${STATUS_CONFIG[status].bg}`}>
-                                                        <div className={`w-2 h-2 rounded-full ${STATUS_CONFIG[status].dot}`} />
-                                                        <span className={`text-[9px] font-black uppercase tracking-widest ${STATUS_CONFIG[status].color}`}>
-                                                            {STATUS_CONFIG[status].label}
-                                                        </span>
-                                                        <span className="ml-auto text-[9px] text-zinc-600 font-bold">{kanbanColumns[status].length}</span>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        {kanbanColumns[status].map(task => (
-                                                            <KanbanCard key={task.id} task={task}
-                                                                onClick={() => { setSelectedIncident(null); setSelectedTask(selectedTask?.id === task.id ? null : task) }} />
-                                                        ))}
-                                                        {kanbanColumns[status].length === 0 && (
-                                                            <div className="py-6 text-center text-[9px] text-zinc-700 border border-dashed border-white/[0.05] rounded-xl">Sin tareas</div>
-                                                        )}
-                                                    </div>
+                            {tasksLoading ? (
+                                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                    <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                                </div>
+                            ) : tasks.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+                                    <ClipboardList size={32} className="text-zinc-700" />
+                                    <p className="text-sm font-bold text-zinc-400">Todavía no hay tareas para tu equipo</p>
+                                    <p className="text-xs text-zinc-600 max-w-sm">Crea una tarea, asígnala a alguien de tu equipo y le llegará a su panel en <span className="text-zinc-400">Mis Tareas</span> con aviso por WhatsApp.</p>
+                                    <button onClick={openCreate}
+                                        className="mt-2 flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/20 rounded-xl text-xs font-bold transition-all">
+                                        <Plus size={12} /> Crear primera tarea
+                                    </button>
+                                </div>
+                            ) : taskView === 'persona' ? (
+                                /* ── VISTA POR PERSONA ── */
+                                <div className="space-y-4">
+                                    {people.map(p => (
+                                        <div key={p.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-9 h-9 rounded-full bg-indigo-500/15 flex items-center justify-center text-indigo-300 font-black text-sm">
+                                                    {(p.name || '?').trim().charAt(0).toUpperCase()}
                                                 </div>
-                                            ))}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-white truncate">{p.name}</p>
+                                                    {p.role && <p className="text-[10px] text-zinc-500">{ROLE_LABELS[p.role] || p.role}</p>}
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[10px] font-bold">
+                                                    <span className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400">{p.tasks.length} abiertas</span>
+                                                    {p.overdue > 0 && <span className="px-2 py-1 rounded-lg bg-orange-500/10 text-orange-400">{p.overdue} vencidas</span>}
+                                                </div>
+                                            </div>
+                                            {p.tasks.length === 0 ? (
+                                                <p className="text-xs text-zinc-600 pl-12">Sin tareas pendientes ✅</p>
+                                            ) : (
+                                                <div className="space-y-2">{p.tasks.map(renderRow)}</div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {unassigned.length > 0 && (
+                                        <div className="rounded-2xl border border-dashed border-white/[0.1] p-4">
+                                            <p className="text-sm font-bold text-zinc-300 mb-3">Sin asignar <span className="text-zinc-600 font-normal">· {unassigned.length}</span></p>
+                                            <div className="space-y-2">{unassigned.map(renderRow)}</div>
                                         </div>
                                     )}
-                                </motion.div>
+                                    <p className="text-[11px] text-zinc-600">Aquí solo aparecen las tareas abiertas. Las completadas están en la vista de Lista o Por estado.</p>
+                                </div>
+                            ) : filteredTasks.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 gap-2">
+                                    <ClipboardList size={28} className="text-zinc-700" />
+                                    <p className="text-sm font-bold text-zinc-500">No hay tareas con estos filtros</p>
+                                </div>
+                            ) : taskView === 'list' ? (
+                                <div className="space-y-2">{filteredTasks.map(renderRow)}</div>
+                            ) : (
+                                /* ── POR ESTADO ── */
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    {(['pending', 'in_progress', 'completed'] as TaskStatus[]).map(status => (
+                                        <div key={status} className="min-w-[200px]">
+                                            <div className={`flex items-center gap-2 mb-3 px-3 py-2 rounded-xl border ${STATUS_CONFIG[status].bg}`}>
+                                                <div className={`w-2 h-2 rounded-full ${STATUS_CONFIG[status].dot}`} />
+                                                <span className={`text-[9px] font-black uppercase tracking-widest ${STATUS_CONFIG[status].color}`}>
+                                                    {STATUS_CONFIG[status].label}
+                                                </span>
+                                                <span className="ml-auto text-[9px] text-zinc-600 font-bold">{kanbanColumns[status].length}</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {kanbanColumns[status].map(task => (
+                                                    <KanbanCard key={task.id} task={task} onClick={() => selectTask(task)} />
+                                                ))}
+                                                {kanbanColumns[status].length === 0 && (
+                                                    <div className="py-6 text-center text-[9px] text-zinc-700 border border-dashed border-white/[0.05] rounded-xl">Sin tareas</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
-                        </AnimatePresence>
+                        </div>
                     </div>
 
                     {/* ─ Side Panel ─ */}
                     <AnimatePresence>
-                        {hasSidePanel && (
+                        {selectedTask && ctx && (
                             <motion.div
                                 initial={{ opacity: 0, width: 0 }}
                                 animate={{ opacity: 1, width: 360 }}
@@ -1998,31 +1592,15 @@ export function ControlOperativoClient() {
                                 className="shrink-0 rounded-2xl overflow-hidden border border-white/[0.06] h-[calc(100vh-280px)] sticky top-6"
                                 style={{ minWidth: 360 }}
                             >
-                                <AnimatePresence mode="wait">
-                                    {selectedIncident && ctx && (
-                                        <IncidentDetailPanel
-                                            key={selectedIncident.id}
-                                            incident={selectedIncident}
-                                            onClose={() => setSelectedIncident(null)}
-                                            onCreateTask={handleCreateTaskFromIncident}
-                                            onStatusChange={handleIncidentStatusChange}
-                                            orgId={ctx.orgId}
-                                            userId={ctx.userId}
-                                            userName={ctx.userName}
-                                        />
-                                    )}
-                                    {selectedTask && ctx && (
-                                        <TaskDetailPanel
-                                            key={selectedTask.id}
-                                            task={selectedTask}
-                                            onClose={() => setSelectedTask(null)}
-                                            onRefresh={() => { loadTasks(); loadKPIs() }}
-                                            orgId={ctx.orgId}
-                                            userId={ctx.userId}
-                                            userName={ctx.userName}
-                                        />
-                                    )}
-                                </AnimatePresence>
+                                <TaskDetailPanel
+                                    key={`${selectedTask.id}-${selectedTask.comments ? 'full' : 'base'}`}
+                                    task={selectedTask}
+                                    onClose={() => setSelectedTask(null)}
+                                    onRefresh={() => { loadTasks(); setSelectedTask(null) }}
+                                    orgId={ctx.orgId}
+                                    userId={ctx.userId}
+                                    userName={ctx.userName}
+                                />
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -2034,7 +1612,7 @@ export function ControlOperativoClient() {
                 {showCreateModal && ctx && (
                     <CreateTaskModal
                         onClose={() => setShowCreateModal(false)}
-                        onCreated={() => { loadTasks(); loadKPIs() }}
+                        onCreated={loadTasks}
                         orgId={ctx.orgId}
                         userId={ctx.userId}
                         userName={ctx.userName}
@@ -2042,34 +1620,6 @@ export function ControlOperativoClient() {
                         teamMembers={ctx.teamMembers}
                         prefill={createTaskPrefill}
                     />
-                )}
-            </AnimatePresence>
-
-            {/* ─ New Incident Toast ─ */}
-            <AnimatePresence>
-                {newIncidentToast && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 100, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                        className="fixed bottom-10 right-10 z-50 w-[380px]"
-                    >
-                        <PremiumCard glowColor="rose" className="!p-5 shadow-2xl shadow-rose-950/40 border-rose-500/30">
-                            <div className="flex gap-3">
-                                <div className="p-2.5 rounded-xl bg-rose-500 text-white shrink-0 shadow-lg shadow-rose-500/20">
-                                    <ShieldAlert size={20} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between mb-0.5">
-                                        <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest animate-pulse">Nueva Incidencia</p>
-                                        <button onClick={() => setNewIncidentToast(null)} className="text-zinc-600 hover:text-white transition-colors">
-                                            <X size={14} />
-                                        </button>
-                                    </div>
-                                    <h4 className="text-sm font-black text-white uppercase italic truncate">{newIncidentToast.title}</h4>
-                                    <p className="text-[9px] text-zinc-500 mt-0.5">{newIncidentToast.location} · {newIncidentToast.condominium}</p>
-                                </div>
-                            </div>
-                        </PremiumCard>
-                    </motion.div>
                 )}
             </AnimatePresence>
         </div>

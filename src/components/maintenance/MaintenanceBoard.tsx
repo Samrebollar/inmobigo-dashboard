@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Ticket } from '@/types/tickets'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +19,8 @@ import {
     Home,
     Search,
     Download,
-    Building2
+    Building2,
+    ClipboardList
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ResolveTicketModal } from './ResolveTicketModal'
@@ -262,6 +264,17 @@ export function MaintenanceBoard({ tickets, onUpdateTicket }: MaintenanceBoardPr
                                                     </span>
                                                 </div>
                                                 
+                                                {(ticket.status === 'open' || ticket.status === 'in_progress') && (
+                                                    <Link
+                                                        href={`/dashboard/control-operativo?incidencia=${ticket.id}`}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="ml-auto mr-2 h-10 px-4 flex items-center gap-2 border border-zinc-800 hover:border-indigo-500/40 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition-all"
+                                                        title="Asignar este reporte a alguien de tu equipo"
+                                                    >
+                                                        <ClipboardList className="h-3.5 w-3.5" /> Asignar como tarea
+                                                    </Link>
+                                                )}
+
                                                 {ticket.status === 'open' && (
                                                     <button 
                                                         onClick={(e) => {

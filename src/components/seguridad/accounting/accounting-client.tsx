@@ -113,10 +113,51 @@ export function AccountingClient({
         selectedYear: currentYear
     })
 
-    const totalCollected = condoFinancials.recaudado
-    const totalReceivable = condoFinancials.porCobrar
-    const totalOverdue = condoFinancials.vencido
-    const totalInvoiced = condoFinancials.totalPeriodo
+    // Otros cargos del periodo (multas, cuotas extraordinarias, etc.): en
+    // contabilidad también son ingresos, así que se suman a Total, Cobrado,
+    // Pendiente/Morosidad y al Resultado Neto. calculateCondoMonthlyFinancials
+    // solo cuenta la cuota mensual (maintenance) porque así la usa Cobranza.
+    type ChargeLite = { invoice_type?: string; status?: string; due_date?: string | null; created_at?: string | null; amount?: number | string | null; balance_due?: number | string | null }
+    const chargeList = (invoices || []) as ChargeLite[]
+    const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+    const lastMonthIndex = selectedMonthIndex === -1 ? 11 : selectedMonthIndex
+    const firstMonthIndex = selectedMonthIndex === -1 ? 0 : selectedMonthIndex
+    const otherCharges = chargeList.filter(inv => {
+        if (inv.invoice_type === 'maintenance' || inv.invoice_type === 'initial_balance') return false
+        if (inv.status === 'cancelled') return false
+        const dateStr: string = String(inv.due_date || inv.created_at || '').slice(0, 10)
+        if (!dateStr) return false
+        const [y, m] = dateStr.split('-').map(Number)
+        return y === currentYear && m - 1 >= firstMonthIndex && m - 1 <= lastMonthIndex
+    })
+    let otherTotal = 0, otherPaid = 0, otherPending = 0, otherOverdue = 0
+    otherCharges.forEach(inv => {
+        const amount = Number(inv.amount || 0)
+        const balance = inv.status === 'paid' ? 0 : Number(inv.balance_due ?? amount)
+        otherTotal += amount
+        otherPaid += Math.max(0, amount - balance)
+        if (balance > 0) {
+            const due = String(inv.due_date || inv.created_at || '').slice(0, 10)
+            if (inv.status === 'overdue' || (due && due < todayMx)) otherOverdue += balance
+            else otherPending += balance
+        }
+    })
+    // Saldo arrastrado de antes (debt_amount / facturas de saldo inicial): no es
+    // de este periodo, se informa aparte en la tarjeta de Morosidad.
+    const otherBalancesAnyType = chargeList
+        .filter(inv => inv.invoice_type !== 'maintenance')
+        .filter(inv => {
+            const dateStr: string = String(inv.due_date || inv.created_at || '').slice(0, 10)
+            const [y, m] = dateStr.split('-').map(Number)
+            return y === currentYear && m - 1 >= firstMonthIndex && m - 1 <= (selectedMonthIndex === -1 ? new Date().getMonth() : lastMonthIndex)
+        })
+        .reduce((sum, inv) => sum + Math.max(0, Number(inv.balance_due || 0)), 0)
+    const carriedDebt = Math.max(0, condoFinancials.saldoInicialPendiente - otherBalancesAnyType)
+
+    const totalCollected = condoFinancials.recaudado + otherPaid
+    const totalReceivable = condoFinancials.porCobrar + otherPending
+    const totalOverdue = condoFinancials.vencido + otherOverdue
+    const totalInvoiced = condoFinancials.totalPeriodo + otherTotal
 
     const totalExpenses = filteredRecordsForMetrics
         .filter((r: any) => r.type === 'egreso')
@@ -136,7 +177,9 @@ export function AccountingClient({
         totalInvoiced,
         totalExpenses,
         utilidad,
-        isrEstimado
+        isrEstimado,
+        carriedDebt,
+        otherTotal
     }
 
     const getIAState = () => {

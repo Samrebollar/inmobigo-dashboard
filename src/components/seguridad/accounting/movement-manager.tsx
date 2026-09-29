@@ -106,13 +106,13 @@ export function MovementManager({
         amount: '',
         category: '',
         description: '',
-        date: new Date().toISOString().split('T')[0],
+        date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }),
         unit_id: '',
         status: 'pagado' as PaymentStatus,
         es_recurrente: false,
         frecuencia: 'mensual' as 'mensual' | 'semanal',
         dia_corte: 1,
-        fecha_inicio: new Date().toISOString().split('T')[0],
+        fecha_inicio: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }),
         fecha_fin: '',
         use_reserve_fund: false,
         reserve_reason: 'emergencia',
@@ -177,6 +177,7 @@ export function MovementManager({
                 category: formData.category,
                 description: formData.description || formData.category,
                 date: formData.date,
+                iva_amount: parseFloat(formData.iva_amount || '0') || 0,
                 receipt_url,
                 use_reserve_fund: formData.use_reserve_fund,
                 reserve_reason: formData.reserve_reason
@@ -189,13 +190,13 @@ export function MovementManager({
                 amount: '',
                 category: '',
                 description: '',
-                date: new Date().toISOString().split('T')[0],
+                date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }),
                 unit_id: '',
                 status: 'pagado',
                 es_recurrente: false,
                 frecuencia: 'mensual',
                 dia_corte: 1,
-                fecha_inicio: new Date().toISOString().split('T')[0],
+                fecha_inicio: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }),
                 fecha_fin: '',
                 use_reserve_fund: false,
                 reserve_reason: 'emergencia',
@@ -512,6 +513,7 @@ export function MovementManager({
                                             <div className={cn(
                                                 "inline-flex px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-[0.2em] mt-1 border",
                                                 record.status === 'pagado' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                                record.status === 'vencido' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
                                                 "bg-amber-500/10 text-amber-500 border-amber-500/20"
                                             )}>
                                                 {record.status}

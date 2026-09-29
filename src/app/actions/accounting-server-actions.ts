@@ -254,7 +254,11 @@ export async function getAccountingData(condominiumId: string = 'all') {
                 category: 'Ingreso (cobranza)',
                 description: `${inv.folio || 'INV'} - ${inv.description || 'Consulta de pago'}`,
                 date: inv.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-                status: normalizeStatus(inv.status) === 'pagado' || normalizeStatus(inv.status) === 'paid' ? 'pagado' : 'pendiente',
+                status: normalizeStatus(inv.status) === 'pagado' || normalizeStatus(inv.status) === 'paid'
+                    ? 'pagado'
+                    : normalizeStatus(inv.status) === 'overdue' || (inv.due_date && inv.due_date < new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }))
+                        ? 'vencido'
+                        : 'pendiente',
                 is_invoice: true,
                 unit_number: (inv.units as any)?.unit_number,
                 payment_deadline: (inv.units as any)?.payment_deadline,

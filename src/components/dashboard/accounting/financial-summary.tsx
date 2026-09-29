@@ -15,7 +15,9 @@ export function FinancialSummary({
         totalInvoiced: number,
         totalExpenses: number,
         utilidad: number,
-        isrEstimado: number
+        isrEstimado: number,
+        carriedDebt?: number,
+        otherTotal?: number
     },
     regime: FiscalRegime,
     // Estado del mismo diagnóstico de IA que se muestra en el banner de
@@ -72,7 +74,7 @@ export function FinancialSummary({
             bg: 'bg-indigo-950/30 backdrop-blur-xl',
             border: 'border-indigo-500/20',
             glow: 'hover:border-indigo-500/40 hover:shadow-indigo-500/10',
-            subtext: 'Cobranza esperada del periodo',
+            subtext: (metrics.otherTotal || 0) > 0 ? 'Cuotas, multas y extraordinarias' : 'Cobranza esperada del periodo',
             subtextColor: 'text-indigo-400/80'
         },
         {
@@ -108,7 +110,9 @@ export function FinancialSummary({
             bg: 'bg-red-950/30 backdrop-blur-xl',
             border: 'border-red-500/20',
             glow: 'hover:border-red-500/40 hover:shadow-red-500/10',
-            subtext: 'Pagos fuera de plazo',
+            subtext: (metrics.carriedDebt || 0) > 0
+                ? `Fuera de plazo · +$${(metrics.carriedDebt || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} saldo previo`
+                : 'Pagos fuera de plazo',
             subtextColor: 'text-red-400/80'
         },
         {

@@ -128,7 +128,7 @@ export async function getAccountingData(condominiumId: string = 'all') {
 
     // Fetch full Units (para calculateCondoMonthlyFinancials: monto esperado
     // por unidad y proyección de meses sin recibos generados)
-    let unitsQuery = supabase.from('units').select('id, condominium_id, monto_mensual, facturacion_activa, payment_deadline')
+    let unitsQuery = supabase.from('units').select('id, condominium_id, monto_mensual, facturacion_activa, payment_deadline, created_at')
     if (condominiumId && condominiumId !== 'all') {
         unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
     } else {
@@ -143,12 +143,12 @@ export async function getAccountingData(condominiumId: string = 'all') {
     // para "Saldo Inicial (Arrastre)")
     let residents: any[] = []
     if (condominiumId && condominiumId !== 'all') {
-        const { data } = await supabase.from('residents').select('id, status, condominium_id, debt_amount').eq('condominium_id', condominiumId)
+        const { data } = await supabase.from('residents').select('id, status, condominium_id, debt_amount, unit_id, created_at, fecha_ingreso').eq('condominium_id', condominiumId)
         residents = data || []
     } else {
         const condoIds = condominiums.map(c => c.id)
         if (condoIds.length > 0) {
-            const { data } = await supabase.from('residents').select('id, status, condominium_id, debt_amount').in('condominium_id', condoIds)
+            const { data } = await supabase.from('residents').select('id, status, condominium_id, debt_amount, unit_id, created_at, fecha_ingreso').in('condominium_id', condoIds)
             residents = data || []
         }
     }
@@ -467,12 +467,12 @@ export async function getTransparencyData(condominiumId: string) {
     // 2.c Units y Residentes para calculateCondoMonthlyFinancials
     const { data: unitsData } = await adminClient
         .from('units')
-        .select('id, condominium_id, monto_mensual, facturacion_activa, payment_deadline')
+        .select('id, condominium_id, monto_mensual, facturacion_activa, payment_deadline, created_at')
         .eq('condominium_id', condominiumId)
 
     const { data: residentsData } = await adminClient
         .from('residents')
-        .select('id, status, condominium_id, debt_amount')
+        .select('id, status, condominium_id, debt_amount, unit_id, created_at, fecha_ingreso')
         .eq('condominium_id', condominiumId)
 
     const billingData = billing || []

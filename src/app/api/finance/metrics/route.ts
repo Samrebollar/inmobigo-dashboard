@@ -39,7 +39,7 @@ export async function GET(request: Request) {
         // Unidades (para el ingreso mensual esperado y proyectar meses sin recibos generados)
         let unitsQuery = supabase
             .from('units')
-            .select('id, condominium_id, unit_number, monto_mensual, payment_deadline, facturacion_activa')
+            .select('id, condominium_id, unit_number, monto_mensual, payment_deadline, facturacion_activa, created_at')
 
         if (condominiumId) {
             unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
         if (condominiumId) {
             const { data } = await supabase
                 .from('residents')
-                .select('id, status, condominium_id, debt_amount')
+                .select('id, status, condominium_id, debt_amount, unit_id, created_at, fecha_ingreso')
                 .eq('condominium_id', condominiumId)
             residents = data || []
         } else if (organizationId) {
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
             if (condoIds.length > 0) {
                 const { data } = await supabase
                     .from('residents')
-                    .select('id, status, condominium_id, debt_amount')
+                    .select('id, status, condominium_id, debt_amount, unit_id, created_at, fecha_ingreso')
                     .in('condominium_id', condoIds)
                 residents = data || []
             }

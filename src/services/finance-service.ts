@@ -948,7 +948,7 @@ export const financeService = {
         // 2. Fetch Units for Expected Income and Deadlines
         let unitsQuery = supabase
             .from('units')
-            .select('id, condominium_id, unit_number, monto_mensual, payment_deadline, facturacion_activa')
+            .select('id, condominium_id, unit_number, monto_mensual, payment_deadline, facturacion_activa, created_at')
 
         if (condominiumId && condominiumId !== 'all' && !condominiumId.startsWith('demo-')) {
             unitsQuery = unitsQuery.eq('condominium_id', condominiumId)
@@ -963,7 +963,7 @@ export const financeService = {
             if (condominiumId && condominiumId !== 'all' && !condominiumId.startsWith('demo-')) {
                 const { data } = await supabase
                     .from('residents')
-                    .select('id, status, condominium_id')
+                    .select('id, status, condominium_id, unit_id, created_at, fecha_ingreso')
                     .eq('condominium_id', condominiumId)
                 allResidents = data || []
             } else {
@@ -975,7 +975,7 @@ export const financeService = {
                 if (condoIds.length > 0) {
                     const { data } = await supabase
                         .from('residents')
-                        .select('id, status, condominium_id')
+                        .select('id, status, condominium_id, unit_id, created_at, fecha_ingreso')
                         .in('condominium_id', condoIds)
                     allResidents = data || []
                 }

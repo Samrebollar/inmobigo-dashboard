@@ -6,6 +6,8 @@ import { LayoutDashboard, Settings, LogOut, User, CreditCard, Zap, Bell, Message
 import { DashboardLayoutClient } from '@/components/seguridad/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
+type SubscriptionRow = { subscription_status: string | null; plan_name: string | null; created_at: string; next_payment_date: string | null }
+
 export default async function DashboardLayout({
     children,
 }: {
@@ -24,38 +26,36 @@ export default async function DashboardLayout({
     const { createAdminClient } = await import('@/utils/supabase/admin')
     const adminSupabase = createAdminClient()
 
-    // 1. Check if Admin/Staff (STRICT: Must be in organization_users)
+    // Staff, residente y perfil son independientes: se consultan en paralelo.
     // We use adminSupabase here to bypass the RLS recursion error in organization_users
-    const { data: orgUser } = await adminSupabase
-        .from('organization_users')
-        .select(`
-            organization_id,
-            role_new,
-            organizations (
-                business_type
-            )
-        `)
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const [{ data: orgUser }, { data: resident }, { data: profile }] = await Promise.all([
+        adminSupabase
+            .from('organization_users')
+            .select(`
+                organization_id,
+                role_new,
+                organizations (
+                    business_type
+                )
+            `)
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        supabase
+            .from('residents')
+            .select('id, first_name, last_name, condominiums(organization_id)')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        supabase
+            .from('profiles')
+            .select('full_name, avatar_url, role_new')
+            .eq('id', user.id)
+            .maybeSingle(),
+    ])
 
     const businessType = (orgUser?.organizations as any)?.business_type || 'condominio'
     const isPropiedades = businessType === 'propiedades'
 
-    // 2. Check if Resident (STRICT: Must be in residents)
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('id, first_name, last_name, condominiums(organization_id)')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
     const isMetadataResident = user.user_metadata?.role === 'resident'
-
-    // 3. Get Profile for Name fallback and Avatar
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url, role_new')
-        .eq('id', user.id)
-        .maybeSingle()
 
     // Construction of Name + First Surname
     let displayName = 'Usuario'
@@ -101,26 +101,15 @@ export default async function DashboardLayout({
 
     const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
 
-    // Prioritize active subscriptions, fallback to the latest created overall
-    let { data: activeSub } = await adminSupabase
-        .from('subscriptions')
-        .select('subscription_status, plan_name, created_at, next_payment_date')
-        .eq('organization_id', organizationId)
-        .eq('subscription_status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-    if (!activeSub) {
-        const { data: fallbackSub } = await adminSupabase
+    // Suscripción más reciente, priorizando la activa (un solo viaje en vez de dos).
+    const { data: subs } = organizationId
+        ? await adminSupabase
             .from('subscriptions')
             .select('subscription_status, plan_name, created_at, next_payment_date')
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        activeSub = fallbackSub
-    }
+        : { data: [] as SubscriptionRow[] }
+    const activeSub = (subs as SubscriptionRow[] | null || []).find(sub => sub.subscription_status === 'active') || (subs as SubscriptionRow[] | null || [])[0] || null
 
     const isDemoMode = !activeSub && role !== 'resident'
     

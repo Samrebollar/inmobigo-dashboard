@@ -67,6 +67,7 @@ export default function AdminDashboardCondominioClient({
 
     const [recentActivity, setRecentActivity] = useState<any[]>(initialActivity)
     const [ingresosAnterior, setIngresosAnterior] = useState<number>(0)
+    const [ingresosBreakdown, setIngresosBreakdown] = useState<{ delMes: number, recuperacion: number, adelantos: number } | null>(null)
     const [condominiums, setCondominiums] = useState<Array<{ id: string, name: string }>>([])
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
     const [mounted, setMounted] = useState(false)
@@ -103,6 +104,7 @@ export default function AdminDashboardCondominioClient({
                     // Mes" en Finanzas, incluye lo recuperado de meses anteriores).
                     setTotalIngresos(cashIncome ? cashIncome.current : analytics.ingresosTotales)
                     setIngresosAnterior(cashIncome ? cashIncome.previous : analytics.ingresosTotalesAnterior)
+                    setIngresosBreakdown(cashIncome ? cashIncome.breakdown : null)
                     setTotalDeuda(analytics.deudaTotal)
                     setTasaCobranza(analytics.tasaCobranza)
                     setMorosidad({
@@ -205,9 +207,22 @@ export default function AdminDashboardCondominioClient({
                                         <div className="text-2xl font-bold text-white">
                                             {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(totalIngresos || 0)}
                                         </div>
-                                        <p className="text-xs text-emerald-500 flex items-center mt-1">
-                                            <TrendingUp className="h-3 w-3 mr-1" /> +20.1% vs mes anterior
+                                        <p className={cn(
+                                            "text-xs flex items-center mt-1",
+                                            (totalIngresos || 0) >= ingresosAnterior ? "text-emerald-500" : "text-rose-500"
+                                        )}>
+                                            {(totalIngresos || 0) >= ingresosAnterior ? <TrendingUp className="h-3 w-3 mr-1" /> : <Activity className="h-3 w-3 mr-1" />}
+                                            {ingresosAnterior > 0
+                                                ? `${(((totalIngresos || 0) - ingresosAnterior) / ingresosAnterior * 100).toFixed(1)}%`
+                                                : '+100%'} vs mes anterior
                                         </p>
+                                        {ingresosBreakdown && (ingresosBreakdown.recuperacion > 0 || ingresosBreakdown.adelantos > 0) && (
+                                            <p className="text-[11px] text-zinc-500 mt-1.5 leading-snug">
+                                                Cuotas del mes {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(ingresosBreakdown.delMes)}
+                                                {ingresosBreakdown.recuperacion > 0 && <> · Meses anteriores {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(ingresosBreakdown.recuperacion)}</>}
+                                                {ingresosBreakdown.adelantos > 0 && <> · Adelantos {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(ingresosBreakdown.adelantos)}</>}
+                                            </p>
+                                        )}
                                     </>
                                 )}
                             </CardContent>

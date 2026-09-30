@@ -16,10 +16,18 @@ export async function fetchCashIncome(organizationId: string, condominiumId?: st
         if (month) params.set('month', month)
         const res = await fetch(`/api/finance/metrics?${params.toString()}`)
         if (!res.ok) throw new Error('No se pudieron cargar los ingresos')
-        const data = await res.json()
-        return Number(data.ingresos_mes || 0)
+        return res.json()
     }
 
-    const [current, previous] = await Promise.all([load(), load(prevKey)])
-    return { current, previous }
+    const [cur, prev] = await Promise.all([load(), load(prevKey)])
+    return {
+        current: Number(cur.ingresos_mes || 0),
+        previous: Number(prev.ingresos_mes || 0),
+        // Desglose para cuadrar con "Recaudado" de Gestión de Cobranza (solo cuotas del mes)
+        breakdown: {
+            delMes: Number(cur.ingresos_del_mes || 0),
+            recuperacion: Number(cur.ingresos_recuperacion || 0),
+            adelantos: Number(cur.ingresos_adelantos || 0),
+        },
+    }
 }

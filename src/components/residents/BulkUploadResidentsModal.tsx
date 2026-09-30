@@ -7,7 +7,7 @@ import Papa from 'papaparse'
 
 import { Button } from '@/components/ui/button'
 import { residentsService } from '@/services/residents-service'
-import { sendResidentInvitationsAction } from '@/app/actions/resident-invite-actions'
+import { sendResidentInvitationsAction, billNewResidentsAction } from '@/app/actions/resident-invite-actions'
 import { unitsService } from '@/services/units-service'
 import { CreateResidentDTO } from '@/types/residents'
 import { Unit } from '@/types/units'
@@ -219,6 +219,7 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
                     // Invitación por correo a cada residente nuevo para que active su cuenta
                     let inviteNote = ''
                     if (createdIds.length > 0) {
+                        await billNewResidentsAction(createdIds)
                         const inv = await sendResidentInvitationsAction(createdIds)
                         inviteNote = inv.failed > 0
                             ? ` Invitaciones: ${inv.sent} enviadas, ${inv.failed} con error (reenvíalas desde Acciones).`

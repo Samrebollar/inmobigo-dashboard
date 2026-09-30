@@ -7,7 +7,7 @@ import Papa from 'papaparse'
 
 import { Button } from '@/components/ui/button'
 import { bulkService, UnifiedBulkRow } from '@/services/bulk-service'
-import { sendResidentInvitationsAction } from '@/app/actions/resident-invite-actions'
+import { sendResidentInvitationsAction, billNewResidentsAction } from '@/app/actions/resident-invite-actions'
 
 interface UnifiedBulkUploadModalProps {
     isOpen: boolean
@@ -169,6 +169,7 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                     // Invitación por correo a cada residente nuevo para que active su cuenta
                     let inviteNote = ''
                     if (result.createdResidentIds.length > 0) {
+                        await billNewResidentsAction(result.createdResidentIds)
                         const inv = await sendResidentInvitationsAction(result.createdResidentIds)
                         inviteNote = inv.failed > 0
                             ? ` Invitaciones: ${inv.sent} enviadas, ${inv.failed} con error (reenvíalas desde Acciones).`

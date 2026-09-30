@@ -106,11 +106,10 @@ export function isBillingActiveForPeriod(resident: any, periodDate: Date): boole
 }
 
 /**
- * Primer mes que se le cobra automáticamente a un residente (año y mes 0-11).
- * Si se dio de alta DESPUÉS del día límite de pago de ese mes, su primera cuota
- * proyectada es la del mes siguiente: no debe aparecer con la cuota de un mes en
- * el que ni siquiera estaba registrado a tiempo para pagar. La deuda previa que
- * se captura al darlo de alta (facturas reales) se suma aparte.
+ * Primer mes que se le cobra automáticamente a un residente (año y mes 0-11):
+ * el mes en que se dio de alta. Al registrarlo se genera la factura de ese mes
+ * (aunque ya haya pasado el día límite, en cuyo caso nace vencida). La deuda
+ * previa que se captura al darlo de alta (facturas reales) se suma aparte.
  */
 export function getFirstBillableMonth(
     startDateStr: string | null | undefined,
@@ -123,9 +122,7 @@ export function getFirstBillableMonth(
         : new Date(raw).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
     const [y, m, d] = ymd.split('-').map(Number)
     if (!y || !m || !d) return null
-    if (d > paymentDeadlineDay) {
-        return m === 12 ? { year: y + 1, month: 0 } : { year: y, month: m }
-    }
+    void paymentDeadlineDay
     return { year: y, month: m - 1 }
 }
 

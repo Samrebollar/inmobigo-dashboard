@@ -275,7 +275,9 @@ export function FinanceTab() {
             const { invoices: invoicesData } = await response.json()
 
             if (invoicesData) {
-                const mappedInvoices = invoicesData.map((inv: any) => {
+                // Los recibos cancelados (p. ej. de residentes eliminados) no son
+                // cobranza: no se listan en Movimientos recientes.
+                const mappedInvoices = invoicesData.filter((inv: any) => inv.status !== 'cancelled').map((inv: any) => {
                     const resident = inv.residents
                     const unitName = resident?.units?.unit_number || 'S/N'
                     const phone = resident?.phone || ''

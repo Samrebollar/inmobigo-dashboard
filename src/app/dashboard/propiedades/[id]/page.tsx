@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 
 import { createClient } from '@/utils/supabase/client'
+import { fetchCashIncome } from '@/lib/cash-income'
 import { propertiesService } from '@/services/properties-service'
 import { residentsService } from '@/services/residents-service'
 import { Condominium } from '@/types/properties'
@@ -159,7 +160,11 @@ export default function CondominiumPage() {
                                 .filter(isInvoiceInCurrentMonth)
                                 .reduce((acc, curr) => acc + Math.max(0, Number(curr.amount || 0) - Number(curr.balance_due || 0)), 0)
 
-                            ;(data as any).ingresos_mes = totalRecaudado
+                            // Ingresos del mes = flujo de caja (igual que Finanzas, Dashboard y
+                            // "Recaudado" de Gestión de Cobranza); si falla, cuotas cobradas del mes.
+                            ;(data as any).ingresos_mes = await fetchCashIncome('', id)
+                                .then(r => r.current)
+                                .catch(() => totalRecaudado)
 
                             // 6-8. Deuda Total / Residentes Morosos.
                             // Deuda Total = lo que realmente debe cada residente (misma fórmula que

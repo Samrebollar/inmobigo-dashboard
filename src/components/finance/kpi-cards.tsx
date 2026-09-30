@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, DollarSign, Receipt, AlertCircle, Target } from 'lucide-react'
+import { DollarSign, Receipt, AlertCircle, Target, Info } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -10,27 +10,35 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
 }
 
+interface MetricsData {
+    ingresos_mes: number
+    ingresos_del_mes: number
+    ingresos_recuperacion: number
+    ingresos_adelantos: number
+    total_generado: number
+    cobrado_cuotas_mes: number
+    total_por_cobrar: number
+    cartera_vencida: number
+    cartera_vencida_mes: number
+    cartera_vencida_anterior: number
+    eficacia_cobro: number
+}
+
+type Color = 'emerald' | 'blue' | 'violet' | 'rose'
+
 interface KPI {
     id: string
     title: string
-    value: number
-    prefix?: string
-    suffix?: string
-    change: number // percentage
-    trend: 'up' | 'down' | 'neutral'
+    hint: string
+    value: string
+    isZero: boolean
     icon: React.ElementType
-    color: 'emerald' | 'blue' | 'violet' | 'rose'
-    data: number[] // sparkline bars
-    isLoading: boolean
+    color: Color
+    rows: { label: string, value: string, tone?: 'muted' | 'good' | 'bad' | 'warn' }[]
+    progress?: number
 }
 
-interface MetricsData {
-    ingresos_mes: number
-    total_por_cobrar: number
-    cartera_vencida: number
-    eficacia_cobro: number
-    total_generado: number
-}
+const money = (n: number) => `$${Math.round(n || 0).toLocaleString('es-MX')}`
 
 export function KPICards({ organizationId, condominiumId }: { organizationId: string, condominiumId?: string }) {
     const [metrics, setMetrics] = useState<MetricsData | null>(null)
@@ -48,16 +56,16 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
 
                 const res = await fetch(`/api/finance/metrics?${params.toString()}`)
                 if (res.ok) {
-                    const data: MetricsData = await res.json()
-                    setMetrics(data)
+                    setMetrics(await res.json())
                 } else {
                     const errData = await res.json().catch(() => ({}))
                     setError(errData.error || `Error ${res.status}`)
                 }
-            } catch (e: any) {
-                if (e?.name !== 'AbortError' && !e?.message?.includes('aborted') && !e?.message?.includes('abort')) {
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e)
+                if (!msg.includes('abort')) {
                     console.error('Error fetching finance metrics:', e)
-                    setError(e.message)
+                    setError(msg)
                 }
             } finally {
                 setIsLoading(false)
@@ -66,66 +74,64 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
         fetchMetrics()
     }, [condominiumId, organizationId])
 
-    // Build realistic sparkline bars proportional to the real metric value
-    function makeSparkline(value: number, count = 10): number[] {
-        if (value <= 0) return Array(count).fill(0.1)
-        // Simulate a plausible recent trend ending at the current value
-        return Array.from({ length: count }, (_, i) => {
-            const fraction = 0.4 + (i / (count - 1)) * 0.6 // ramp from 40% to 100%
-            const noise = (Math.sin(i * 2.3 + value * 0.001) * 0.12) // deterministic noise
-            return Math.max(0.05, fraction + noise)
-        }).map(f => f * value)
-    }
+    const m = metrics
+    const monthName = new Date().toLocaleDateString('es-MX', { month: 'long', timeZone: 'America/Mexico_City' })
 
     const kpis: KPI[] = [
         {
             id: 'income',
             title: 'Ingresos del Mes',
-            value: metrics?.ingresos_mes ?? 0,
-            prefix: '$',
-            change: metrics ? (metrics.ingresos_mes > 0 ? 12.5 : 0) : 0,
-            trend: 'up',
+            hint: `Todo el dinero que entró en ${monthName}, sin importar a qué mes pertenece la deuda.`,
+            value: money(m?.ingresos_mes ?? 0),
+            isZero: !m?.ingresos_mes,
             icon: DollarSign,
             color: 'emerald',
-            data: makeSparkline(metrics?.ingresos_mes ?? 0),
-            isLoading,
+            rows: [
+                { label: `Cuotas de ${monthName}`, value: money(m?.ingresos_del_mes ?? 0) },
+                { label: 'Meses anteriores (recuperación)', value: money(m?.ingresos_recuperacion ?? 0), tone: (m?.ingresos_recuperacion ?? 0) > 0 ? 'good' : 'muted' },
+                { label: 'Adelantos / saldo a favor', value: money(m?.ingresos_adelantos ?? 0), tone: 'muted' },
+            ],
         },
         {
             id: 'billed',
-            title: 'Total por Cobrar del Periodo',
-            value: metrics?.total_generado ?? 0,
-            prefix: '$',
-            change: metrics ? (metrics.total_generado > 0 ? 8.2 : 0) : 0,
-            trend: 'up',
+            title: 'Facturado del Mes',
+            hint: `Cuotas de mantenimiento generadas para ${monthName}.`,
+            value: money(m?.total_generado ?? 0),
+            isZero: !m?.total_generado,
             icon: Receipt,
             color: 'blue',
-            data: makeSparkline(metrics?.total_generado ?? 0),
-            isLoading,
+            rows: [
+                { label: 'Cobrado', value: money(m?.cobrado_cuotas_mes ?? 0), tone: 'good' },
+                { label: 'Por cobrar', value: money(m?.total_por_cobrar ?? 0), tone: (m?.total_por_cobrar ?? 0) > 0 ? 'warn' : 'muted' },
+            ],
         },
         {
             id: 'overdue',
             title: 'Cartera Vencida',
-            value: metrics?.cartera_vencida ?? 0,
-            prefix: '$',
-            change: metrics ? (metrics.cartera_vencida > 0 ? -2.4 : 0) : 0,
-            trend: 'down',
+            hint: 'Todo lo vencido sin pagar a hoy, de cualquier mes.',
+            value: money(m?.cartera_vencida ?? 0),
+            isZero: !m?.cartera_vencida,
             icon: AlertCircle,
             color: 'rose',
-            data: makeSparkline(metrics?.cartera_vencida ?? 0),
-            isLoading,
+            rows: [
+                { label: `De ${monthName}`, value: money(m?.cartera_vencida_mes ?? 0), tone: (m?.cartera_vencida_mes ?? 0) > 0 ? 'bad' : 'muted' },
+                { label: 'Meses anteriores', value: money(m?.cartera_vencida_anterior ?? 0), tone: (m?.cartera_vencida_anterior ?? 0) > 0 ? 'bad' : 'muted' },
+            ],
         },
         {
             id: 'collection',
             title: 'Eficacia de Cobro',
-            value: metrics?.eficacia_cobro ?? 0,
-            suffix: '%',
-            change: metrics ? (metrics.eficacia_cobro > 0 ? 5.1 : 0) : 0,
-            trend: 'up',
+            hint: `Qué porcentaje de las cuotas de ${monthName} ya se cobró. Lo recuperado de meses anteriores no la infla.`,
+            value: `${(m?.eficacia_cobro ?? 0).toFixed(1)}%`,
+            isZero: !m?.eficacia_cobro,
             icon: Target,
             color: 'violet',
-            data: makeSparkline(metrics?.eficacia_cobro ?? 0),
-            isLoading,
-        }
+            progress: m?.eficacia_cobro ?? 0,
+            rows: [
+                { label: `${money(m?.cobrado_cuotas_mes ?? 0)} de ${money(m?.total_generado ?? 0)}`, value: '', tone: 'muted' },
+                { label: 'Recuperado de meses anteriores', value: money(m?.ingresos_recuperacion ?? 0), tone: (m?.ingresos_recuperacion ?? 0) > 0 ? 'good' : 'muted' },
+            ],
+        },
     ]
 
     if (error) {
@@ -144,110 +150,69 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {kpis.map((kpi, index) => (
-                <KPICard key={kpi.id} kpi={kpi} index={index} />
+                <KPICard key={kpi.id} kpi={kpi} index={index} isLoading={isLoading} />
             ))}
         </div>
     )
 }
 
-function KPICard({ kpi, index }: { kpi: KPI, index: number }) {
-    // Format the value based on type
-    const formatValue = (kpi: KPI) => {
-        if (kpi.isLoading) return '—'
-        if (kpi.suffix === '%') {
-            return kpi.value.toFixed(2)
-        }
-        // Currency formatting with locale (MXN style)
-        return kpi.value.toLocaleString('es-MX', { maximumFractionDigits: 0 })
-    }
+const TONE: Record<string, string> = {
+    muted: 'text-zinc-500',
+    good: 'text-emerald-400',
+    bad: 'text-rose-400',
+    warn: 'text-amber-400',
+}
 
+function KPICard({ kpi, index, isLoading }: { kpi: KPI, index: number, isLoading: boolean }) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1, duration: 0.4 }}
-            className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 hover:bg-zinc-900/80 transition-all duration-300 hover:border-zinc-700/50 hover:shadow-xl hover:shadow-indigo-500/5"
+            transition={{ delay: index * 0.08, duration: 0.35 }}
+            className="group relative rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 hover:bg-zinc-900/80 transition-all duration-300 hover:border-zinc-700/50"
         >
-            {/* Background Gradient on Hover */}
-            <div className={cn(
-                "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-tr from-transparent to-transparent pointer-events-none",
-                kpi.color === 'emerald' && "via-emerald-500/5",
-                kpi.color === 'blue' && "via-blue-500/5",
-                kpi.color === 'violet' && "via-violet-500/5",
-                kpi.color === 'rose' && "via-rose-500/5",
-            )} />
-
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex justify-between items-start mb-3">
                 <div className={cn(
-                    "p-2 rounded-lg bg-zinc-800/50 text-zinc-400 group-hover:text-white transition-colors duration-300",
-                    kpi.color === 'emerald' && "group-hover:bg-emerald-500/20 group-hover:text-emerald-400",
-                    kpi.color === 'blue' && "group-hover:bg-blue-500/20 group-hover:text-blue-400",
-                    kpi.color === 'violet' && "group-hover:bg-violet-500/20 group-hover:text-violet-400",
-                    kpi.color === 'rose' && "group-hover:bg-rose-500/20 group-hover:text-rose-400",
+                    'p-2 rounded-lg bg-zinc-800/50',
+                    kpi.color === 'emerald' && 'text-emerald-400',
+                    kpi.color === 'blue' && 'text-blue-400',
+                    kpi.color === 'violet' && 'text-violet-400',
+                    kpi.color === 'rose' && 'text-rose-400',
                 )}>
-                    <kpi.icon size={20} />
+                    <kpi.icon size={18} />
                 </div>
-
-                {/* Trend Badge — only shown when not loading and value is meaningful */}
-                {!kpi.isLoading && kpi.value > 0 && kpi.change !== 0 && (
-                    <div className={cn(
-                        "flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full",
-                        kpi.trend === 'up' && kpi.id !== 'overdue' ? "bg-emerald-500/10 text-emerald-400" :
-                            kpi.trend === 'down' && kpi.id === 'overdue' ? "bg-emerald-500/10 text-emerald-400" :
-                                "bg-rose-500/10 text-rose-400"
-                    )}>
-                        {kpi.change > 0 ? '+' : ''}{kpi.change}%
-                        {kpi.change > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                <div className="relative group/hint">
+                    <Info size={14} className="text-zinc-600 hover:text-zinc-300 cursor-help" />
+                    <div className="pointer-events-none absolute right-0 top-5 z-20 w-56 rounded-lg border border-zinc-700 bg-zinc-950 p-2.5 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity group-hover/hint:opacity-100">
+                        {kpi.hint}
                     </div>
-                )}
-            </div>
-
-            <div className="space-y-1">
-                <h3 className="text-sm font-medium text-zinc-400">{kpi.title}</h3>
-                <div className="flex items-baseline gap-1">
-                    {kpi.isLoading ? (
-                        <div className="h-8 w-32 bg-zinc-800 rounded animate-pulse" />
-                    ) : (
-                        <span className={cn(
-                            "text-2xl font-bold tracking-tight",
-                            kpi.value === 0 ? "text-zinc-500" : "text-white"
-                        )}>
-                            {kpi.prefix}{formatValue(kpi)}{kpi.suffix}
-                        </span>
-                    )}
                 </div>
             </div>
 
-            {/* Sparkline — proportional to real values */}
-            <div className="mt-4 h-10 w-full flex items-end gap-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
-                {kpi.isLoading ? (
-                    // Skeleton sparkline
-                    Array.from({ length: 10 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="flex-1 rounded-t-sm bg-zinc-800 animate-pulse"
-                            style={{ height: `${30 + Math.sin(i) * 20}%` }}
-                        />
-                    ))
-                ) : (
-                    kpi.data.map((value, i) => {
-                        const max = Math.max(...kpi.data, 1)
-                        const height = Math.max(4, (value / max) * 100)
-                        return (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "flex-1 rounded-t-sm transition-all duration-500",
-                                    kpi.color === 'emerald' ? "bg-emerald-500" :
-                                        kpi.color === 'blue' ? "bg-blue-500" :
-                                            kpi.color === 'violet' ? "bg-violet-500" :
-                                                "bg-rose-500"
-                                )}
-                                style={{ height: `${height}%` }}
-                            />
-                        )
-                    })
-                )}
+            <h3 className="text-sm font-medium text-zinc-400">{kpi.title}</h3>
+            {isLoading ? (
+                <div className="h-8 w-28 bg-zinc-800 rounded animate-pulse mt-1" />
+            ) : (
+                <p className={cn('text-2xl font-bold tracking-tight mt-0.5', kpi.isZero ? 'text-zinc-500' : 'text-white')}>{kpi.value}</p>
+            )}
+
+            {kpi.progress !== undefined && (
+                <div className="mt-3 h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="h-full rounded-full bg-violet-500 transition-all duration-700" style={{ width: `${isLoading ? 0 : Math.min(100, kpi.progress)}%` }} />
+                </div>
+            )}
+
+            <div className="mt-3 pt-3 border-t border-zinc-800/80 space-y-1.5">
+                {kpi.rows.map(r => (
+                    <div key={r.label} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-zinc-500 truncate">{r.label}</span>
+                        {r.value && (
+                            <span className={cn('font-medium tabular-nums', isLoading ? 'text-zinc-600' : TONE[r.tone || ''] || 'text-zinc-200')}>
+                                {isLoading ? '—' : r.value}
+                            </span>
+                        )}
+                    </div>
+                ))}
             </div>
         </motion.div>
     )

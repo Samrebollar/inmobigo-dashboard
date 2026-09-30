@@ -79,7 +79,7 @@ export async function GET(request: Request) {
             paid_at: p.paid_at,
             amount: Number(p.amount || 0),
             method: p.payment_method || 'Sin especificar',
-            concept: inv?.description || 'Pago',
+            concept: inv?.description || (p.invoice_id ? 'Pago' : 'Anticipo (saldo a favor)'),
             resident: res ? `${res.first_name || ''} ${res.last_name || ''}`.trim() : 'Residente',
             unit: unit?.unit_number || '',
             condominium: condoMap.get(p.condominium_id as string)?.name || '',

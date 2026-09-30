@@ -500,24 +500,37 @@ export function CreateInvoiceModal({
             return
         }
         const paid = charge.paidNow
+        const condo = selectedResident.condominium_id || selectedCondoId
+        const isDemoCondo = isDemo || condo.startsWith('demo-')
+        // Real: el cargo se crea pendiente y se cobra con register_payment, para que
+        // el pago quede registrado (folio, quién cobró) y aparezca en el Corte de Caja
+        // y en Ingresos del Mes. En demo se guarda ya pagado como antes.
         const created = await financeService.create({
             organization_id: organizationId,
-            condominium_id: selectedResident.condominium_id || selectedCondoId,
+            condominium_id: condo,
             resident_id: selectedResident.id,
             unit_id: selectedResident.unit_id,
             amount,
-            status: paid ? 'paid' : 'pending',
+            status: paid && isDemoCondo ? 'paid' : 'pending',
             invoice_type: CONCEPT_TO_INVOICE_TYPE[charge.concept],
             due_date: paid ? todayMx() : charge.dueDate,
             description: notes ? `${charge.concept} - ${notes}` : charge.concept,
-            payment_method: paid ? paymentMethod : null,
-            ...(paid && { paid_at: new Date().toISOString(), paid_amount: amount, balance_due: 0 })
+            payment_method: paid && isDemoCondo ? paymentMethod : null,
+            ...(paid && isDemoCondo && { paid_at: new Date().toISOString(), paid_amount: amount, balance_due: 0 })
         } as unknown as CreateInvoiceDTO)
+
+        let paymentFolio = ''
+        if (paid && !isDemoCondo && created?.id) {
+            const { payment } = await financeService.registerPayment(condo, {
+                invoiceId: created.id, amount, paymentMethod, notes: notes || undefined, paidAt: new Date().toISOString(),
+            })
+            paymentFolio = payment?.folio || ''
+        }
 
         if (paid) {
             downloadReceipt({
-                folio: created?.folio || (created?.id ? `FAC-${created.id.substring(0, 8).toUpperCase()}` : `REC-${Date.now().toString().slice(-6)}`),
-                rows: [{ concept: charge.concept, period: periodLabel(charge.dueDate), amount }],
+                folio: paymentFolio || created?.folio || (created?.id ? `FAC-${created.id.substring(0, 8).toUpperCase()}` : `REC-${Date.now().toString().slice(-6)}`),
+                rows: [{ concept: charge.concept, period: periodLabel(todayMx()), amount }],
                 total: amount,
                 method: paymentMethod,
                 remaining: totalDebt,
@@ -526,8 +539,8 @@ export function CreateInvoiceModal({
             })
             toast.success(`Recibo de ${money(amount)} creado y cobrado`)
             await deliverReceipt({
-                folio: created?.folio || (created?.id ? `FAC-${created.id.substring(0, 8).toUpperCase()}` : ''),
-                items: [{ concept: charge.concept, period: periodLabel(charge.dueDate), amount }],
+                folio: paymentFolio || created?.folio || (created?.id ? `FAC-${created.id.substring(0, 8).toUpperCase()}` : ''),
+                items: [{ concept: charge.concept, period: periodLabel(todayMx()), amount }],
                 total: amount,
                 remaining: totalDebt,
                 method: paymentMethod,

@@ -28,6 +28,7 @@ import {
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
 import { ContactInmobiGoCard } from '@/components/shared/ContactInmobiGoCard'
+import { syncMyPhoneAction } from '@/app/actions/profile-actions'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -212,6 +213,11 @@ export default function ResidentProfileClient({
                 .update(profileUpdate)
                 .eq('id', user.id)
             if (profileError) throw profileError
+
+            // El mismo número en los demás lugares (WhatsApp de notificaciones
+            // del administrador y datos de la cuenta)
+            const sync = await syncMyPhoneAction(normalizedPhone)
+            if (!sync.success) throw new Error(sync.error || 'No se pudo actualizar el teléfono')
 
             router.refresh()
             toast.success('Perfil actualizado con éxito. Sus datos han sido guardados de forma segura.')

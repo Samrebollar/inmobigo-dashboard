@@ -114,7 +114,7 @@ export default async function PaymentsPage() {
                     const relatedInv = invMap[p.invoice_id]
                     return {
                         ...p,
-                        concept: relatedInv?.description || 'Cuota de Mantenimiento',
+                        concept: relatedInv?.description || (p.invoice_id ? 'Cuota de Mantenimiento' : 'Anticipo (saldo a favor)'),
                         payment_method: p.payment_method || 'N/A',
                     }
                 })

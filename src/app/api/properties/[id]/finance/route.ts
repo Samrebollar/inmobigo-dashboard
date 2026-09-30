@@ -177,7 +177,28 @@ export async function POST(
             const newCredit = Math.round((Number(res.credit_amount || 0) + amount) * 100) / 100
             const { error } = await adminSupabase.from('residents').update({ credit_amount: newCredit }).eq('id', res.id)
             if (error) throw error
-            return NextResponse.json({ success: true, credit_amount: newCredit })
+            // El anticipo es dinero que entró hoy: se registra como pago sin factura
+            // para que cuente en Ingresos del Mes y en el Corte de Caja.
+            const advanceId = randomUUID()
+            const { data: advance, error: advanceError } = await adminSupabase
+                .from('resident_invoice_payments')
+                .insert({
+                    id: advanceId,
+                    invoice_id: null,
+                    resident_id: res.id,
+                    condominium_id: condoId,
+                    organization_id: orgId,
+                    amount,
+                    folio: `REC-${advanceId.substring(0, 8).toUpperCase()}`,
+                    payment_method: body.paymentMethod || 'Efectivo',
+                    notes: 'Anticipo · saldo a favor',
+                    paid_at: new Date().toISOString(),
+                    created_by: user.id,
+                })
+                .select()
+                .single()
+            if (advanceError) console.error('[add_credit] No se pudo registrar el anticipo:', advanceError)
+            return NextResponse.json({ success: true, credit_amount: newCredit, payment: advance })
         }
 
         // ── Recibo al residente por WhatsApp + correo (flujo n8n 37) ──

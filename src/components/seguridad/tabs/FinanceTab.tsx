@@ -254,7 +254,7 @@ export function FinanceTab() {
                 facturado: condoFinancials.totalPeriodo,
                 recaudado: condoFinancials.recaudado,
                 porCobrar: condoFinancials.porCobrar,
-                vencido: condoFinancials.vencido,
+                vencido: condoFinancials.morosidadTotal, // incluye deuda vencida de meses anteriores
                 morosos: condoFinancials.morososCount,
                 saldoInicialPendiente: condoFinancials.saldoInicialPendiente
             })
@@ -589,7 +589,7 @@ export function FinanceTab() {
                                     <div className="text-2xl font-bold text-violet-400">
                                         ${metrics.saldoInicialPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </div>
-                                    <p className="text-xs text-zinc-500 mt-1">Deuda previa, no es cuota del mes</p>
+                                    <p className="text-xs text-zinc-500 mt-1">Deuda de meses anteriores, ya incluida en Morosidad</p>
                                 </>
                             )}
                         </CardContent>

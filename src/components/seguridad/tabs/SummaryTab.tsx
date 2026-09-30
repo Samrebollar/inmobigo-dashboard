@@ -83,7 +83,7 @@ export function SummaryTab({ condo, revenueData = [] }: SummaryTabProps) {
                 setMetrics({
                     recaudado: condoFinancials.recaudado,
                     porCobrar: condoFinancials.porCobrar,
-                    vencido: condoFinancials.vencido,
+                    vencido: condoFinancials.morosidadTotal, // incluye deuda vencida de meses anteriores
                     morosos: condoFinancials.morososCount
                 })
 

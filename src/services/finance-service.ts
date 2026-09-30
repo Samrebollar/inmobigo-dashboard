@@ -1061,7 +1061,7 @@ export const financeService = {
                 ? (condoFinancials.recaudado / condoFinancials.totalPeriodo) * 100
                 : 0,
             morosidadCount: condoFinancials.morososCount,
-            morosidadMonto: condoFinancials.vencido,
+            morosidadMonto: condoFinancials.morosidadTotal, // cuotas vencidas + deuda de meses anteriores
             incomeSummary: [] as any[],
             recentActivity: [] as any[]
         }

@@ -216,7 +216,7 @@ export function FinanceTab() {
             // 1. Fetch units
             const { data: unitsData, error: unitsError } = await supabase
                 .from('units')
-                .select('id, monto_mensual, facturacion_activa')
+                .select('id, monto_mensual, facturacion_activa, payment_deadline, created_at')
                 .eq('condominium_id', condoId)
                 .neq('billing_status', 'suspended')
 
@@ -229,7 +229,7 @@ export function FinanceTab() {
             // tuviera saldo inicial cargado.
             const { data: residentsData, error: residentsError } = await supabase
                 .from('residents')
-                .select('id, unit_id, fecha_ingreso, status, debt_amount')
+                .select('id, unit_id, fecha_ingreso, created_at, status, debt_amount')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError
@@ -237,7 +237,7 @@ export function FinanceTab() {
             // 3. Fetch resident invoices
             const { data: invoicesData, error: invoiceError } = await supabase
                 .from('resident_invoices')
-                .select('amount, balance_due, status, resident_id, invoice_type, created_at, due_date')
+                .select('amount, balance_due, status, resident_id, unit_id, invoice_type, created_at, due_date')
                 .eq('condominium_id', condoId)
 
             if (invoiceError) throw invoiceError

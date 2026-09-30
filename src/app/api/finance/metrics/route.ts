@@ -33,8 +33,14 @@ export async function GET(request: Request) {
         }
 
         const now = new Date()
-        const currentYear = now.getFullYear()
-        const currentMonth = now.getMonth()
+        const todayMxKey = now.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }).slice(0, 7)
+        // ?month=YYYY-MM permite pedir otro mes (el dashboard lo usa para el
+        // "vs mes anterior"); por defecto es el mes en curso.
+        const monthParam = searchParams.get('month')
+        const monthKey = monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam) ? monthParam : todayMxKey
+        const [yy, mm] = monthKey.split('-').map(Number)
+        const currentYear = yy
+        const currentMonth = mm - 1
 
         // Unidades (para el ingreso mensual esperado y proyectar meses sin recibos generados)
         let unitsQuery = supabase
@@ -108,10 +114,8 @@ export async function GET(request: Request) {
         // · Eficacia de Cobro = % cobrado de las cuotas del mes. Lo recuperado de
         //   meses anteriores no la infla: se reporta aparte.
         const todayMx = now.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
-        const monthKey = todayMx.slice(0, 7)
         const monthStart = `${monthKey}-01`
         const monthStartIso = new Date(`${monthStart}T00:00:00-06:00`).toISOString()
-        const [yy, mm] = monthKey.split('-').map(Number)
         const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, '0')}-01`
         const monthEndIso = new Date(`${nextMonth}T00:00:00-06:00`).toISOString()
 

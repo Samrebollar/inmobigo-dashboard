@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { DollarSign, Building, Users, Activity, TrendingUp, Home, Wrench, AlertTriangle, Megaphone } from 'lucide-react'
 import Link from 'next/link'
 import { financeService } from '@/services/finance-service'
+import { fetchCashIncome } from '@/lib/cash-income'
 import { dashboardService } from '@/services/dashboard-service'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -94,11 +95,18 @@ export default function AdminDashboardCondominioClient({
                 setTasaError(null)
                 setMorosidadError(null)
 
-                const analytics = await financeService.getDashboardAnalytics(organizationId, selectedCondoId || undefined)
+                const [analytics, cashIncome] = await Promise.all([
+                    financeService.getDashboardAnalytics(organizationId, selectedCondoId || undefined),
+                    selectedCondoId.startsWith('demo-')
+                        ? Promise.resolve(null)
+                        : fetchCashIncome(organizationId, selectedCondoId || undefined).catch(() => null),
+                ])
 
                 if (isMounted) {
-                    setTotalIngresos(analytics.ingresosTotales)
-                    setIngresosAnterior(analytics.ingresosTotalesAnterior)
+                    // Ingresos = flujo de caja del mes (misma cifra que "Ingresos del
+                    // Mes" en Finanzas, incluye lo recuperado de meses anteriores).
+                    setTotalIngresos(cashIncome ? cashIncome.current : analytics.ingresosTotales)
+                    setIngresosAnterior(cashIncome ? cashIncome.previous : analytics.ingresosTotalesAnterior)
                     setTotalDeuda(analytics.deudaTotal)
                     setTasaCobranza(analytics.tasaCobranza)
                     setMorosidad({

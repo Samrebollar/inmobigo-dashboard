@@ -84,9 +84,48 @@ export async function GET(request: Request) {
             unit: unit?.unit_number || '',
             condominium: condoMap.get(p.condominium_id as string)?.name || '',
             collected_by: prof ? (prof.full_name || prof.email || 'Equipo') : (p.payment_method === 'Saldo a favor' ? 'Automático' : 'En línea / sistema'),
+            collected_by_id: (p.created_by as string | null) || null,
             notes: p.notes || '',
         }
     })
 
-    return NextResponse.json({ date, payments: result })
+    // Quién consulta (para "Arqueo realizado por") y arqueos ya hechos ese día
+    const { data: viewerProfile } = await admin.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle()
+    const viewer = { id: user.id, name: viewerProfile?.full_name || viewerProfile?.email || user.email || 'Yo' }
+
+    let countsQuery = admin
+        .from('cash_counts')
+        .select('id, condominium_id, count_date, counted_by, counted_for, expected_amount, counted_amount, difference, status, notes, created_at')
+        .eq('organization_id', organizationId)
+        .eq('count_date', date)
+        .order('created_at', { ascending: false })
+    if (condominiumId) countsQuery = countsQuery.eq('condominium_id', condominiumId)
+    const { data: countsRaw } = await countsQuery
+    const countUserIds = ids((countsRaw || []).flatMap(c => [c.counted_by as string, c.counted_for as string]))
+    const missing = countUserIds.filter(id => !profMap.has(id) && id !== user.id)
+    if (missing.length) {
+        const { data: more } = await admin.from('profiles').select('id, full_name, email').in('id', missing)
+        ;((more || []) as Prof[]).forEach(p => profMap.set(p.id, p))
+    }
+    const nameOf = (id: string | null) => {
+        if (!id) return '—'
+        if (id === user.id) return viewer.name
+        const pr = profMap.get(id)
+        return pr?.full_name || pr?.email || 'Equipo'
+    }
+    const counts = (countsRaw || []).map(c => ({
+        id: c.id,
+        count_date: c.count_date,
+        counted_by: nameOf(c.counted_by as string | null),
+        counted_for: nameOf(c.counted_for as string | null),
+        counted_for_id: c.counted_for,
+        expected_amount: Number(c.expected_amount || 0),
+        counted_amount: Number(c.counted_amount || 0),
+        difference: Number(c.difference || 0),
+        status: c.status,
+        notes: c.notes || '',
+        created_at: c.created_at,
+    }))
+
+    return NextResponse.json({ date, payments: result, viewer, counts })
 }

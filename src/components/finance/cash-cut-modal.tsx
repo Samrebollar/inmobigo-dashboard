@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, Download, Loader2, Banknote, ArrowLeftRight, CreditCard, Wallet, Receipt } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Loader2, Banknote, ArrowLeftRight, CreditCard, Wallet, Receipt, ClipboardCheck, History, Calculator } from 'lucide-react'
+import { CashCountPanel, type CashCollector } from './cash-count-panel'
+import { CashCountHistory } from './cash-count-history'
+import { STATUS_UI, statusOf, downloadCashCountPdf, type CashCountRecord } from './cash-count-shared'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -18,6 +21,7 @@ type CashCutPayment = {
     unit: string
     condominium: string
     collected_by: string
+    collected_by_id: string | null
     notes: string
 }
 
@@ -51,9 +55,16 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
     const [condoId, setCondoId] = useState(defaultCondoId || '')
     const [payments, setPayments] = useState<CashCutPayment[]>([])
     const [loading, setLoading] = useState(false)
+    const [view, setView] = useState<'corte' | 'arqueo' | 'historial'>('corte')
+    const [viewer, setViewer] = useState<{ id: string, name: string } | null>(null)
+    const [counts, setCounts] = useState<CashCountRecord[]>([])
+    const [reloadKey, setReloadKey] = useState(0)
 
     useEffect(() => {
-        if (isOpen) setCondoId(defaultCondoId || '')
+        if (isOpen) {
+            setCondoId(defaultCondoId || '')
+            setView('corte')
+        }
     }, [isOpen, defaultCondoId])
 
     useEffect(() => {
@@ -67,7 +78,11 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
                 const res = await fetch(`/api/finance/cash-cut?${qs.toString()}`)
                 const data = await res.json()
                 if (!res.ok) throw new Error(data.error || 'No se pudo cargar el corte')
-                if (!cancelled) setPayments(data.payments || [])
+                if (!cancelled) {
+                    setPayments(data.payments || [])
+                    setViewer(data.viewer || null)
+                    setCounts(data.counts || [])
+                }
             } catch (err) {
                 if (!cancelled) {
                     setPayments([])
@@ -79,7 +94,7 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
         }
         load()
         return () => { cancelled = true }
-    }, [isOpen, organizationId, date, condoId])
+    }, [isOpen, organizationId, date, condoId, reloadKey])
 
     const total = useMemo(() => payments.reduce((s, p) => s + p.amount, 0), [payments])
     const byMethod = useMemo(() => {
@@ -103,6 +118,21 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
         return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total)
     }, [payments])
     const cashTotal = byMethod.find(([m]) => m === 'Efectivo')?.[1].total || 0
+    // Personas con efectivo que arquear (solo cobros registrados por alguien del equipo)
+    const collectors: CashCollector[] = useMemo(() => {
+        const map = new Map<string, CashCollector>()
+        payments.forEach(p => {
+            if (p.method !== 'Efectivo' || !p.collected_by_id) return
+            const cur = map.get(p.collected_by_id) || { id: p.collected_by_id, name: p.collected_by, cash: 0, count: 0 }
+            map.set(p.collected_by_id, { ...cur, cash: cur.cash + p.amount, count: cur.count + 1 })
+        })
+        return Array.from(map.values()).sort((a, b) => b.cash - a.cash)
+    }, [payments])
+    const lastCountByName = useMemo(() => {
+        const map = new Map<string, CashCountRecord>()
+        counts.forEach(c => { if (!map.has(c.counted_for)) map.set(c.counted_for, c) })
+        return map
+    }, [counts])
     const condoLabel = condoId ? (condominiumList.find(c => c.id === condoId)?.name || '') : 'Todas las propiedades'
 
     const downloadPdf = () => {
@@ -150,6 +180,17 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
             headStyles: { fillColor: [39, 39, 42] },
             columnStyles: { 6: { halign: 'right' } },
         })
+        if (counts.length > 0) {
+            y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6
+            autoTable(doc, {
+                startY: y,
+                head: [['Arqueo a', 'Realizó', 'Sistema', 'Contado', 'Resultado']],
+                body: counts.map(c => [c.counted_for, c.counted_by, money(c.expected_amount), money(c.counted_amount), STATUS_UI[statusOf(c.difference)].label(c.difference)]),
+                styles: { fontSize: 9, cellPadding: 3 },
+                headStyles: { fillColor: [79, 70, 229] },
+                columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } },
+            })
+        }
         y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 24
         if (y < 270) {
             doc.setDrawColor(160, 160, 160)
@@ -166,6 +207,42 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Corte de Caja" className="max-w-4xl">
             <div className="space-y-5 max-h-[78vh] overflow-y-auto pr-1 custom-scrollbar">
+                {view !== 'arqueo' && (
+                    <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-900 border border-zinc-800 max-w-md">
+                        <button type="button" onClick={() => setView('corte')}
+                            className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'corte' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'text-zinc-400 hover:text-white'}`}>
+                            <Receipt size={15} /> Corte del día
+                        </button>
+                        <button type="button" onClick={() => setView('historial')}
+                            className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'historial' ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30' : 'text-zinc-400 hover:text-white'}`}>
+                            <History size={15} /> Historial de arqueos
+                        </button>
+                    </div>
+                )}
+
+                {view === 'arqueo' ? (
+                    <CashCountPanel
+                        organizationId={organizationId}
+                        condominiumId={condoId}
+                        condoLabel={condoLabel}
+                        date={date}
+                        viewerName={viewer?.name || 'Yo'}
+                        collectors={collectors}
+                        onBack={() => setView('corte')}
+                        onSaved={() => { setView('corte'); setReloadKey(k => k + 1) }}
+                    />
+                ) : view === 'historial' ? (
+                    <>
+                        <div className="flex justify-end">
+                            <select value={condoId} onChange={(e) => setCondoId(e.target.value)}
+                                className="bg-zinc-900 border border-zinc-800 rounded-lg py-2 px-3 text-sm text-white">
+                                <option value="">Todas las propiedades</option>
+                                {condominiumList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <CashCountHistory organizationId={organizationId} condominiumId={condoId} condoLabel={condoLabel} refreshKey={reloadKey} />
+                    </>
+                ) : (<>
                 {/* Filtros */}
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
@@ -181,6 +258,11 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
                             <option value="">Todas las propiedades</option>
                             {condominiumList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
+                        <button type="button" onClick={() => setView('arqueo')} disabled={loading || collectors.length === 0}
+                            title={collectors.length === 0 ? 'Nadie cobró en efectivo este día' : 'Contar el efectivo y compararlo con el sistema'}
+                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40">
+                            <Calculator size={15} /> Arqueo
+                        </button>
                         <button type="button" onClick={downloadPdf} disabled={loading || payments.length === 0}
                             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-40">
                             <Download size={15} /> PDF
@@ -240,11 +322,43 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
                                                         <p className="text-xs text-zinc-500">{v.count} {v.count === 1 ? 'pago' : 'pagos'} · efectivo {money(v.cash)}</p>
                                                     </div>
                                                 </div>
-                                                <p className="text-sm font-semibold text-white">{money(v.total)}</p>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-semibold text-white">{money(v.total)}</p>
+                                                    {(() => {
+                                                        const c = lastCountByName.get(name)
+                                                        if (!c) return v.cash > 0 ? <p className="text-[11px] text-zinc-500">Sin arqueo</p> : null
+                                                        const ui = STATUS_UI[statusOf(c.difference)]
+                                                        return <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full border mt-0.5 ${ui.cls}`}><ClipboardCheck size={10} /> {ui.label(c.difference)}</span>
+                                                    })()}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
+
+                                {/* Arqueos del día */}
+                                {counts.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h3 className="text-sm font-semibold text-zinc-300">Arqueos del día</h3>
+                                        <div className="space-y-2">
+                                            {counts.map(c => {
+                                                const ui = STATUS_UI[statusOf(c.difference)]
+                                                return (
+                                                    <div key={c.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 ${ui.cls}`}>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm text-white">Arqueo a <b>{c.counted_for}</b> <span className="text-zinc-400">· realizó {c.counted_by} · {timeMx(c.created_at)}</span></p>
+                                                            <p className="text-xs text-zinc-400">Sistema {money(c.expected_amount)} · Contado {money(c.counted_amount)}{c.notes ? ` · ${c.notes}` : ''}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm font-semibold">{ui.label(c.difference)}</span>
+                                                            <button type="button" onClick={() => downloadCashCountPdf(c, condoLabel)} className="text-xs text-indigo-300 hover:text-indigo-200 underline">Acta</button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Detalle */}
                                 <div className="space-y-2">
@@ -286,6 +400,7 @@ export function CashCutModal({ isOpen, onClose, organizationId, condominiumList,
                         )}
                     </>
                 )}
+                </>)}
             </div>
         </Modal>
     )

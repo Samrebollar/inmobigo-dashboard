@@ -94,7 +94,7 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
         },
         {
             id: 'billed',
-            title: 'Facturado del Mes',
+            title: 'Total por Cobrar del Periodo',
             hint: `Cuotas de mantenimiento generadas para ${monthName}.`,
             value: money(m?.total_generado ?? 0),
             isZero: !m?.total_generado,
@@ -156,6 +156,34 @@ export function KPICards({ organizationId, condominiumId }: { organizationId: st
     )
 }
 
+// Contorno, brillo y acento por tarjeta (clases completas para que Tailwind las detecte)
+const CARD_STYLE: Record<Color, { border: string, glow: string, accent: string, icon: string }> = {
+    emerald: {
+        border: 'border-emerald-500/30 hover:border-emerald-400/70',
+        glow: 'hover:shadow-[0_0_28px_-6px_rgba(16,185,129,0.45)]',
+        accent: 'from-emerald-500/0 via-emerald-400 to-emerald-500/0',
+        icon: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20',
+    },
+    blue: {
+        border: 'border-blue-500/30 hover:border-blue-400/70',
+        glow: 'hover:shadow-[0_0_28px_-6px_rgba(59,130,246,0.45)]',
+        accent: 'from-blue-500/0 via-blue-400 to-blue-500/0',
+        icon: 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20',
+    },
+    rose: {
+        border: 'border-rose-500/30 hover:border-rose-400/70',
+        glow: 'hover:shadow-[0_0_28px_-6px_rgba(244,63,94,0.45)]',
+        accent: 'from-rose-500/0 via-rose-400 to-rose-500/0',
+        icon: 'bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/20',
+    },
+    violet: {
+        border: 'border-violet-500/30 hover:border-violet-400/70',
+        glow: 'hover:shadow-[0_0_28px_-6px_rgba(139,92,246,0.45)]',
+        accent: 'from-violet-500/0 via-violet-400 to-violet-500/0',
+        icon: 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20',
+    },
+}
+
 const TONE: Record<string, string> = {
     muted: 'text-zinc-500',
     good: 'text-emerald-400',
@@ -164,23 +192,35 @@ const TONE: Record<string, string> = {
 }
 
 function KPICard({ kpi, index, isLoading }: { kpi: KPI, index: number, isLoading: boolean }) {
+    const style = CARD_STYLE[kpi.color]
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
+            whileHover={{ y: -4 }}
             transition={{ delay: index * 0.08, duration: 0.35 }}
-            className="group relative rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 hover:bg-zinc-900/80 transition-all duration-300 hover:border-zinc-700/50"
+            className={cn(
+                'group relative overflow-hidden rounded-xl border bg-zinc-900/50 p-5 transition-[border-color,box-shadow,background-color] duration-300 hover:bg-zinc-900/80',
+                style.border,
+                style.glow,
+            )}
         >
+            {/* Acento superior que recorre la tarjeta */}
+            <motion.div
+                aria-hidden
+                className={cn('absolute top-0 left-0 h-[2px] w-1/2 bg-gradient-to-r', style.accent)}
+                initial={{ x: '-100%' }}
+                animate={{ x: '220%' }}
+                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: index * 0.4, repeatDelay: 1.2 }}
+            />
             <div className="flex justify-between items-start mb-3">
-                <div className={cn(
-                    'p-2 rounded-lg bg-zinc-800/50',
-                    kpi.color === 'emerald' && 'text-emerald-400',
-                    kpi.color === 'blue' && 'text-blue-400',
-                    kpi.color === 'violet' && 'text-violet-400',
-                    kpi.color === 'rose' && 'text-rose-400',
-                )}>
+                <motion.div
+                    className={cn('p-2 rounded-lg transition-transform duration-300 group-hover:scale-110', style.icon)}
+                    animate={{ scale: [1, 1.06, 1] }}
+                    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: index * 0.3 }}
+                >
                     <kpi.icon size={18} />
-                </div>
+                </motion.div>
                 <div className="relative group/hint">
                     <Info size={14} className="text-zinc-600 hover:text-zinc-300 cursor-help" />
                     <div className="pointer-events-none absolute right-0 top-5 z-20 w-56 rounded-lg border border-zinc-700 bg-zinc-950 p-2.5 text-[11px] leading-relaxed text-zinc-300 opacity-0 shadow-xl transition-opacity group-hover/hint:opacity-100">
@@ -193,7 +233,15 @@ function KPICard({ kpi, index, isLoading }: { kpi: KPI, index: number, isLoading
             {isLoading ? (
                 <div className="h-8 w-28 bg-zinc-800 rounded animate-pulse mt-1" />
             ) : (
-                <p className={cn('text-2xl font-bold tracking-tight mt-0.5', kpi.isZero ? 'text-zinc-500' : 'text-white')}>{kpi.value}</p>
+                <motion.p
+                    key={kpi.value}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className={cn('text-2xl font-bold tracking-tight mt-0.5', kpi.isZero ? 'text-zinc-500' : 'text-white')}
+                >
+                    {kpi.value}
+                </motion.p>
             )}
 
             {kpi.progress !== undefined && (

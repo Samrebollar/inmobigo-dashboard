@@ -32,7 +32,7 @@ export async function GET(
             // 1. Fetch units
             const { data: units, error: unitsError } = await adminSupabase
                 .from('units')
-                .select('id, monto_mensual, facturacion_activa')
+                .select('id, monto_mensual, facturacion_activa, payment_deadline, created_at')
                 .eq('condominium_id', condoId)
                 .neq('billing_status', 'suspended')
 
@@ -45,7 +45,7 @@ export async function GET(
             // tuviera saldo inicial cargado.
             const { data: residents, error: residentsError } = await adminSupabase
                 .from('residents')
-                .select('id, unit_id, fecha_ingreso, status, debt_amount')
+                .select('id, unit_id, fecha_ingreso, created_at, status, debt_amount')
                 .eq('condominium_id', condoId)
 
             if (residentsError) throw residentsError
@@ -53,14 +53,26 @@ export async function GET(
             // 3. Fetch resident invoices for the selected year
             const yearStart = `${year}-01-01`
             const yearEnd = `${year}-12-31`
-            const { data: invoices, error: invoiceError } = await adminSupabase
+            const invoiceFields = 'amount, balance_due, status, resident_id, unit_id, invoice_type, created_at, due_date'
+            const { data: yearInvoices, error: invoiceError } = await adminSupabase
                 .from('resident_invoices')
-                .select('amount, balance_due, status, resident_id, invoice_type, created_at, due_date')
+                .select(invoiceFields)
                 .eq('condominium_id', condoId)
                 .gte('due_date', yearStart)
                 .lte('due_date', yearEnd)
 
             if (invoiceError) throw invoiceError
+
+            // Deuda sin pagar de años anteriores: cuenta en "Saldo Inicial (Arrastre)"
+            const { data: priorUnpaid, error: priorError } = await adminSupabase
+                .from('resident_invoices')
+                .select(invoiceFields)
+                .eq('condominium_id', condoId)
+                .lt('due_date', yearStart)
+                .in('status', ['pending', 'overdue'])
+
+            if (priorError) throw priorError
+            const invoices = [...(yearInvoices || []), ...(priorUnpaid || [])]
 
             return NextResponse.json({
                 units: units || [],

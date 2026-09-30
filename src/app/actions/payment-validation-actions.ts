@@ -220,6 +220,33 @@ export async function updateValidationStatus(
 
                 let remainingPayment = Number(validation.amount) || 0
 
+                // Cada abono aplicado queda como pago real (resident_invoice_payments):
+                // con fecha, método y quién lo validó, para que cuente en Ingresos del
+                // Mes, en el Corte de Caja y en el historial del residente. Antes solo
+                // se marcaba la factura como pagada sin registrar el pago.
+                const paidAtIso = new Date().toISOString()
+                let folioUsed = false
+                const recordPayment = async (invoiceId: string, amount: number) => {
+                    if (amount <= 0) return
+                    const payId = randomUUID()
+                    const folio = !folioUsed && approvedFolio ? approvedFolio : `REC-${payId.substring(0, 8).toUpperCase()}`
+                    folioUsed = true
+                    const { error: payErr } = await adminClient.from('resident_invoice_payments').insert({
+                        id: payId,
+                        invoice_id: invoiceId,
+                        resident_id: resData!.id,
+                        condominium_id: resData!.condominium_id,
+                        organization_id: organizationId,
+                        amount: Math.round(amount * 100) / 100,
+                        folio,
+                        payment_method: 'Transferencia',
+                        notes: 'Comprobante validado por administración',
+                        paid_at: paidAtIso,
+                        created_by: user.id,
+                    })
+                    if (payErr) console.error('[Validation] Error registrando el pago', invoiceId, payErr)
+                }
+
                 // ── Aplicar pago a facturas existentes ────────────────────────────
                 if (pendingInvoices && pendingInvoices.length > 0) {
                     for (const invoice of pendingInvoices) {
@@ -244,11 +271,15 @@ export async function updateValidationStatus(
                                 paid_amount: paidAmount,
                                 updated_at: new Date().toISOString(),
                                 notes: `validation:${id}`,
+                                payment_method: 'Transferencia',
+                                ...(newStatus === 'paid' ? { paid_at: paidAtIso } : {}),
                             })
                             .eq('id', invoice.id)
 
                         if (applyErr) {
                             console.error('[Validation] Error aplicando pago a factura', invoice.id, applyErr)
+                        } else {
+                            await recordPayment(invoice.id, amountToApply)
                         }
                     }
                 }
@@ -298,6 +329,7 @@ export async function updateValidationStatus(
                             description,
                             notes: `validation:${id}`,
                             payment_provider: 'Manual',
+                            payment_method: 'Transferencia',
                             paid_at: nowIso,
                             folio: buildFolio(newInvoiceId),
                             created_at: nowIso,
@@ -306,6 +338,8 @@ export async function updateValidationStatus(
 
                     if (insertRIErr) {
                         console.error('[Validation] Error registrando excedente como factura pagada', insertRIErr)
+                    } else {
+                        await recordPayment(newInvoiceId, remainingPayment)
                     }
                 }
 

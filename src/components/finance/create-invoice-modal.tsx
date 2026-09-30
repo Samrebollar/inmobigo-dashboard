@@ -32,7 +32,9 @@ const TYPE_LABEL: Record<string, string> = {
     custom: 'Cargo',
 }
 
-const PAYMENT_METHODS = ['Efectivo', 'Transferencia', 'Tarjeta']
+// En caja solo se recibe efectivo, y el pago siempre queda con la fecha del día
+// en que se cobra (no se permiten fechas pasadas ni otros métodos).
+const PAYMENT_METHOD = 'Efectivo'
 
 // Id del renglón "saldo inicial capturado" (residents.debt_amount sin factura)
 const LEGACY_DEBT_ID = '__legacy_debt__'
@@ -101,8 +103,7 @@ export function CreateInvoiceModal({
     const [mode, setMode] = useState<Mode>('cobrar')
     const [selectedCondoId, setSelectedCondoId] = useState(defaultCondominiumId)
     const [residentId, setResidentId] = useState('')
-    const [paymentMethod, setPaymentMethod] = useState('Efectivo')
-    const [paymentDate, setPaymentDate] = useState(todayMx())
+    const paymentMethod = PAYMENT_METHOD
     const [notes, setNotes] = useState('')
 
     // Cobrar adeudos
@@ -128,8 +129,6 @@ export function CreateInvoiceModal({
     useEffect(() => {
         if (!isOpen) return
         setNotes('')
-        setPaymentMethod('Efectivo')
-        setPaymentDate(todayMx())
         setCashReceived('')
         setAmountEdited(false)
         setUseCredit(true)
@@ -316,7 +315,7 @@ export function CreateInvoiceModal({
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
             doc.text(`Folio: ${opts.folio}`, 145, 16)
-            doc.text(`Fecha: ${new Date(`${paymentDate}T12:00:00Z`).toLocaleDateString('es-MX', { timeZone: 'UTC' })}`, 145, 23)
+            doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })}`, 145, 23)
 
             doc.setFontSize(12)
             doc.setTextColor(40, 40, 40)
@@ -423,7 +422,7 @@ export function CreateInvoiceModal({
         let moneyPool = appliedMoney
         const applied: { concept: string, period: string, amount: number }[] = []
         let folio = ''
-        const paidAt = paymentDate === todayMx() ? new Date().toISOString() : `${paymentDate}T12:00:00-06:00`
+        const paidAt = new Date().toISOString()
 
         // Se aplica primero a lo más antiguo de lo seleccionado: saldo a favor y
         // luego el dinero recibido.
@@ -509,7 +508,7 @@ export function CreateInvoiceModal({
             amount,
             status: paid ? 'paid' : 'pending',
             invoice_type: CONCEPT_TO_INVOICE_TYPE[charge.concept],
-            due_date: charge.dueDate,
+            due_date: paid ? todayMx() : charge.dueDate,
             description: notes ? `${charge.concept} - ${notes}` : charge.concept,
             payment_method: paid ? paymentMethod : null,
             ...(paid && { paid_at: new Date().toISOString(), paid_amount: amount, balance_due: 0 })
@@ -755,8 +754,10 @@ export function CreateInvoiceModal({
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-sm font-semibold text-slate-300">Fecha de pago</label>
-                                        <input type="date" max={todayMx()} className={`${inputCls} text-slate-300 [color-scheme:dark]`}
-                                            value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+                                        <div className={`${inputCls} text-slate-300 flex items-center justify-between cursor-default`}>
+                                            <span>{new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' })}</span>
+                                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Hoy</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -786,11 +787,21 @@ export function CreateInvoiceModal({
                                             value={charge.amount} onChange={(e) => setCharge({ ...charge, amount: e.target.value })} />
                                     </div>
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-sm font-semibold text-slate-300">Fecha de vencimiento</label>
-                                    <input type="date" className={`${inputCls} text-slate-300 [color-scheme:dark]`} required
-                                        value={charge.dueDate} onChange={(e) => setCharge({ ...charge, dueDate: e.target.value })} />
-                                </div>
+                                {charge.paidNow ? (
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-semibold text-slate-300">Fecha de pago</label>
+                                        <div className={`${inputCls} text-slate-300 flex items-center justify-between cursor-default`}>
+                                            <span>{new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' })}</span>
+                                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Hoy</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-semibold text-slate-300">Fecha de vencimiento</label>
+                                        <input type="date" min={todayMx()} className={`${inputCls} text-slate-300 [color-scheme:dark]`} required
+                                            value={charge.dueDate} onChange={(e) => setCharge({ ...charge, dueDate: e.target.value })} />
+                                    </div>
+                                )}
                             </div>
                             <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800 text-sm">
                                 <button type="button" onClick={() => setCharge({ ...charge, paidNow: true })}
@@ -824,14 +835,7 @@ export function CreateInvoiceModal({
                     {(mode === 'cobrar' || charge.paidNow) && (
                         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                             <span className="text-slate-400">Método de pago</span>
-                            <div className="flex gap-1">
-                                {PAYMENT_METHODS.map(m => (
-                                    <button key={m} type="button" onClick={() => setPaymentMethod(m)}
-                                        className={`px-3 py-1 rounded-md text-xs border transition-colors ${paymentMethod === m ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'border-slate-800 text-slate-400 hover:text-white'}`}>
-                                        {m}
-                                    </button>
-                                ))}
-                            </div>
+                            <span className="px-3 py-1 rounded-md text-xs border bg-emerald-500/15 border-emerald-500/40 text-emerald-300">Efectivo</span>
                         </div>
                     )}
                     {showCash && footerTotal > 0 && (

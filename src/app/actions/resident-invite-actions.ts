@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { deliverResidentInvitation } from '@/lib/resident-invitation'
+import { createCurrentMonthMaintenanceInvoice } from '@/lib/resident-billing'
 
 const STAFF_ROLES = ['owner', 'admin', 'admin_condominio', 'admin_propiedad', 'manager', 'staff']
 
@@ -57,5 +58,22 @@ export async function sendResidentInvitationsAction(residentIds: string[]) {
         return { success: failed === 0, sent, failed }
     } catch (err) {
         return { success: false, sent: 0, failed: ids.length, error: err instanceof Error ? err.message : 'No autorizado' }
+    }
+}
+
+/** Genera la cuota del mes en curso para los residentes recién creados por la carga masiva. */
+export async function billNewResidentsAction(residentIds: string[]) {
+    const ids = Array.from(new Set(residentIds.filter(Boolean)))
+    if (ids.length === 0) return { success: true, created: 0 }
+    try {
+        const admin = await assertCanInvite(ids)
+        let created = 0
+        for (const id of ids) {
+            const r = await createCurrentMonthMaintenanceInvoice(admin, id)
+            if (r.created) created++
+        }
+        return { success: true, created }
+    } catch (err) {
+        return { success: false, created: 0, error: err instanceof Error ? err.message : 'No autorizado' }
     }
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { ensureResidentAuthUser, deliverResidentInvitation } from '@/lib/resident-invitation'
+import { createCurrentMonthMaintenanceInvoice } from '@/lib/resident-billing'
 
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
@@ -443,7 +444,11 @@ export async function adminCreateResidentAction(payload: any) {
             if (debtError) console.error('⚠️ Error creando facturas de deuda previa:', debtError);
         }
 
-        // 7. Correo de invitación para que active su cuenta (vía n8n)
+        // 7. Cuota de mantenimiento del mes de registro (la cuota corre desde el alta)
+        const billing = await createCurrentMonthMaintenanceInvoice(admin, newResident.id)
+        if (!billing.created) console.log(`ℹ️ Cuota del mes no generada: ${billing.reason}`);
+
+        // 8. Correo de invitación para que active su cuenta (vía n8n)
         const invitation = await deliverResidentInvitation(admin, newResident.id)
 
         console.log(`✅ [adminCreateResidentAction] Todo completado con éxito para: ${cleanEmail}`);

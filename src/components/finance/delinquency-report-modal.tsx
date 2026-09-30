@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Search, Filter, AlertCircle, FileText, Download, ChevronRight, ChevronDown, Table as TableIcon, Loader2, MessageCircle, CheckCircle2, HandCoins } from 'lucide-react'
+import { X, Search, Filter, AlertCircle, FileText, Download, ChevronRight, ChevronDown, Table as TableIcon, Loader2, MessageCircle, CheckCircle2, Receipt } from 'lucide-react'
 import { format, differenceInDays, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import jsPDF from 'jspdf'
@@ -22,9 +22,10 @@ import { Badge } from '@/components/ui/badge'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { Resident } from '@/types/residents'
-import { Invoice, ResidentInvoice, ResidentInvoicePayment } from '@/types/finance'
+import { Invoice } from '@/types/finance'
 import { calculateResidentMonthlyFinancials } from '@/utils/finance-utils'
-import { RegisterPaymentModal } from '@/components/finance/register-payment-modal'
+import { CreateInvoiceModal } from '@/components/finance/create-invoice-modal'
+import { createClient } from '@/utils/supabase/client'
 interface DelinquencyReportModalProps {
     isOpen: boolean
     onClose: () => void
@@ -64,7 +65,7 @@ export function DelinquencyReportModal({
     const [expandedRow, setExpandedRow] = useState<string | null>(null)
     const [sendingReminderIds, setSendingReminderIds] = useState<Set<string>>(new Set())
     const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
-    const [paymentModalTarget, setPaymentModalTarget] = useState<{ invoice: ResidentInvoice, condominiumId: string } | null>(null)
+    const [receiptTarget, setReceiptTarget] = useState<{ resident: DelinquentResident, organizationId: string } | null>(null)
 
     // Helper for Toast
     const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -275,33 +276,28 @@ export function DelinquencyReportModal({
         setExpandedRow(expandedRow === id ? null : id)
     }
 
-    // Solo se puede registrar un pago contra un recibo que ya existe en la BD —
-    // las filas "virtuales" (id que empieza con "virtual-") son deuda proyectada
-    // cuando todavía no se generó el recibo del periodo, así que no tienen un
-    // invoice_id real contra el cual aplicar el pago.
-    const handleOpenRegisterPayment = (resident: DelinquentResident) => {
-        const realUnpaidInvoices = resident.unpaidInvoices
-            .filter((inv: any) => !String(inv.id).startsWith('virtual-'))
-            .sort((a: any, b: any) => new Date(a.due_date || a.created_at).getTime() - new Date(b.due_date || b.created_at).getTime())
-
-        const oldestInvoice = realUnpaidInvoices[0]
-
-        if (!oldestInvoice) {
-            showNotification('Este residente aún no tiene un recibo generado en el sistema. Genera el recibo del periodo antes de registrar el pago.', 'error')
+    // "Nuevo recibo": abre el mismo formulario de cobro en efectivo de Finanzas
+    // con el residente ya seleccionado (ahí se ven sus adeudos, recargos y
+    // saldo a favor, y se genera el recibo del pago).
+    const handleOpenNewReceipt = async (resident: DelinquentResident) => {
+        let organizationId = (resident.unpaidInvoices as any[]).find(inv => inv.organization_id)?.organization_id as string | undefined
+        if (!organizationId && resident.condominium_id) {
+            const { data } = await createClient()
+                .from('condominiums')
+                .select('organization_id')
+                .eq('id', resident.condominium_id)
+                .maybeSingle()
+            organizationId = data?.organization_id
+        }
+        if (!organizationId) {
+            showNotification('No se pudo identificar la organización de este residente.', 'error')
             return
         }
-
-        setPaymentModalTarget({ invoice: oldestInvoice as any as ResidentInvoice, condominiumId: resident.condominium_id })
+        setReceiptTarget({ resident, organizationId })
     }
 
-    const handlePaymentRegistered = (result: { payment: ResidentInvoicePayment, invoice: ResidentInvoice }) => {
-        setPaymentModalTarget(null)
-        showNotification(
-            result.invoice.status === 'paid'
-                ? 'Pago registrado. El recibo quedó liquidado.'
-                : `Abono registrado. Saldo restante: $${Number(result.invoice.balance_due).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-            'success'
-        )
+    const handleReceiptCreated = () => {
+        setReceiptTarget(null)
         fetchReportData()
     }
 
@@ -616,11 +612,11 @@ export function DelinquencyReportModal({
                                                                         <motion.button
                                                                             whileHover={{ scale: 1.1 }}
                                                                             whileTap={{ scale: 0.95 }}
-                                                                            onClick={() => handleOpenRegisterPayment(resident)}
-                                                                            className="p-2 rounded-full bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-colors border border-amber-500/20 shadow-sm"
-                                                                            title="Registrar Pago"
+                                                                            onClick={() => handleOpenNewReceipt(resident)}
+                                                                            className="p-2 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors border border-emerald-500/20 shadow-sm"
+                                                                            title="Nuevo recibo (cobro en efectivo)"
                                                                         >
-                                                                            <HandCoins size={16} />
+                                                                                <Receipt size={16} />
                                                                         </motion.button>
                                                                         <motion.button
                                                                             whileHover={{ scale: 1.1, rotate: [0, -10, 10, 0] }}
@@ -740,12 +736,20 @@ export function DelinquencyReportModal({
                                 )}
                             </AnimatePresence>
 
-                            <RegisterPaymentModal
-                                isOpen={!!paymentModalTarget}
-                                onClose={() => setPaymentModalTarget(null)}
-                                condominiumId={paymentModalTarget?.condominiumId || ''}
-                                invoice={paymentModalTarget?.invoice || null}
-                                onSuccess={handlePaymentRegistered}
+                            <CreateInvoiceModal
+
+                                isOpen={!!receiptTarget}
+
+                                onClose={() => setReceiptTarget(null)}
+
+                                condominiumId={receiptTarget?.resident.condominium_id || ''}
+
+                                organizationId={receiptTarget?.organizationId || ''}
+
+                                defaultResident={receiptTarget?.resident}
+
+                                onSuccess={handleReceiptCreated}
+
                             />
                         </div>
         </motion.div>

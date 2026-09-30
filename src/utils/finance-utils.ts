@@ -86,6 +86,9 @@ export interface CondoFinancials {
     // distinto de 'maintenance' — saldo inicial, ajustes manuales, etc.), reportada
     // aparte porque no es una cuota mensual y no debe inflar totalPeriodo/recaudado.
     saldoInicialPendiente: number
+    // Morosidad total = cuotas vencidas del periodo + deuda vencida que se arrastra
+    // de meses anteriores (saldo inicial). Es la cifra de las tarjetas "Morosidad".
+    morosidadTotal: number
     morososCount: number
 }
 
@@ -850,6 +853,7 @@ export function calculateCondoMonthlyFinancials({
         porCobrar,
         vencido,
         saldoInicialPendiente,
+        morosidadTotal: vencido + saldoInicialPendiente,
         morososCount: debtorResidents.size
     }
 }

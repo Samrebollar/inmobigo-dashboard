@@ -77,7 +77,7 @@ export async function createCurrentMonthMaintenanceInvoice(
         .limit(1)
     if (existing && existing.length > 0) return { created: false, reason: 'Ya facturado este mes' }
 
-    const { error } = await admin.from('resident_invoices').insert({
+    const { data: inserted, error } = await admin.from('resident_invoices').insert({
         condominium_id: resident.condominium_id,
         resident_id: resident.id,
         unit_id: resident.unit_id,
@@ -94,10 +94,59 @@ export async function createCurrentMonthMaintenanceInvoice(
         folio: `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         reminder_sent: false,
         recargo_aplicado: false,
-    })
-    if (error) {
+    }).select('id').single()
+    if (error || !inserted) {
         console.error('[resident-billing] Error creando cuota del mes:', error)
-        return { created: false, reason: error.message }
+        return { created: false, reason: error?.message || 'No se pudo crear la cuota' }
     }
+    await applyResidentCreditToInvoice(admin, resident.id, inserted.id)
     return { created: true }
+}
+
+/**
+ * Saldo a favor: si el residente tiene crédito (residents.credit_amount), se
+ * aplica automáticamente a una factura recién generada, como un pago con
+ * método "Saldo a favor". Devuelve el monto aplicado.
+ */
+export async function applyResidentCreditToInvoice(
+    admin: AdminClient,
+    residentId: string,
+    invoiceId: string
+): Promise<number> {
+    const [{ data: resident }, { data: invoice }] = await Promise.all([
+        admin.from('residents').select('credit_amount').eq('id', residentId).maybeSingle(),
+        admin.from('resident_invoices').select('id, amount, balance_due, status, condominium_id, organization_id').eq('id', invoiceId).maybeSingle(),
+    ])
+    const credit = Number(resident?.credit_amount || 0)
+    const balance = Number(invoice?.balance_due ?? invoice?.amount ?? 0)
+    if (!invoice || credit <= 0 || balance <= 0) return 0
+
+    const apply = Math.round(Math.min(credit, balance) * 100) / 100
+    // Update condicionado: si el crédito cambió en medio, no se aplica dos veces
+    const { data: updated } = await admin
+        .from('residents')
+        .update({ credit_amount: Math.round((credit - apply) * 100) / 100 })
+        .eq('id', residentId)
+        .eq('credit_amount', resident?.credit_amount ?? 0)
+        .select('id')
+    if (!updated || updated.length === 0) return 0
+
+    const paidAt = new Date().toISOString()
+    await admin.from('resident_invoice_payments').insert({
+        invoice_id: invoice.id,
+        resident_id: residentId,
+        condominium_id: invoice.condominium_id,
+        organization_id: invoice.organization_id,
+        amount: apply,
+        folio: `REC-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+        payment_method: 'Saldo a favor',
+        notes: 'Aplicado automáticamente al generar la cuota',
+        paid_at: paidAt,
+    })
+    const newBalance = Math.round((balance - apply) * 100) / 100
+    await admin.from('resident_invoices').update({
+        balance_due: newBalance,
+        ...(newBalance <= 0.009 ? { status: 'paid', paid_at: paidAt, payment_method: 'Saldo a favor' } : {}),
+    }).eq('id', invoice.id)
+    return apply
 }

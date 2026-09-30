@@ -8,6 +8,8 @@ import { BulkChargeModal } from '@/components/finance/bulk-charge-modal'
 import { FineModal } from '@/components/finance/fine-modal'
 import { FileText, ArrowRight, Plus, AlertTriangle, Gavel } from 'lucide-react'
 import Link from 'next/link'
+import { CashCutModal } from '@/components/finance/cash-cut-modal'
+import { Calculator } from 'lucide-react'
 
 export default function AdminFinanceClient({ 
     initialCondoId, 
@@ -20,6 +22,7 @@ export default function AdminFinanceClient({
 }) {
     const [selectedCondoId, setSelectedCondoId] = useState<string | null>(initialCondoId)
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
+    const [isCashCutOpen, setIsCashCutOpen] = useState(false)
     const [isBulkChargeOpen, setIsBulkChargeOpen] = useState(false)
     const [isFineModalOpen, setIsFineModalOpen] = useState(false)
 
@@ -58,6 +61,13 @@ export default function AdminFinanceClient({
                     >
                         <Plus size={16} />
                         Nuevo Recibo
+                    </button>
+                    <button
+                        onClick={() => setIsCashCutOpen(true)}
+                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 border border-zinc-700 transition-all flex-1 sm:flex-none"
+                    >
+                        <Calculator size={16} />
+                        Corte de Caja
                     </button>
                     <button
                         onClick={() => setIsBulkChargeOpen(true)}
@@ -127,6 +137,15 @@ export default function AdminFinanceClient({
                 organizationId={organizationId}
                 condominiumList={condominiumList}
                 onSuccess={() => window.location.reload()}
+            />
+
+            {/* Corte de caja diario */}
+            <CashCutModal
+                isOpen={isCashCutOpen}
+                onClose={() => setIsCashCutOpen(false)}
+                organizationId={organizationId}
+                condominiumList={condominiumList}
+                defaultCondoId={selectedCondoId}
             />
         </div>
     )

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
+import { applyResidentCreditToInvoice } from '@/lib/resident-billing'
 
 /**
  * GET /api/cron/generate-monthly-invoices
@@ -286,7 +287,7 @@ async function handleRequest(request: Request) {
             const folio = `INV-${folioSuffix}`
 
             // Crear factura
-            const { error: insertError } = await supabase
+            const { data: insertedInvoice, error: insertError } = await supabase
                 .from('resident_invoices')
                 .insert({
                     condominium_id:  resident.condominium_id,
@@ -306,6 +307,8 @@ async function handleRequest(request: Request) {
                     reminder_sent:   false,
                     recargo_aplicado: false,
                 })
+                .select('id')
+                .single()
 
             if (insertError) {
                 console.error(`[GenerateInvoices] Error creando factura para residente ${resident.id}:`, insertError)
@@ -313,6 +316,8 @@ async function handleRequest(request: Request) {
                 results.details.push(`Error residente ${resident.id}: ${insertError.message}`)
             } else {
                 results.generated++
+                // Saldo a favor del residente → se aplica solo a la nueva cuota
+                if (insertedInvoice?.id) await applyResidentCreditToInvoice(supabase, resident.id, insertedInvoice.id)
                 console.log(`[GenerateInvoices] ✓ Factura creada: residente ${resident.id}, unidad ${unit.unit_number}, $${fee}`)
             }
         }

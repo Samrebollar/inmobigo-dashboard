@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/modal'
-import { Loader2, Mail, Phone, ChevronRight, Wallet, FilePlus2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
+import { Loader2, Mail, Phone, ChevronRight, Wallet, FilePlus2, CheckCircle2, AlertTriangle, Clock, Send, PiggyBank } from 'lucide-react'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { propertiesService } from '@/services/properties-service'
@@ -110,6 +110,9 @@ export function CreateInvoiceModal({
     const [amountToCharge, setAmountToCharge] = useState('')
     const [amountEdited, setAmountEdited] = useState(false)
     const [cashReceived, setCashReceived] = useState('')
+    const [useCredit, setUseCredit] = useState(true)
+    const [residentCredit, setResidentCredit] = useState(0)
+    const [sendReceipt, setSendReceipt] = useState(true)
 
     // Nuevo cargo
     const [charge, setCharge] = useState({
@@ -129,6 +132,8 @@ export function CreateInvoiceModal({
         setPaymentDate(todayMx())
         setCashReceived('')
         setAmountEdited(false)
+        setUseCredit(true)
+        setSendReceipt(true)
         setCharge({ concept: baseConcept, amount: '', dueDate: format(new Date(), 'yyyy-MM-dd'), paidNow: true })
         if (defaultResident) {
             if (defaultResident.condominium_id) setSelectedCondoId(defaultResident.condominium_id)
@@ -157,8 +162,10 @@ export function CreateInvoiceModal({
         if (!res) {
             setDebtRows([])
             setSelectedIds(new Set())
+            setResidentCredit(0)
             return
         }
+        setResidentCredit(Number(res.credit_amount || 0))
         let cancelled = false
         const load = async () => {
             setLoadingDebts(true)
@@ -211,14 +218,25 @@ export function CreateInvoiceModal({
     const overdueDebt = useMemo(() => debtRows.filter(r => r.daysOverdue > 0 || r.id === LEGACY_DEBT_ID).reduce((s, r) => s + r.balance, 0), [debtRows])
     const selectedRows = useMemo(() => debtRows.filter(r => selectedIds.has(r.id)), [debtRows, selectedIds])
     const selectedTotal = useMemo(() => selectedRows.reduce((s, r) => s + r.balance, 0), [selectedRows])
+    // Recargos por mora incluidos en lo seleccionado (los genera el cron diario)
+    const moraSelected = useMemo(() => selectedRows.filter(r => r.concept.startsWith('Recargo por mora')).reduce((s, r) => s + r.balance, 0), [selectedRows])
+    // El saldo a favor solo se aplica a facturas reales (no al saldo capturado sin factura)
+    const creditEligible = useMemo(() => selectedRows.filter(r => r.id !== LEGACY_DEBT_ID).reduce((s, r) => s + r.balance, 0), [selectedRows])
+    const creditToUse = useCredit ? Math.min(residentCredit, creditEligible) : 0
+    const dueAfterCredit = Math.max(0, selectedTotal - creditToUse)
 
     // El monto a cobrar sigue a la selección mientras no se edite a mano
     useEffect(() => {
-        if (!amountEdited) setAmountToCharge(selectedTotal > 0 ? selectedTotal.toFixed(2) : '')
-    }, [selectedTotal, amountEdited])
+        if (!amountEdited) setAmountToCharge(dueAfterCredit > 0 ? dueAfterCredit.toFixed(2) : '')
+    }, [dueAfterCredit, amountEdited])
 
-    const chargeAmount = Math.min(parseFloat(amountToCharge) || 0, selectedTotal)
-    const remainingAfter = Math.max(0, totalDebt - chargeAmount)
+    // chargeAmount = dinero que entrega hoy (efectivo/transferencia/tarjeta).
+    // Si paga de más, el excedente queda como saldo a favor.
+    const chargeAmount = Math.max(0, parseFloat(amountToCharge) || 0)
+    const appliedMoney = Math.min(chargeAmount, dueAfterCredit)
+    const excess = Math.max(0, Math.round((chargeAmount - dueAfterCredit) * 100) / 100)
+    const totalApplied = creditToUse + appliedMoney
+    const remainingAfter = Math.max(0, totalDebt - totalApplied)
     const cash = parseFloat(cashReceived) || 0
     const change = paymentMethod === 'Efectivo' && cash > 0 ? cash - chargeAmount : 0
 
@@ -366,10 +384,33 @@ export function CreateInvoiceModal({
         }
     }
 
+    const financeApi = async (payload: Record<string, unknown>) => {
+        const condo = selectedResident?.condominium_id || selectedCondoId
+        const res = await fetch(`/api/properties/${condo}/finance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Error del servidor')
+        return data
+    }
+
+    const deliverReceipt = async (opts: { folio: string, items: { concept: string, period: string, amount: number }[], total: number, remaining: number, method: string }) => {
+        if (!sendReceipt || !selectedResident || isDemo) return
+        try {
+            const r = await financeApi({ action: 'send_receipt', residentId: selectedResident.id, ...opts })
+            const canales = [r.whatsapp && 'WhatsApp', r.email && 'correo'].filter(Boolean).join(' y ')
+            if (canales) toast.success(`Recibo enviado por ${canales}`)
+        } catch {
+            toast.error('El pago quedó registrado, pero no se pudo enviar el recibo al residente.')
+        }
+    }
+
     // ── Cobrar adeudos existentes (no crea cargos nuevos: abona a las facturas) ──
     const handleCollect = async () => {
         if (!selectedResident) return
-        if (selectedRows.length === 0 || chargeAmount <= 0) {
+        if (selectedRows.length === 0 || totalApplied <= 0) {
             toast.error('Selecciona al menos un adeudo y un monto mayor a $0.')
             return
         }
@@ -378,43 +419,77 @@ export function CreateInvoiceModal({
             return
         }
 
-        let remainingToApply = chargeAmount
+        let creditPool = creditToUse
+        let moneyPool = appliedMoney
         const applied: { concept: string, period: string, amount: number }[] = []
         let folio = ''
         const paidAt = paymentDate === todayMx() ? new Date().toISOString() : `${paymentDate}T12:00:00-06:00`
 
-        // Se aplica primero a lo más antiguo de lo seleccionado
+        // Se aplica primero a lo más antiguo de lo seleccionado: saldo a favor y
+        // luego el dinero recibido.
         for (const row of selectedRows) {
-            if (remainingToApply <= 0.009) break
-            const toApply = Math.min(remainingToApply, row.balance)
+            let balance = row.balance
+            let appliedToRow = 0
             if (row.id === LEGACY_DEBT_ID) {
-                await residentsService.update(selectedResident.id, { debt_amount: Math.max(0, row.balance - toApply) })
+                const k = Math.min(moneyPool, balance)
+                if (k > 0.009) {
+                    await residentsService.update(selectedResident.id, { debt_amount: Math.max(0, balance - k) })
+                    moneyPool -= k
+                    appliedToRow += k
+                }
             } else {
-                const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
-                    invoiceId: row.id,
-                    amount: Number(toApply.toFixed(2)),
-                    paymentMethod,
-                    notes: notes || undefined,
-                    paidAt,
-                })
-                if (!folio && payment?.folio) folio = payment.folio
+                const c = Math.min(creditPool, balance)
+                if (c > 0.009) {
+                    const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
+                        invoiceId: row.id, amount: Number(c.toFixed(2)), paymentMethod: 'Saldo a favor', notes: notes || undefined, paidAt,
+                    })
+                    if (!folio && payment?.folio) folio = payment.folio
+                    creditPool -= c
+                    balance -= c
+                    appliedToRow += c
+                }
+                const k = Math.min(moneyPool, balance)
+                if (k > 0.009) {
+                    const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
+                        invoiceId: row.id, amount: Number(k.toFixed(2)), paymentMethod, notes: notes || undefined, paidAt,
+                    })
+                    if (!folio && payment?.folio) folio = payment.folio
+                    moneyPool -= k
+                    appliedToRow += k
+                }
             }
-            applied.push({ concept: row.concept, period: row.period, amount: toApply })
-            remainingToApply -= toApply
+            if (appliedToRow > 0) applied.push({ concept: row.concept, period: row.period, amount: appliedToRow })
+            if (creditPool <= 0.009 && moneyPool <= 0.009) break
         }
 
+        // Pagó de más → el excedente queda como saldo a favor
+        if (excess > 0) {
+            await financeApi({ action: 'add_credit', residentId: selectedResident.id, amount: excess })
+            applied.push({ concept: 'Saldo a favor (anticipo)', period: 'Se aplicará a su siguiente cuota', amount: excess })
+        }
+
+        const methodLabel = creditToUse > 0
+            ? (appliedMoney > 0 || excess > 0 ? `${paymentMethod} + Saldo a favor` : 'Saldo a favor')
+            : paymentMethod
+        const receiptFolio = folio || `REC-${Date.now().toString().slice(-6)}`
+        const receiptTotal = totalApplied + excess
+
         downloadReceipt({
-            folio: folio || `REC-${Date.now().toString().slice(-6)}`,
+            folio: receiptFolio,
             rows: applied,
-            total: chargeAmount,
-            method: paymentMethod,
+            total: receiptTotal,
+            method: methodLabel,
             remaining: remainingAfter,
             received: paymentMethod === 'Efectivo' ? cash : undefined,
             change,
         })
-        toast.success(`Pago de ${money(chargeAmount)} registrado`, {
-            description: remainingAfter > 0 ? `Saldo pendiente: ${money(remainingAfter)}` : 'El residente quedó al corriente.',
+        toast.success(`Pago de ${money(receiptTotal)} registrado`, {
+            description: [
+                remainingAfter > 0 ? `Saldo pendiente: ${money(remainingAfter)}` : 'El residente quedó al corriente.',
+                excess > 0 ? `Nuevo saldo a favor: ${money(residentCredit - creditToUse + excess)}` : '',
+            ].filter(Boolean).join(' · '),
         })
+        await deliverReceipt({ folio: receiptFolio, items: applied, total: receiptTotal, remaining: remainingAfter, method: methodLabel })
     }
 
     // ── Nuevo cargo (multa, cuota extraordinaria, etc.) ──
@@ -451,6 +526,13 @@ export function CreateInvoiceModal({
                 change: paymentMethod === 'Efectivo' && cash > 0 ? cash - amount : 0,
             })
             toast.success(`Recibo de ${money(amount)} creado y cobrado`)
+            await deliverReceipt({
+                folio: created?.folio || (created?.id ? `FAC-${created.id.substring(0, 8).toUpperCase()}` : ''),
+                items: [{ concept: charge.concept, period: periodLabel(charge.dueDate), amount }],
+                total: amount,
+                remaining: totalDebt,
+                method: paymentMethod,
+            })
         } else {
             toast.success(`Cargo de ${money(amount)} creado`, { description: `Vence el ${new Date(`${charge.dueDate}T12:00:00Z`).toLocaleDateString('es-MX', { timeZone: 'UTC' })}` })
         }
@@ -481,6 +563,7 @@ export function CreateInvoiceModal({
 
     const inputCls = 'w-full bg-slate-900 border border-slate-700/50 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-blue-500/50 shadow-sm'
     const footerTotal = mode === 'cobrar' ? chargeAmount : (parseFloat(charge.amount) || 0)
+    const receiptChannels = [selectedResident?.phone && 'WhatsApp', selectedResident?.email && 'correo'].filter(Boolean).join(' y ')
     const showCash = paymentMethod === 'Efectivo' && (mode === 'cobrar' || charge.paidNow)
 
     return (
@@ -548,7 +631,7 @@ export function CreateInvoiceModal({
                         loadingDebts ? (
                             <div className="flex items-center gap-2 text-sm text-slate-400 py-2"><Loader2 className="h-4 w-4 animate-spin" /> Consultando estado de cuenta…</div>
                         ) : (
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className={`grid gap-3 ${residentCredit > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
                                     <p className="text-[11px] uppercase tracking-wide text-rose-300/80">Vencido</p>
                                     <p className="text-base font-bold text-rose-300">{money(overdueDebt)}</p>
@@ -561,6 +644,12 @@ export function CreateInvoiceModal({
                                     <p className="text-[11px] uppercase tracking-wide text-slate-400">Adeudo total</p>
                                     <p className="text-base font-bold text-white">{money(totalDebt)}</p>
                                 </div>
+                                {residentCredit > 0 && (
+                                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                        <p className="text-[11px] uppercase tracking-wide text-emerald-300/80">Saldo a favor</p>
+                                        <p className="text-base font-bold text-emerald-300">{money(residentCredit)}</p>
+                                    </div>
+                                )}
                             </div>
                         )
                     )}
@@ -634,20 +723,33 @@ export function CreateInvoiceModal({
                                     })}
                                 </div>
 
+                                {residentCredit > 0 && creditEligible > 0 && (
+                                    <label className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 cursor-pointer">
+                                        <span className="flex items-center gap-2 text-sm text-emerald-200">
+                                            <input type="checkbox" checked={useCredit} onChange={(e) => { setUseCredit(e.target.checked); setAmountEdited(false) }}
+                                                className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-emerald-500" />
+                                            <PiggyBank size={15} /> Usar saldo a favor
+                                        </span>
+                                        <span className="text-sm font-semibold text-emerald-300">
+                                            {useCredit ? `−${money(creditToUse)}` : money(residentCredit)}
+                                        </span>
+                                    </label>
+                                )}
+
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-sm font-semibold text-slate-300">Monto a cobrar</label>
+                                        <label className="text-sm font-semibold text-slate-300">{creditToUse > 0 ? 'Monto a cobrar (restante)' : 'Monto a cobrar'}</label>
                                         <div className="relative">
                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
-                                            <input type="number" step="0.01" min="0" max={selectedTotal}
+                                            <input type="number" step="0.01" min="0"
                                                 className={`${inputCls} pl-6 font-medium`}
                                                 value={amountToCharge}
                                                 onChange={(e) => { setAmountToCharge(e.target.value); setAmountEdited(true) }} />
                                         </div>
-                                        {parseFloat(amountToCharge) > selectedTotal + 0.009 && (
-                                            <p className="text-xs text-amber-400">No puede ser mayor a lo seleccionado ({money(selectedTotal)}).</p>
+                                        {excess > 0 && (
+                                            <p className="text-xs text-emerald-400">Paga {money(excess)} de más: quedará como saldo a favor para su siguiente cuota.</p>
                                         )}
-                                        {chargeAmount > 0 && chargeAmount < selectedTotal - 0.009 && (
+                                        {chargeAmount > 0 && chargeAmount < dueAfterCredit - 0.009 && (
                                             <p className="text-xs text-slate-400">Abono parcial: se aplica primero a lo más antiguo.</p>
                                         )}
                                     </div>
@@ -750,6 +852,18 @@ export function CreateInvoiceModal({
                             </div>
                         </div>
                     )}
+                    {mode === 'cobrar' && moraSelected > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-400 flex items-center gap-1.5"><AlertTriangle size={13} className="text-rose-400" /> Incluye recargos por mora</span>
+                            <span className="font-medium text-rose-300">{money(moraSelected)}</span>
+                        </div>
+                    )}
+                    {mode === 'cobrar' && creditToUse > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-400">Saldo a favor aplicado</span>
+                            <span className="font-medium text-emerald-300">−{money(creditToUse)}</span>
+                        </div>
+                    )}
                     {mode === 'cobrar' && selectedResident && debtRows.length > 0 && (
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-slate-400">Saldo después del pago</span>
@@ -761,16 +875,28 @@ export function CreateInvoiceModal({
                         <span className="text-white font-bold text-lg">{money(footerTotal)}</span>
                     </div>
 
+                    {selectedResident && (mode === 'cobrar' ? debtRows.length > 0 : charge.paidNow) && (
+                        <label className={`flex items-center justify-between gap-3 text-sm ${receiptChannels ? 'cursor-pointer' : 'opacity-60'}`}>
+                            <span className="flex items-center gap-2 text-slate-300">
+                                <input type="checkbox" checked={sendReceipt && Boolean(receiptChannels)} disabled={!receiptChannels}
+                                    onChange={(e) => setSendReceipt(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-emerald-500" />
+                                <Send size={14} className="text-emerald-400" /> Enviar recibo al {residentLabel.toLowerCase()}
+                            </span>
+                            <span className="text-xs text-slate-500">{receiptChannels ? `por ${receiptChannels}` : 'sin teléfono ni correo'}</span>
+                        </label>
+                    )}
+
                     <div className="flex justify-end gap-3 pt-2">
                         <button type="button" onClick={onClose} disabled={loading}
                             className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700">
                             Cancelar
                         </button>
                         <button type="submit"
-                            disabled={loading || !selectedResident || loadingDebts || (mode === 'cobrar' && (chargeAmount <= 0 || parseFloat(amountToCharge) > selectedTotal + 0.009))}
+                            disabled={loading || !selectedResident || loadingDebts || (mode === 'cobrar' && (selectedRows.length === 0 || totalApplied <= 0))}
                             className={`flex items-center gap-2 px-6 py-2 text-sm font-medium text-white rounded-lg shadow-lg transition-all disabled:opacity-50 ${mode === 'cobrar' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'}`}>
                             {loading && <Loader2 className="animate-spin h-4 w-4" />}
-                            {mode === 'cobrar' ? `Cobrar ${money(chargeAmount)}` : (charge.paidNow ? 'Crear y cobrar' : 'Crear cargo')}
+                            {mode === 'cobrar' ? (chargeAmount > 0 ? `Cobrar ${money(chargeAmount)}` : `Aplicar ${money(creditToUse)} de saldo a favor`) : (charge.paidNow ? 'Crear y cobrar' : 'Crear cargo')}
                         </button>
                     </div>
                 </div>

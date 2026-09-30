@@ -7,6 +7,8 @@ import { ReportsGeneratorModal } from '@/components/seguridad/reports-generator'
 import { CreateInvoiceModal } from '@/components/seguridad/create-invoice-modal'
 import { FileText, Download, ArrowRight, Plus } from 'lucide-react'
 import Link from 'next/link'
+import { CashCutModal } from '@/components/finance/cash-cut-modal'
+import { Calculator } from 'lucide-react'
 
 export default function AdminFinanceClient({ 
     initialCondoId, 
@@ -20,6 +22,7 @@ export default function AdminFinanceClient({
     const [selectedCondoId, setSelectedCondoId] = useState<string | null>(initialCondoId)
     const [isReportModalOpen, setIsReportModalOpen] = useState(false)
     const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
+    const [isCashCutOpen, setIsCashCutOpen] = useState(false)
 
     // El Historial de Recibos hereda el condominio seleccionado aquí, en vez de
     // mandar siempre a ver todo el portafolio.
@@ -56,6 +59,13 @@ export default function AdminFinanceClient({
                     >
                         <Plus size={16} />
                         Nuevo Recibo
+                    </button>
+                    <button
+                        onClick={() => setIsCashCutOpen(true)}
+                        className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 border border-zinc-700 transition-all flex-1 sm:flex-none"
+                    >
+                        <Calculator size={16} />
+                        Corte de Caja
                     </button>
                     <button
                         onClick={() => setIsReportModalOpen(true)}
@@ -104,6 +114,15 @@ export default function AdminFinanceClient({
                     // Optional: refresh data
                     window.location.reload()
                 }}
+            />
+
+            {/* Corte de caja diario */}
+            <CashCutModal
+                isOpen={isCashCutOpen}
+                onClose={() => setIsCashCutOpen(false)}
+                organizationId={organizationId}
+                condominiumList={condominiumList}
+                defaultCondoId={selectedCondoId}
             />
         </div>
     )

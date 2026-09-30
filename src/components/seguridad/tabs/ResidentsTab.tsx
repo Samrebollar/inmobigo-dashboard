@@ -164,11 +164,12 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
         setIsDeleting(true)
         try {
             await residentsService.delete(residentToDelete.id)
+            toast.success(`${residentToDelete.first_name} fue eliminado`)
             await fetchResidents()
             onResidentsUpdated?.()
         } catch (error) {
             console.error("Error deleting resident:", error)
-            alert("Error al eliminar el residente.")
+            toast.error('No se pudo eliminar al residente', { description: (error as { message?: string })?.message || 'Intenta de nuevo.' })
         } finally {
             setIsDeleting(false)
             setDeleteModalOpen(false)
@@ -199,7 +200,7 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
             onResidentsUpdated?.()
         } catch (error) {
             console.error("Error deleting all residents:", error)
-            alert("Error al eliminar los residentes.")
+            toast.error('No se pudieron eliminar los residentes', { description: (error as { message?: string })?.message || 'Intenta de nuevo.' })
         } finally {
             setIsDeletingAll(false)
             setDeleteAllModalOpen(false)

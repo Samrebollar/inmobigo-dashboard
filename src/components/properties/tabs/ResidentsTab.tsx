@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Plus, Search, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
+import { calculateResidentDebtSummary } from '@/utils/finance-utils'
 import { sendResidentInvitationAction } from '@/app/actions/resident-invite-actions'
 
 import { Button } from '@/components/ui/button'
@@ -64,10 +65,6 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
             const unitMap = new Map<string, any>()
             unitsData.forEach((u: any) => unitMap.set(u.id, u))
 
-            const today = new Date()
-            const currentMonthIndex = today.getMonth()
-            const dayOfMonth = today.getDate()
-
             // Combine data and calculate real debt
             const enrichedResidents = residentsData.map(resident => {
                 // Filtrar solo por resident_id — filtrar también por unit_id atribuía a
@@ -75,64 +72,11 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                 // (ej. familiares en la misma unidad).
                 const unitInvoices = invoicesData.filter(inv => (inv as any).resident_id === resident.id)
 
-                const pendingInvoices = unitInvoices.filter(i => i.status === 'pending' || i.status === 'overdue')
-
-                // Invoices-based debt (facturas reales en BD) — solo cuota de
-                // mantenimiento. El saldo inicial ('initial_balance') se maneja aparte
-                // más abajo para no contarlo dos veces (una vez aquí y otra vez sumando
-                // resident.debt_amount completo).
-                const invoiceDebt = pendingInvoices
-                    .filter(inv => (inv as any).invoice_type === 'maintenance')
-                    .reduce((sum, inv) => {
-                        const bd = (inv as any).balance_due
-                        return sum + (bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0)
-                    }, 0)
-
-                // Fee-based debt: (meses activos × cuota mensual) − total pagado
+                // Misma fórmula que el detalle del residente, su propio panel y la lista
+                // de Residentes del dashboard (incluye la regla del primer mes facturable:
+                // quien se da de alta después del día límite no debe la cuota de ese mes).
                 const unit = unitMap.get(resident.unit_id || '')
-                const monthlyFee = Number(unit?.monto_mensual || 0)
-                const paymentDeadlineDay = Number(unit?.payment_deadline) || 10
-                let feeBasedDebt = 0
-                let paymentSurplus = 0
-                if (monthlyFee > 0 && resident.status !== 'inactive' && unit?.facturacion_activa !== false) {
-                    const startDateStr = resident.fecha_ingreso ?? resident.created_at
-                    const startDate = startDateStr ? new Date(startDateStr) : null
-                    let firstBillingMonth = 0
-                    if (startDate) {
-                        const startMonth = startDate.getMonth()
-                        firstBillingMonth = startMonth
-                        // If resident started in a prior year, bill from Jan of current year
-                        if (startDate.getFullYear() < today.getFullYear()) firstBillingMonth = 0
-                    }
-                    // Include current month as overdue if past the unit's fecha límite de cobro
-                    const lastBilledMonth = dayOfMonth > paymentDeadlineDay ? currentMonthIndex : currentMonthIndex - 1
-                    const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
-                    const annualTarget = monthlyFee * activeMonths
-                    // paid_amount = amount - balance_due (no hay columna paid_amount en
-                    // resident_invoices). Se calcula sobre TODAS las facturas, no solo
-                    // las 'paid': un abono parcial deja la factura en 'pending' con
-                    // balance_due reducido, y ese abono ya cuenta como pagado.
-                    const totalPaid = unitInvoices.reduce((sum, inv) => {
-                        const paidAmt = Math.max(0, Number(inv.amount || 0) - Number((inv as any).balance_due || 0))
-                        return sum + paidAmt
-                    }, 0)
-                    feeBasedDebt = Math.max(0, annualTarget - totalPaid)
-                    paymentSurplus = Math.max(0, totalPaid - annualTarget)
-                }
-
-                // debt_amount es un saldo inicial "manual" heredado. Si el residente ya
-                // pagó de más contra su cuota real (paymentSurplus), ese excedente
-                // absorbe primero el saldo inicial pendiente. Si además ya existe una
-                // factura real 'initial_balance' para ese mismo saldo, esa factura ya es
-                // la fuente de verdad y debt_amount quedó obsoleto — se resta también
-                // para no contar el mismo saldo inicial dos veces.
-                const initialBalanceInvoiceDebt = unitInvoices
-                    .filter(inv => (inv as any).invoice_type === 'initial_balance' && (inv.status === 'overdue' || inv.status === 'pending'))
-                    .reduce((sum, inv) => sum + Number((inv as any).balance_due ?? inv.amount ?? 0), 0)
-                const remainingDebtAmount = Math.max(0, Number(resident.debt_amount || 0) - paymentSurplus - initialBalanceInvoiceDebt)
-
-                // Use the greater of the two: invoice-based or fee-based debt
-                const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount
+                const { debt } = calculateResidentDebtSummary({ resident, invoices: unitInvoices, unit })
 
                 return {
                     ...resident,

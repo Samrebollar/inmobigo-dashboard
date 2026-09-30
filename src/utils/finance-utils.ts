@@ -106,6 +106,30 @@ export function isBillingActiveForPeriod(resident: any, periodDate: Date): boole
 }
 
 /**
+ * Primer mes que se le cobra automáticamente a un residente (año y mes 0-11).
+ * Si se dio de alta DESPUÉS del día límite de pago de ese mes, su primera cuota
+ * proyectada es la del mes siguiente: no debe aparecer con la cuota de un mes en
+ * el que ni siquiera estaba registrado a tiempo para pagar. La deuda previa que
+ * se captura al darlo de alta (facturas reales) se suma aparte.
+ */
+export function getFirstBillableMonth(
+    startDateStr: string | null | undefined,
+    paymentDeadlineDay: number
+): { year: number, month: number } | null {
+    if (!startDateStr) return null
+    const raw = String(startDateStr)
+    const ymd = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+        ? raw
+        : new Date(raw).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+    const [y, m, d] = ymd.split('-').map(Number)
+    if (!y || !m || !d) return null
+    if (d > paymentDeadlineDay) {
+        return m === 12 ? { year: y + 1, month: 0 } : { year: y, month: m }
+    }
+    return { year: y, month: m - 1 }
+}
+
+/**
  * Calculates resident monthly financials for a selected month/year.
  */
 export function calculateResidentMonthlyFinancials({
@@ -172,31 +196,14 @@ export function calculateResidentMonthlyFinancials({
         }
     }
 
-    const startDateStr = resident.fecha_ingreso || resident.created_at
-    const startDate = startDateStr ? new Date(startDateStr) : null
-
-    // Determine first billing month
+    // Primer mes con cuota proyectada (regla del día límite de pago). Si empieza
+    // en un año posterior, no hay proyección en este año (12 = ningún mes), pero
+    // sus facturas reales (p.ej. deuda previa capturada al darlo de alta) sí se muestran.
+    const billingStart = getFirstBillableMonth(resident.fecha_ingreso || resident.created_at, paymentDeadlineDay)
     let firstBillingMonth = 0
-    if (startDate) {
-        const startYear = startDate.getFullYear()
-        if (startYear === selectedYear) {
-            firstBillingMonth = startDate.getMonth()
-        } else if (startYear > selectedYear) {
-            // Not started billing in this selected year yet
-            return {
-                cuotaMensual: 0,
-                totalPaid: 0,
-                totalPending: 0,
-                overdueCount: 0,
-                overdueAmount: 0,
-                maxDaysOverdue: 0,
-                creditBalance: 0,
-                activeMonthlyFee: 0,
-                filteredInvoices: []
-            }
-        } else {
-            firstBillingMonth = 0
-        }
+    if (billingStart) {
+        if (billingStart.year === selectedYear) firstBillingMonth = billingStart.month
+        else if (billingStart.year > selectedYear) firstBillingMonth = 12
     }
 
     const monthNum = selectedMonth === 'all' ? -1 : parseInt(selectedMonth)
@@ -230,8 +237,12 @@ export function calculateResidentMonthlyFinancials({
 
     const annualFeeTarget = monthlyFee * activeMonthsInYear
 
-    // Guard: if looking at a single month prior to ingress month, return 0s
-    if (monthNum !== -1 && monthNum < firstBillingMonth) {
+    // Guard: mes anterior al primer mes facturable y sin facturas reales → todo en 0
+    const hasDbInvoicesInSelectedMonth = monthNum !== -1 && invoices.some(inv => {
+        const parts = getLocalDateParts(inv.due_date || inv.created_at)
+        return !!parts && parts.year === selectedYear && parts.month === monthNum
+    })
+    if (monthNum !== -1 && monthNum < firstBillingMonth && !hasDbInvoicesInSelectedMonth) {
         return {
             cuotaMensual: 0,
             totalPaid: 0,
@@ -732,6 +743,28 @@ export function calculateCondoMonthlyFinancials({
             return min === null ? d : Math.min(min, d)
         }, null) ?? 10
 
+    // Inicio de cobro por unidad (regla del día límite): el residente más antiguo
+    // de la unidad, o la fecha de alta de la unidad si no hay residentes. Una unidad
+    // dada de alta después del día límite de un mes no proyecta la cuota de ese mes.
+    const unitBillingStart = new Map<string, { year: number, month: number } | null>()
+    units.forEach(u => {
+        const deadline = Number(u.payment_deadline) || 10
+        const starts = residents
+            .filter(r => r.unit_id === u.id && r.status !== 'inactive')
+            .map(r => getFirstBillableMonth(r.fecha_ingreso || r.created_at, deadline))
+            .filter(Boolean) as { year: number, month: number }[]
+        const fromUnit = getFirstBillableMonth(u.created_at, deadline)
+        const candidates = starts.length > 0 ? starts : (fromUnit ? [fromUnit] : [])
+        const earliest = candidates.reduce<{ year: number, month: number } | null>((min, c) =>
+            !min || c.year < min.year || (c.year === min.year && c.month < min.month) ? c : min, null)
+        unitBillingStart.set(u.id, earliest)
+    })
+    const isUnitBillableInMonth = (unitId: string, year: number, month: number) => {
+        const start = unitBillingStart.get(unitId)
+        if (!start) return true
+        return start.year < year || (start.year === year && start.month <= month)
+    }
+
     if (numMonths > 0 && expectedMonthlyIncome > 0) {
         for (let m = firstMonth; m <= lastMonth; m++) {
             // Skip future months
@@ -764,7 +797,15 @@ export function calculateCondoMonthlyFinancials({
                 return parts && parts.year === selectedYear && parts.month === m
             }).reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
 
-            const projectedDebt = Math.max(0, expectedMonthlyIncome - paidThisMonth)
+            const billableUnitIds = new Set(
+                units
+                    .filter(u => u.facturacion_activa !== false && isUnitBillableInMonth(u.id, selectedYear, m))
+                    .map(u => u.id)
+            )
+            const expectedThisMonth = units
+                .filter(u => billableUnitIds.has(u.id))
+                .reduce((sum, u) => sum + Number(u.monto_mensual || 0), 0)
+            const projectedDebt = Math.max(0, expectedThisMonth - paidThisMonth)
 
             if (projectedDebt > 0) {
                 if (isInOverduePeriod) {
@@ -772,7 +813,7 @@ export function calculateCondoMonthlyFinancials({
                     // Count all billing-active residents as debtors for this projected
                     // month — incluye 'delinquent', solo excluye 'inactive'.
                     residents.forEach(r => {
-                        if (r.status !== 'inactive' && r.id) {
+                        if (r.status !== 'inactive' && r.id && (!r.unit_id || billableUnitIds.has(r.unit_id))) {
                             debtorResidents.add(r.id)
                         }
                     })
@@ -830,47 +871,44 @@ export function calculateResidentDebtSummary({
     const pendingInvoices = invoices.filter(i => i.status === 'pending' || i.status === 'overdue')
     const overdueInvoices = invoices.filter(i => i.status === 'overdue')
 
+    // Primer mes con cuota proyectada (regla del día límite de pago).
+    const billingStart = getFirstBillableMonth(resident?.fecha_ingreso ?? resident?.created_at, paymentDeadlineDay)
+    const currentYear = today.getFullYear()
+    let firstBillingMonth = 0
+    if (billingStart) {
+        if (billingStart.year === currentYear) firstBillingMonth = billingStart.month
+        else if (billingStart.year > currentYear) firstBillingMonth = 12
+    }
+    // Ventana de proyección: cuotas de mantenimiento del año en curso desde el
+    // primer mes facturable. Lo anterior (deuda previa capturada al darlo de alta,
+    // años pasados) se suma tal cual por sus facturas reales, sin proyectar.
+    type InvLite = { due_date?: string | null, created_at?: string | null, amount?: number | string | null, balance_due?: number | string | null }
+    const inWindow = (inv: InvLite) => {
+        const parts = getLocalDateParts(inv.due_date || inv.created_at)
+        return !!parts && parts.year === currentYear && parts.month >= firstBillingMonth
+    }
+    const maintenanceInvoices = invoices.filter(inv => inv.invoice_type === 'maintenance')
+    const pendingBalance = (inv: InvLite) => {
+        const bd = inv.balance_due
+        return bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0
+    }
+    const preWindowInvoiceDebt = pendingInvoices
+        .filter(inv => inv.invoice_type === 'maintenance' && !inWindow(inv))
+        .reduce((sum, inv) => sum + pendingBalance(inv), 0)
     const invoiceDebt = pendingInvoices
-        .filter(inv => inv.invoice_type === 'maintenance')
-        .reduce((sum, inv) => {
-            const bd = inv.balance_due
-            return sum + (bd != null && Number(bd) > 0 ? Number(bd) : Number(inv.amount) || 0)
-        }, 0)
+        .filter(inv => inv.invoice_type === 'maintenance' && inWindow(inv))
+        .reduce((sum, inv) => sum + pendingBalance(inv), 0)
 
     const monthlyFee = Number(unit?.monto_mensual || 0)
     let feeBasedDebt = 0
     let paymentSurplus = 0
     if (monthlyFee > 0 && resident.status !== 'inactive' && unit?.facturacion_activa !== false) {
-        const startDateStr = resident.fecha_ingreso ?? resident.created_at
-        const startDate = startDateStr ? new Date(startDateStr) : null
-        let firstBillingMonth = 0
-        if (startDate) {
-            firstBillingMonth = startDate.getMonth()
-            if (startDate.getFullYear() < today.getFullYear()) firstBillingMonth = 0
-        }
-        // Si ya existe una factura real de mantenimiento con vencimiento anterior
-        // al mes calculado arriba (p.ej. se le cargó un mes previo aunque su
-        // fecha_ingreso/created_at diga que "empezó" después), ese mes real
-        // manda: de lo contrario el pago ya aplicado a esa factura anterior se
-        // contaría como si cubriera el mes actual, ocultando saldo pendiente real.
-        const earliestMaintenanceDue = invoices
-            .filter(inv => inv.invoice_type === 'maintenance' && inv.due_date)
-            .reduce((earliest: Date | null, inv) => {
-                const d = new Date(inv.due_date)
-                return !earliest || d < earliest ? d : earliest
-            }, null as Date | null)
-        if (earliestMaintenanceDue) {
-            firstBillingMonth = earliestMaintenanceDue.getFullYear() < today.getFullYear()
-                ? 0
-                : Math.min(firstBillingMonth, earliestMaintenanceDue.getMonth())
-        }
         const lastBilledMonth = today.getDate() > paymentDeadlineDay ? currentMonthIndex : currentMonthIndex - 1
         const activeMonths = Math.max(0, lastBilledMonth - firstBillingMonth + 1)
         const annualTarget = monthlyFee * activeMonths
-        const totalPaid = invoices.reduce((sum, inv) => {
-            const paidAmt = Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0))
-            return sum + paidAmt
-        }, 0)
+        const totalPaid = maintenanceInvoices
+            .filter(inWindow)
+            .reduce((sum, inv) => sum + Math.max(0, Number(inv.amount || 0) - Number(inv.balance_due || 0)), 0)
         feeBasedDebt = Math.max(0, annualTarget - totalPaid)
         paymentSurplus = Math.max(0, totalPaid - annualTarget)
     }
@@ -887,7 +925,7 @@ export function calculateResidentDebtSummary({
         .filter(inv => inv.invoice_type !== 'maintenance' && inv.invoice_type !== 'initial_balance')
         .reduce((sum, inv) => sum + Number(inv.balance_due ?? inv.amount ?? 0), 0)
 
-    const debt = Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount + otrosCargosDebt
+    const debt = preWindowInvoiceDebt + Math.max(invoiceDebt, feeBasedDebt) + remainingDebtAmount + otrosCargosDebt
 
     let overdueCount = overdueInvoices.length
     if (overdueCount === 0 && feeBasedDebt > 0 && monthlyFee > 0) {

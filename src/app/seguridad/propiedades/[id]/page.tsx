@@ -26,7 +26,7 @@ import { SettingsTab } from '@/components/seguridad/tabs/SettingsTab'
 import { EditCondominiumModal } from '@/components/seguridad/EditCondominiumModal'
 import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
-import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
+import { calculateResidentDebtSummary } from '@/utils/finance-utils'
 
 export default function CondominiumPage() {
     const { isPropiedades } = useUserRole()
@@ -119,14 +119,14 @@ export default function CondominiumPage() {
                             // morosos tanto de "Residentes Morosos" como de la proyección de "Deuda Total".
                             const { data: activeResidents } = await supabase
                                 .from('residents')
-                                .select('id, first_name, last_name, status, unit_id, debt_amount, units(unit_number)')
+                                .select('id, first_name, last_name, status, unit_id, debt_amount, created_at, fecha_ingreso, units(unit_number)')
                                 .eq('condominium_id', id)
                                 .neq('status', 'inactive')
 
                             // 3. Unidades activas
                             const { data: unitsData } = await supabase
                                 .from('units')
-                                .select('id, monto_mensual, facturacion_activa, payment_deadline')
+                                .select('id, monto_mensual, facturacion_activa, payment_deadline, created_at')
                                 .eq('condominium_id', id)
 
                             // 4. Fetch ALL invoices for this condominium from resident_invoices
@@ -151,26 +151,27 @@ export default function CondominiumPage() {
 
                             ;(data as any).ingresos_mes = totalRecaudado
 
-                            // 6-8. Deuda Total / Residentes Morosos — misma función
-                            // (calculateCondoMonthlyFinancials) que usa Finanzas > Gestión de
-                            // Cobranza, para que el hero de arriba coincida exacto con esas
-                            // tarjetas: Deuda Total = Pendiente + Morosidad + Saldo Inicial
-                            // (Arrastre). Antes este bloque tenía su propio motor con umbral fijo
-                            // "día > 10" (ignorando el día límite de pago real de cada unidad),
-                            // sin considerar debt_amount, y su fallback de "residentes activos"
-                            // excluía a quienes ya estaban marcados como 'delinquent'.
-                            const condoFinancialsForHero = calculateCondoMonthlyFinancials({
-                                units: unitsData || [],
-                                residents: activeResidents || [],
-                                invoices,
-                                selectedMonth: now.getMonth(),
-                                selectedYear: now.getFullYear(),
+                            // 6-8. Deuda Total / Residentes Morosos.
+                            // Deuda Total = lo que realmente debe cada residente (misma fórmula que
+                            // la lista de Residentes: deuda previa capturada + cuotas vencidas desde
+                            // su primer mes facturable + multas/extraordinarias), no solo el mes en curso.
+                            const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+                            type InvRow = { resident_id?: string | null, status?: string, balance_due?: number | null, amount?: number | null, due_date?: string | null }
+                            const unitById = new Map((unitsData || []).map(u => [u.id, u]))
+                            let deudaTotal = 0
+                            let morososCount = 0
+                            ;(activeResidents || []).forEach(r => {
+                                const resInvoices = (invoices as InvRow[]).filter(inv => inv.resident_id === r.id)
+                                const summary = calculateResidentDebtSummary({ resident: r, invoices: resInvoices, unit: unitById.get(r.unit_id || '') })
+                                deudaTotal += summary.debt
+                                const hasPastDue = resInvoices.some(inv =>
+                                    (inv.status === 'overdue' || inv.status === 'pending') &&
+                                    Number(inv.balance_due ?? inv.amount ?? 0) > 0 &&
+                                    String(inv.due_date || '').slice(0, 10) < todayMx && !!inv.due_date)
+                                if (summary.debt > 0 && (summary.overdueCount > 0 || hasPastDue || summary.carriedOverDebt > 0)) morososCount++
                             })
-                            ;(data as any).deuda_total =
-                                condoFinancialsForHero.porCobrar +
-                                condoFinancialsForHero.vencido +
-                                condoFinancialsForHero.saldoInicialPendiente
-                            ;(data as any).morosos_count = condoFinancialsForHero.morososCount
+                            ;(data as any).deuda_total = deudaTotal
+                            ;(data as any).morosos_count = morososCount
 
                             // 9. Morosidad alerts
                             const residentsList = activeResidents?.map((r: any) => ({

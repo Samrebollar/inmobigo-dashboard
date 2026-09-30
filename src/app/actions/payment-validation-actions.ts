@@ -360,6 +360,23 @@ export async function updateValidationStatus(
                     .update({ debt_amount: newDebt })
                     .eq('id', resData.id)
 
+                // Si ya no le queda nada vencido, deja de aparecer como Moroso
+                const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+                const { count: stillOverdue, error: overdueErr } = await adminClient
+                    .from('resident_invoices')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('resident_id', resData.id)
+                    .in('status', ['pending', 'overdue'])
+                    .gt('balance_due', 0)
+                    .lt('due_date', todayMx)
+                if (!overdueErr && !stillOverdue) {
+                    await adminClient
+                        .from('residents')
+                        .update({ status: 'active' })
+                        .eq('id', resData.id)
+                        .eq('status', 'delinquent')
+                }
+
                 revalidatePath('/dashboard/finance/billing')
                 revalidatePath(`/dashboard/residentes/${resData.id}`)
             } catch (e: any) {

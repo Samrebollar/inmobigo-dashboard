@@ -556,6 +556,9 @@ export function calculateCondoMonthlyFinancials({
     selectedYear?: number
 }): CondoFinancials {
     const today = new Date()
+    // Una factura cancelada (p. ej. la de un residente eliminado) no es cobranza:
+    // no cuenta en el Total del Periodo, ni como pendiente, ni como arrastre.
+    invoices = invoices.filter(inv => inv.status !== 'cancelled')
 
     // Determine the first and last months of the period
     let firstMonth = 0

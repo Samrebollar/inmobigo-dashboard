@@ -82,8 +82,13 @@ export function DelinquencyReportModal({
             : null
 
         // 2. Prepare Payload
+        // Con atraso se manda la plantilla de cobranza según los días (leve, moroso,
+        // crítico, legal); "recordatorio" solo si todavía no vence.
+        const daysOverdue = Number(resident.daysOverdue || 0)
         const payload = {
-            tipo: "recordatorio",
+            tipo: daysOverdue > 0 ? "cobranza" : "recordatorio",
+            resident_id: resident.id,
+            days_overdue: daysOverdue,
             first_name: `${resident.first_name} ${resident.last_name}`,
             phone: resident.phone || '',
             amount: resident.calculatedDebt,

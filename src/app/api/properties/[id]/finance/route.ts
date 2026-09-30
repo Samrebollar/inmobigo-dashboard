@@ -329,14 +329,14 @@ export async function POST(
             // Si ya no le queda nada vencido, deja de aparecer como Moroso
             if (invoice.resident_id) {
                 const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
-                const { count: stillOverdue } = await adminSupabase
+                const { count: stillOverdue, error: overdueError } = await adminSupabase
                     .from('resident_invoices')
                     .select('id', { count: 'exact', head: true })
                     .eq('resident_id', invoice.resident_id)
-                    .in('status', ['pending', 'overdue', 'partial'])
+                    .in('status', ['pending', 'overdue'])
                     .gt('balance_due', 0)
                     .lt('due_date', todayMx)
-                if (!stillOverdue) {
+                if (!overdueError && !stillOverdue) {
                     await adminSupabase
                         .from('residents')
                         .update({ status: 'active' })

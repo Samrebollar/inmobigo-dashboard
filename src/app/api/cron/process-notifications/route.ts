@@ -61,6 +61,8 @@ export async function GET(request: Request) {
                 due_date,
                 description,
                 invoice_type,
+                unit_id,
+                recargo_aplicado,
                 created_at,
                 updated_at,
                 residents (
@@ -137,21 +139,20 @@ export async function GET(request: Request) {
                     : null
 
                 if (config) {
-                    const facturaParaRecargo = {
+                    const aplicado = await cronService.aplicarRecargo({
                         id: factura.id,
                         amount: Number(factura.amount),
-                        balance_due: Number(factura.balance_due ?? factura.amount),
-                        status: factura.status === 'pending' && diasAtraso > 0 ? 'overdue' : factura.status,
+                        status: factura.status,
                         due_date: factura.due_date,
                         resident_id: factura.resident_id,
                         condominium_id: factura.condominium_id,
                         organization_id: factura.organization_id,
+                        unit_id: factura.unit_id,
+                        invoice_type: factura.invoice_type,
+                        recargo_aplicado: factura.recargo_aplicado,
                         description: factura.description || 'Cuota de Mantenimiento',
-                        created_at: factura.created_at,
-                    }
-
-                    await cronService.aplicarRecargo(facturaParaRecargo, config)
-                    results.recargos_applied++
+                    }, config)
+                    if (aplicado) results.recargos_applied++
                 }
 
                 // 2c. Recordatorio ANTES del vencimiento, solo en los días que el admin

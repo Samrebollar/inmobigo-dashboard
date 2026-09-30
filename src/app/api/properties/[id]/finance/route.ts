@@ -2,6 +2,9 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
+import { getFinanceOrgForCondo } from '@/lib/finance-auth'
+
+const N8N_BASE = () => (process.env.N8N_BASE_URL || 'https://n8n.inmobigo.mx').replace(/\/$/, '')
 
 export async function GET(
     request: Request,
@@ -154,6 +157,69 @@ export async function POST(
 
         const adminSupabase = createAdminClient()
 
+        // Solo el equipo de la organización dueña del condominio puede mover dinero
+        // (antes bastaba con tener sesión, incluso un residente).
+        const orgId = await getFinanceOrgForCondo(adminSupabase, user.id, condoId)
+        if (!orgId) {
+            return NextResponse.json({ error: 'No tienes permiso para operar las finanzas de esta propiedad' }, { status: 403 })
+        }
+
+        // ── Saldo a favor: suma el excedente de un pago al crédito del residente ──
+        if (body.action === 'add_credit') {
+            const amount = Math.round(Number(body.amount) * 100) / 100
+            if (!body.residentId || !(amount > 0)) {
+                return NextResponse.json({ error: 'residentId y amount (mayor a 0) son requeridos' }, { status: 400 })
+            }
+            const { data: res } = await adminSupabase.from('residents').select('id, credit_amount, condominium_id').eq('id', body.residentId).maybeSingle()
+            if (!res || res.condominium_id !== condoId) {
+                return NextResponse.json({ error: 'Residente no encontrado' }, { status: 404 })
+            }
+            const newCredit = Math.round((Number(res.credit_amount || 0) + amount) * 100) / 100
+            const { error } = await adminSupabase.from('residents').update({ credit_amount: newCredit }).eq('id', res.id)
+            if (error) throw error
+            return NextResponse.json({ success: true, credit_amount: newCredit })
+        }
+
+        // ── Recibo al residente por WhatsApp + correo (flujo n8n 37) ──
+        if (body.action === 'send_receipt') {
+            const { data: res } = await adminSupabase
+                .from('residents')
+                .select('id, first_name, last_name, phone, email, condominium_id, units(unit_number), condominiums(name)')
+                .eq('id', body.residentId)
+                .maybeSingle()
+            if (!res || res.condominium_id !== condoId) {
+                return NextResponse.json({ error: 'Residente no encontrado' }, { status: 404 })
+            }
+            const unit = (Array.isArray(res.units) ? res.units[0] : res.units) as { unit_number?: string } | null
+            const condo = (Array.isArray(res.condominiums) ? res.condominiums[0] : res.condominiums) as { name?: string } | null
+            const items = Array.isArray(body.items) ? body.items.slice(0, 30).map((i: { concept?: string, period?: string, amount?: number }) => ({
+                concept: String(i.concept || 'Pago').slice(0, 120),
+                period: String(i.period || '').slice(0, 60),
+                amount: Number(i.amount) || 0,
+            })) : []
+            const r = await fetch(`${N8N_BASE()}/webhook/recibo-pago-residente`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    first_name: `${res.first_name || ''} ${res.last_name || ''}`.trim(),
+                    phone: body.sendWhatsApp === false ? '' : (res.phone || ''),
+                    email: body.sendEmail === false ? '' : (res.email || ''),
+                    total: Number(body.total) || 0,
+                    remaining: Number(body.remaining) || 0,
+                    method: String(body.method || 'Efectivo'),
+                    folio: String(body.folio || ''),
+                    date: new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' }),
+                    condominium: condo?.name || '',
+                    unit: unit?.unit_number || '',
+                    items,
+                }),
+            }).catch(() => null)
+            if (!r || !r.ok) {
+                return NextResponse.json({ error: 'No se pudo enviar el recibo' }, { status: 502 })
+            }
+            return NextResponse.json({ success: true, whatsapp: Boolean(res.phone) && body.sendWhatsApp !== false, email: Boolean(res.email) && body.sendEmail !== false })
+        }
+
         if (body.action === 'register_payment') {
             const { invoiceId, amount, paymentMethod, notes, paidAt } = body
             const paymentAmount = Number(amount)
@@ -168,13 +234,34 @@ export async function POST(
                 .eq('id', invoiceId)
                 .single()
 
-            if (invoiceFetchError || !invoice) {
+            if (invoiceFetchError || !invoice || invoice.condominium_id !== condoId) {
                 return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 })
             }
 
             const currentBalance = Number(invoice.balance_due ?? invoice.amount)
             if (paymentAmount > currentBalance + 0.01) {
                 return NextResponse.json({ error: `El monto excede el saldo pendiente ($${currentBalance.toFixed(2)})` }, { status: 400 })
+            }
+
+            // Pago con saldo a favor: se descuenta del crédito del residente (sin
+            // permitir que quede negativo; el update condicionado evita carreras).
+            const isCreditPayment = paymentMethod === 'Saldo a favor'
+            if (isCreditPayment) {
+                const { data: res } = await adminSupabase.from('residents').select('credit_amount').eq('id', invoice.resident_id).maybeSingle()
+                const credit = Number(res?.credit_amount || 0)
+                if (credit + 0.001 < paymentAmount) {
+                    return NextResponse.json({ error: `Saldo a favor insuficiente ($${credit.toFixed(2)})` }, { status: 400 })
+                }
+                const { data: updated, error: creditError } = await adminSupabase
+                    .from('residents')
+                    .update({ credit_amount: Math.round((credit - paymentAmount) * 100) / 100 })
+                    .eq('id', invoice.resident_id)
+                    .eq('credit_amount', res?.credit_amount ?? 0)
+                    .select('id')
+                if (creditError) throw creditError
+                if (!updated || updated.length === 0) {
+                    return NextResponse.json({ error: 'El saldo a favor cambió, intenta de nuevo' }, { status: 409 })
+                }
             }
 
             const paymentId = randomUUID()
@@ -194,6 +281,7 @@ export async function POST(
                     payment_method: paymentMethod || null,
                     notes: notes || null,
                     paid_at: paidAtIso,
+                    created_by: user.id,
                 })
                 .select()
                 .single()

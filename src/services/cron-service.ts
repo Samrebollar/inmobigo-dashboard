@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { SettingsCondominio } from '@/types/properties'
-import { syncToLegacy, buildPaymentLink, buildFolio } from './legacy-sync-service'
+import { buildPaymentLink, buildFolio } from './legacy-sync-service'
 
 /**
  * Cron Service — Gestión de recargos, morosidad y disparos a n8n
@@ -41,74 +41,90 @@ export const cronService = {
     },
 
     /**
-     * Evalúa y aplica recargo por mora si cumple las condiciones.
+     * Recargo por mora: UNA sola vez por cuota de mantenimiento vencida, cuando
+     * cumple los días configurados (settings_condominio.recargo_*). Se genera
+     * como un cargo aparte ("Recargo por mora · ...", invoice_type 'fine') y la
+     * cuota original queda marcada con recargo_aplicado = true.
      *
-     * MIGRADO: Actualiza `resident_invoices` (fuente de verdad).
-     * Luego sincroniza a `invoices` para compatibilidad n8n.
+     * Antes el recargo se sumaba al balance_due de la misma factura CADA DÍA que
+     * corría el cron (no se revisaba recargo_aplicado) y además se "sincronizaba"
+     * insertando otra fila en invoices — que hoy es la misma tabla que
+     * resident_invoices —, duplicando la deuda.
      *
-     * NOTA: resident_invoices no tiene recargo_aplicado/recargo_monto —
-     * el recargo se suma directamente al balance_due.
+     * Devuelve true si aplicó el recargo.
      */
     async aplicarRecargo(
         factura: {
             id: string
             amount: number
-            balance_due: number
             status: string
             due_date: string
             resident_id: string
             condominium_id: string
             organization_id: string
+            unit_id?: string | null
+            invoice_type?: string | null
+            recargo_aplicado?: boolean | null
             description?: string
-            created_at: string
         },
         config: SettingsCondominio
-    ) {
-        // No aplicar si ya está pagado o si recargos están desactivados
-        if (factura.status === 'paid' || !config.recargo_activo) return
+    ): Promise<boolean> {
+        if (!config.recargo_activo) return false
+        if (factura.status === 'paid' || factura.status === 'cancelled') return false
+        if (factura.recargo_aplicado) return false
+        if ((factura.invoice_type || 'maintenance') !== 'maintenance') return false
 
         const diasAtraso = this.calcularDiasDiferencia(factura.due_date)
-        if (diasAtraso < config.recargo_dias_aplicar) return
+        const diasAplicar = Number(config.recargo_dias_aplicar ?? 0)
+        if (diasAtraso <= 0 || diasAtraso < diasAplicar) return false
+
+        let recargoMonto = 0
+        if (config.recargo_tipo === 'fijo') {
+            recargoMonto = Number(config.recargo_valor || 0)
+        } else if (config.recargo_tipo === 'porcentaje') {
+            recargoMonto = Number(factura.amount) * (Number(config.recargo_valor || 0) / 100)
+        }
+        recargoMonto = Math.round(recargoMonto * 100) / 100
+        if (recargoMonto <= 0) return false
 
         const supabase = createAdminClient()
-        let recargoMonto = 0
 
-        if (config.recargo_tipo === 'fijo') {
-            recargoMonto = config.recargo_valor
-        } else if (config.recargo_tipo === 'porcentaje') {
-            recargoMonto = factura.amount * (config.recargo_valor / 100)
-        }
-
-        if (recargoMonto <= 0) return
-
-        // El recargo incrementa el balance_due actual
-        const currentBalance = Number(factura.balance_due ?? factura.amount)
-        const nuevoBalance = currentBalance + recargoMonto
-
-        // 1. Actualizar resident_invoices (fuente de verdad)
-        const { error: riError } = await supabase
+        // Se "reserva" la factura primero: si otra corrida ya la marcó, no hace nada
+        const { data: claimed, error: claimError } = await supabase
             .from('resident_invoices')
-            .update({
-                balance_due: nuevoBalance,
-                status: 'overdue',
-                updated_at: new Date().toISOString(),
-            })
+            .update({ recargo_aplicado: true })
             .eq('id', factura.id)
+            .eq('recargo_aplicado', false)
+            .select('id')
+        if (claimError || !claimed || claimed.length === 0) return false
 
-        if (riError) {
-            console.error(`[Cron] Error aplicando recargo a resident_invoice ${factura.id}:`, riError)
-            return
+        const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+        const { error: insertError } = await supabase.from('resident_invoices').insert({
+            condominium_id: factura.condominium_id,
+            organization_id: factura.organization_id,
+            resident_id: factura.resident_id,
+            unit_id: factura.unit_id ?? null,
+            invoice_type: 'fine',
+            invoice_scope: 'resident',
+            status: 'pending',
+            amount: recargoMonto,
+            balance_due: recargoMonto,
+            currency: 'MXN',
+            due_date: hoy,
+            description: `Recargo por mora · ${factura.description || 'Cuota de Mantenimiento'}`,
+            folio: `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+            reminder_sent: false,
+            recargo_aplicado: true,
+        })
+
+        if (insertError) {
+            console.error(`[Cron] Error creando recargo para ${factura.id}:`, insertError)
+            await supabase.from('resident_invoices').update({ recargo_aplicado: false }).eq('id', factura.id)
+            return false
         }
 
-        console.log(`[Cron] Recargo de $${recargoMonto} aplicado a resident_invoice ${factura.id}`)
-
-        // 2. Sync a invoices legacy (para n8n)
-        await syncToLegacy(supabase, {
-            ...factura,
-            balance_due: nuevoBalance,
-            status: 'overdue',
-            updated_at: new Date().toISOString(),
-        })
+        console.log(`[Cron] Recargo de $${recargoMonto} generado para la cuota ${factura.id}`)
+        return true
     },
 
     /**

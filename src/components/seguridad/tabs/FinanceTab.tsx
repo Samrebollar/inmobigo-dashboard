@@ -34,6 +34,9 @@ export function FinanceTab() {
     const [metrics, setMetrics] = useState({
         facturado: 0,
         recaudado: 0,
+        cuotasCobradas: 0,
+        recuperado: 0,
+        adelantos: 0,
         porCobrar: 0,
         vencido: 0,
         morosos: 0,
@@ -205,6 +208,9 @@ export function FinanceTab() {
                 setMetrics({
                     facturado: (demoRecaudado + unpaid),
                     recaudado: demoRecaudado,
+                    cuotasCobradas: demoRecaudado,
+                    recuperado: 0,
+                    adelantos: 0,
                     porCobrar: Math.floor(unpaid * 0.3),
                     vencido: Math.floor(unpaid * 0.7),
                     morosos: morosos,
@@ -250,9 +256,35 @@ export function FinanceTab() {
                 selectedYear: selectedPeriod.year
             })
 
+            // Recaudado = flujo de caja del mes (misma cifra que "Ingresos del Mes" de
+            // Finanzas e "Ingresos Totales" del Dashboard): cuotas del mes + lo cobrado
+            // de meses anteriores + adelantos. Para "Todos los meses" se usan solo las
+            // cuotas cobradas.
+            let cash: { total: number, delMes: number, recuperado: number, adelantos: number } | null = null
+            if (selectedPeriod.month !== -1) {
+                try {
+                    const monthKey = `${selectedPeriod.year}-${String(selectedPeriod.month + 1).padStart(2, '0')}`
+                    const res = await fetch(`/api/finance/metrics?condominium_id=${condoId}&month=${monthKey}`)
+                    if (res.ok) {
+                        const m = await res.json()
+                        cash = {
+                            total: Number(m.ingresos_mes || 0),
+                            delMes: Number(m.ingresos_del_mes || 0),
+                            recuperado: Number(m.ingresos_recuperacion || 0),
+                            adelantos: Number(m.ingresos_adelantos || 0),
+                        }
+                    }
+                } catch (e) {
+                    console.error('Cash income error:', e)
+                }
+            }
+
             setMetrics({
                 facturado: condoFinancials.totalPeriodo,
-                recaudado: condoFinancials.recaudado,
+                recaudado: cash ? cash.total : condoFinancials.recaudado,
+                cuotasCobradas: condoFinancials.recaudado,
+                recuperado: cash ? cash.recuperado : 0,
+                adelantos: cash ? cash.adelantos : 0,
                 porCobrar: condoFinancials.porCobrar,
                 vencido: condoFinancials.morosidadTotal, // incluye deuda vencida de meses anteriores
                 morosos: condoFinancials.morososCount,
@@ -519,8 +551,14 @@ export function FinanceTab() {
                                         ${metrics.recaudado.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </div>
                                     <p className="text-xs text-zinc-500 mt-1">
-                                        Pagada ({metrics.facturado > 0 ? ((metrics.recaudado / metrics.facturado) * 100).toFixed(1) : '0'}%)
+                                        Cuotas del mes: ${metrics.cuotasCobradas.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ({metrics.facturado > 0 ? ((metrics.cuotasCobradas / metrics.facturado) * 100).toFixed(1) : '0'}%)
                                     </p>
+                                    {metrics.recuperado > 0 && (
+                                        <p className="text-xs text-zinc-500">Meses anteriores: ${metrics.recuperado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                                    )}
+                                    {metrics.adelantos > 0 && (
+                                        <p className="text-xs text-zinc-500">Adelantos: ${metrics.adelantos.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                                    )}
                                 </>
                             )}
                         </CardContent>

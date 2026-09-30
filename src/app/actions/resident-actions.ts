@@ -1,5 +1,7 @@
 'use server'
 
+import { ensureResidentAuthUser, deliverResidentInvitation } from '@/lib/resident-invitation'
+
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import type { DebtLineItem } from '@/types/residents'
@@ -375,60 +377,14 @@ export async function adminCreateResidentAction(payload: any) {
             userId = existingAuthUser.id;
             console.log(`ℹ️ [adminCreateResidentAction] Usuario ya existe en Auth: ${userId}`);
         } else {
-            // 2. Invitar al usuario (Paso Crítico)
-            console.log(`👤 [adminCreateResidentAction] Invitando: ${cleanEmail}`);
-            
+            // 2. Crear la cuenta de acceso SIN correo de Supabase (su SMTP rechaza
+            // la autenticación); la invitación sale por n8n al final.
             try {
-                const { data: authData, error: authError } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-                    // Pasamos el email en la URL como salvavidas de identidad
-                    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/activar-residente?e=${encodeURIComponent(cleanEmail)}`,
-                    data: {
-                        first_name,
-                        last_name,
-                        full_name: `${first_name} ${last_name}`,
-                        phone,
-                        role: 'resident',
-                        role_name: 'Residente',
-                        role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
-                        user_type: 'resident'
-                    }
-                });
-
-                if (authError || !authData?.user) {
-                    throw authError || new Error('No se generaron credenciales de usuario');
-                }
-                
-                userId = authData.user.id;
-                console.log(`✅ [adminCreateResidentAction] Usuario invitado con ID: ${userId}`);
-            } catch (inviteError: any) {
-                console.error('⚠️ Error al enviar invitación (Posible fallo SMTP/Límite):', inviteError.message);
-                
-                // FALLBACK: Si falla el envío del correo (ej. Custom SMTP mal configurado),
-                // creamos el usuario silenciosamente para que no bloquee a la plataforma.
-                console.log('🔄 Ejecutando FALLBACK: Creando usuario sin enviar correo inicial...');
-                const { data: fallbackData, error: fallbackError } = await admin.auth.admin.createUser({
-                    email: cleanEmail,
-                    email_confirm: true,
-                    password: Math.random().toString(36).slice(-12) + 'InmobiGo1!', // Contraseña temporal segura
-                    user_metadata: {
-                        first_name,
-                        last_name,
-                        full_name: `${first_name} ${last_name}`,
-                        phone,
-                        role: 'resident',
-                        role_name: 'Residente',
-                        role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
-                        user_type: 'resident'
-                    }
-                });
-
-                if (fallbackError || !fallbackData?.user) {
-                    console.error('❌ Error fatal en Fallback:', fallbackError);
-                    return { success: false, error: 'Fallo al crear el usuario en Auth, incluso usando el método de respaldo.' };
-                }
-
-                userId = fallbackData.user.id;
-                console.log(`✅ [adminCreateResidentAction] Usuario creado por Fallback con ID: ${userId}`);
+                userId = await ensureResidentAuthUser(admin, { email: cleanEmail, firstName: first_name, lastName: last_name, phone })
+                console.log(`✅ [adminCreateResidentAction] Cuenta de acceso creada: ${userId}`);
+            } catch (createErr: any) {
+                console.error('❌ Error creando cuenta de acceso:', createErr?.message);
+                return { success: false, error: 'Fallo al crear la cuenta de acceso del residente.' };
             }
         }
 
@@ -487,10 +443,15 @@ export async function adminCreateResidentAction(payload: any) {
             if (debtError) console.error('⚠️ Error creando facturas de deuda previa:', debtError);
         }
 
+        // 7. Correo de invitación para que active su cuenta (vía n8n)
+        const invitation = await deliverResidentInvitation(admin, newResident.id)
+
         console.log(`✅ [adminCreateResidentAction] Todo completado con éxito para: ${cleanEmail}`);
         return { 
             success: true, 
-            data: { id: newResident.id, email: newResident.email } 
+            data: { id: newResident.id, email: newResident.email },
+            invitationSent: invitation.success,
+            invitationError: invitation.error,
         };
 
     } catch (err: any) {

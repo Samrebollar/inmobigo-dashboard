@@ -7,6 +7,7 @@ import Papa from 'papaparse'
 
 import { Button } from '@/components/ui/button'
 import { residentsService } from '@/services/residents-service'
+import { sendResidentInvitationsAction } from '@/app/actions/resident-invite-actions'
 import { unitsService } from '@/services/units-service'
 import { CreateResidentDTO } from '@/types/residents'
 import { Unit } from '@/types/units'
@@ -194,10 +195,12 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
                     let successCount = 0
                     let duplicateCount = 0
                     let errorCount = 0
+                    const createdIds: string[] = []
 
                     for (const resident of validResidents) {
                         try {
-                            await residentsService.create(resident)
+                            const created = await residentsService.create(resident)
+                            if (created?.id) createdIds.push(created.id)
                             successCount++
                         } catch (err: any) {
                             // Check for unique key violation (Postgres error code: 23505)
@@ -213,12 +216,21 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
                         }
                     }
 
+                    // Invitación por correo a cada residente nuevo para que active su cuenta
+                    let inviteNote = ''
+                    if (createdIds.length > 0) {
+                        const inv = await sendResidentInvitationsAction(createdIds)
+                        inviteNote = inv.failed > 0
+                            ? ` Invitaciones: ${inv.sent} enviadas, ${inv.failed} con error (reenvíalas desde Acciones).`
+                            : ` Se enviaron ${inv.sent} invitaciones por correo.`
+                    }
+
                     // Show final report
                     setLoading(false)
                     onSuccess()
 
                     if (errorCount === 0) {
-                        setSuccessMessage(`¡Carga completada con éxito! ✅ ${successCount} residentes agregados.`)
+                        setSuccessMessage(`¡Carga completada con éxito! ✅ ${successCount} residentes agregados.${inviteNote}`)
                         setTimeout(() => {
                             onClose()
                             setFile(null)
@@ -226,7 +238,7 @@ export function BulkUploadResidentsModal({ isOpen, onClose, onSuccess, condomini
                             setSuccessMessage(null)
                         }, 2000)
                     } else {
-                        setError(`Carga parcial: ${successCount} exitosos, ${duplicateCount} duplicados, ${errorCount} errores.`)
+                        setError(`Carga parcial: ${successCount} exitosos, ${duplicateCount} duplicados, ${errorCount} errores.${inviteNote}`)
                     }
 
 

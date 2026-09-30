@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation'
 import { Plus, Search, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { calculateResidentDebtSummary } from '@/utils/finance-utils'
 import { sendResidentInvitationAction } from '@/app/actions/resident-invite-actions'
 
 import { Button } from '@/components/ui/button'
@@ -15,12 +14,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Resident } from '@/types/residents'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
-import { unitsService } from '@/services/units-service'
 import { useUserRole } from '@/hooks/use-user-role'
 import { CreateResidentModal } from '@/components/seguridad/CreateResidentModal'
 import { UnifiedBulkUploadModal } from './UnifiedBulkUploadModal'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
+
+type ResidentRow = Resident & { current_month_due?: number }
+type InvoiceLite = { status?: string | null, balance_due?: number | string | null, amount?: number | string | null, due_date?: string | null, created_at?: string | null }
 
 interface ResidentsTabProps {
     onResidentsUpdated?: () => void
@@ -32,7 +33,7 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
     const condominiumId = params.id as string
 
     const [loading, setLoading] = useState(true)
-    const [residents, setResidents] = useState<Resident[]>([])
+    const [residents, setResidents] = useState<ResidentRow[]>([])
     const [search, setSearch] = useState('')
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isBulkOpen, setIsBulkOpen] = useState(false)
@@ -55,32 +56,35 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
     const fetchResidents = async () => {
         try {
             setLoading(true)
-            const [residentsData, invoicesData, unitsData] = await Promise.all([
+            const [residentsData, invoicesData] = await Promise.all([
                 residentsService.getByCondominium(condominiumId),
-                financeService.getByCondominium(condominiumId),
-                unitsService.getByCondominium(condominiumId)
+                financeService.getByCondominium(condominiumId)
             ])
 
-            // Build a unit map for quick fee lookup
-            const unitMap = new Map<string, any>()
-            unitsData.forEach((u: any) => unitMap.set(u.id, u))
+            // Saldo Pendiente = lo que arrastra de meses ANTERIORES al mes en curso
+            // (saldo previo capturado al darlo de alta o cuotas que no pagó).
+            // La cuota del mes en curso va en su propia columna: un residente que
+            // no debe nada de meses pasados no debe aparecer con saldo pendiente.
+            const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+            const monthStart = `${todayMx.slice(0, 7)}-01`
+            const isUnpaid = (inv: InvoiceLite) => ['pending', 'overdue', 'partial'].includes(String(inv.status))
+            const owed = (inv: InvoiceLite) => Number(inv.balance_due ?? inv.amount ?? 0)
 
-            // Combine data and calculate real debt
             const enrichedResidents = residentsData.map(resident => {
                 // Filtrar solo por resident_id — filtrar también por unit_id atribuía a
-                // un residente facturas de OTRO residente que comparte la misma unidad
-                // (ej. familiares en la misma unidad).
-                const unitInvoices = invoicesData.filter(inv => (inv as any).resident_id === resident.id)
-
-                // Misma fórmula que el detalle del residente, su propio panel y la lista
-                // de Residentes del dashboard (incluye la regla del primer mes facturable:
-                // quien se da de alta después del día límite no debe la cuota de ese mes).
-                const unit = unitMap.get(resident.unit_id || '')
-                const { debt } = calculateResidentDebtSummary({ resident, invoices: unitInvoices, unit })
+                // un residente facturas de OTRO residente que comparte la misma unidad.
+                const ownInvoices = invoicesData.filter(inv => (inv as any).resident_id === resident.id)
+                const unpaid = ownInvoices.filter(isUnpaid)
+                const dueDay = (inv: InvoiceLite) => String(inv.due_date || inv.created_at || '').slice(0, 10)
+                // Sin facturas (modo demo o datos antiguos): el saldo previo capturado en debt_amount
+                const legacyDebt = ownInvoices.length === 0 ? Number(resident.debt_amount || 0) : 0
+                const carried = legacyDebt + unpaid.filter(inv => dueDay(inv) < monthStart).reduce((sum, inv) => sum + owed(inv), 0)
+                const currentMonth = unpaid.filter(inv => dueDay(inv) >= monthStart).reduce((sum, inv) => sum + owed(inv), 0)
 
                 return {
                     ...resident,
-                    debt_amount: debt
+                    debt_amount: carried,
+                    current_month_due: currentMonth
                 }
             })
 
@@ -241,6 +245,7 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                                 <th className="px-6 py-4 font-medium">Vehículos</th>
                                 <th className="px-6 py-4 font-medium">Estado</th>
                                 <th className="px-6 py-4 font-medium">Saldo Pendiente</th>
+                                <th className="px-6 py-4 font-medium">Cuota del Mes</th>
                                 <th className="px-6 py-4 font-medium">Saldo a Favor</th>
                                 <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
@@ -301,6 +306,11 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
+                                            <span className={(resident.current_month_due || 0) > 0 ? 'text-amber-400 font-medium' : 'text-zinc-400'}>
+                                                {(resident.current_month_due || 0) > 0 ? `$${(resident.current_month_due || 0).toLocaleString()}` : '$0.00'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
                                             <span className={(resident.credit_amount || 0) > 0 ? 'text-emerald-400 font-medium' : 'text-zinc-400'}>
                                                 {(resident.credit_amount || 0) > 0 ? `$${(resident.credit_amount || 0).toLocaleString()}` : '$0.00'}
                                             </span>
@@ -344,7 +354,7 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-zinc-500">
                                         {isPropiedades ? 'No se encontraron inquilinos.' : 'No se encontraron residentes.'}
                                     </td>
                                 </tr>

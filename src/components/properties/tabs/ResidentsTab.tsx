@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { Plus, Search, Mail, Phone, MoreHorizontal, Edit, Trash2, MessageCircle, Send, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { resendInvitationAction } from '@/app/actions/auth-actions'
+import { sendResidentInvitationAction } from '@/app/actions/resident-invite-actions'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -207,19 +207,19 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
         }
     }
 
-    const handleResendInvitation = async (email: string) => {
-        if (!email) {
+    const handleResendInvitation = async (resident: Resident) => {
+        if (!resident.email) {
             toast.error('Este residente no tiene un correo electrónico configurado.');
             return;
         }
 
-        const promise = resendInvitationAction(email);
+        const promise = sendResidentInvitationAction(resident.id);
 
         toast.promise(promise, {
             loading: 'Reenviando invitación...',
             success: (data) => {
                 if (!data.success) throw new Error(data.error);
-                return 'Correo de invitación enviado exitosamente.';
+                return `Invitación enviada a ${resident.email}`;
             },
             error: (err) => `No se pudo enviar la invitación: ${err.message}`
         });
@@ -364,7 +364,7 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
-                                                    onClick={() => handleResendInvitation(resident.email)}
+                                                    onClick={() => handleResendInvitation(resident)}
                                                     className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-lg transition-colors"
                                                     title="Reenviar invitación de acceso"
                                                 >

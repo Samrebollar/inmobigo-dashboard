@@ -25,9 +25,11 @@ export interface UnifiedBulkRow {
 }
 
 export const bulkService = {
-    async unifiedBulkUpload(condominiumId: string, rows: UnifiedBulkRow[]): Promise<{ success: number, errors: string[] }> {
+    async unifiedBulkUpload(condominiumId: string, rows: UnifiedBulkRow[]): Promise<{ success: number, errors: string[], createdResidentIds: string[] }> {
         const errors: string[] = []
         let successCount = 0
+        // Residentes nuevos: se les manda la invitación al terminar la carga
+        const createdResidentIds: string[] = []
 
         // 1. Fetch existing units to avoid duplicates and map IDs
         const existingUnits = await unitsService.getByCondominium(condominiumId)
@@ -90,7 +92,8 @@ export const bulkService = {
                     }
 
                     try {
-                        await residentsService.create(residentPayload)
+                        const created = await residentsService.create(residentPayload)
+                        if (created?.id) createdResidentIds.push(created.id)
                     } catch (err: any) {
                         const errMessage = JSON.stringify(err)
                         if (err?.code === '23505' || errMessage.includes('23505') || errMessage.includes('duplicate key')) {
@@ -110,6 +113,6 @@ export const bulkService = {
             }
         }
 
-        return { success: successCount, errors }
+        return { success: successCount, errors, createdResidentIds }
     }
 }

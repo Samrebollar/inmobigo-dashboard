@@ -190,6 +190,11 @@ export function CreateResidentModal({ isOpen, onClose, onSuccess, condominiumId,
                 }
                 
                 result = resAction.data as unknown as Resident
+                if (resAction.invitationSent) {
+                    toast.success('Invitación enviada', { description: `Le llegará un correo a ${submitData.email} para activar su cuenta.` })
+                } else {
+                    toast.warning('Residente creado, pero no se envió la invitación', { description: resAction.invitationError || 'Puedes reenviarla desde la columna Acciones.' })
+                }
             }
             onSuccess(result)
             onClose()

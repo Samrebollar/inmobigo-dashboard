@@ -7,6 +7,7 @@ import Papa from 'papaparse'
 
 import { Button } from '@/components/ui/button'
 import { bulkService, UnifiedBulkRow } from '@/services/bulk-service'
+import { sendResidentInvitationsAction } from '@/app/actions/resident-invite-actions'
 
 interface UnifiedBulkUploadModalProps {
     isOpen: boolean
@@ -164,14 +165,23 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
 
                 try {
                     const result = await bulkService.unifiedBulkUpload(condominiumId, unifiedRows)
+
+                    // Invitación por correo a cada residente nuevo para que active su cuenta
+                    let inviteNote = ''
+                    if (result.createdResidentIds.length > 0) {
+                        const inv = await sendResidentInvitationsAction(result.createdResidentIds)
+                        inviteNote = inv.failed > 0
+                            ? ` Invitaciones: ${inv.sent} enviadas, ${inv.failed} con error (reenvíalas desde Acciones).`
+                            : ` Se enviaron ${inv.sent} invitaciones por correo.`
+                    }
                     
                     if (result.errors.length > 0) {
-                        setError(`Carga parcial: ${result.success} exitosos. Algunos errores: ${result.errors.slice(0, 2).join(', ')}`)
+                        setError(`Carga parcial: ${result.success} exitosos. Algunos errores: ${result.errors.slice(0, 2).join(', ')}.${inviteNote}`)
                         if (result.success > 0) {
                             onSuccess()
                         }
                     } else {
-                        setSuccessMessage(`¡Excelente! ✅ Se procesaron ${result.success} registros correctamente (Unidades y Residentes vinculados).`)
+                        setSuccessMessage(`¡Excelente! ✅ Se procesaron ${result.success} registros correctamente (Unidades y Residentes vinculados).${inviteNote}`)
                         onSuccess()
                         setTimeout(() => {
                             onClose()

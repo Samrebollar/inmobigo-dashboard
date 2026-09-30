@@ -6,6 +6,8 @@ import { LayoutDashboard, CreditCard, Wrench, BarChart3, User, LogOut, Smartphon
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
+type SubscriptionRow = { subscription_status: string | null; plan_name: string | null; created_at: string; next_payment_date: string | null }
+
 export default async function ResidenteLayout({
     children,
 }: {
@@ -22,17 +24,18 @@ export default async function ResidenteLayout({
     }
 
     // STRICT: Must be in organization_users or residents
-    const { data: resident } = await supabase
-        .from('residents')
-        .select('id, first_name, last_name, condominium_id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url, role_new')
-        .eq('id', user.id)
-        .maybeSingle()
+    const [{ data: resident }, { data: profile }] = await Promise.all([
+        supabase
+            .from('residents')
+            .select('id, first_name, last_name, condominium_id')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        supabase
+            .from('profiles')
+            .select('full_name, avatar_url, role_new')
+            .eq('id', user.id)
+            .maybeSingle(),
+    ])
 
     let displayName = 'Residente'
     let avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture
@@ -60,26 +63,15 @@ export default async function ResidenteLayout({
         organizationId = condoData?.organization_id
     }
 
-    // Prioritize active subscriptions, fallback to the latest created overall
-    let { data: activeSub } = await adminSupabase
-        .from('subscriptions')
-        .select('subscription_status, plan_name, created_at, next_payment_date')
-        .eq('organization_id', organizationId)
-        .eq('subscription_status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-    if (!activeSub) {
-        const { data: fallbackSub } = await adminSupabase
+    // Suscripción más reciente, priorizando la activa (un solo viaje en vez de dos).
+    const { data: subs } = organizationId
+        ? await adminSupabase
             .from('subscriptions')
             .select('subscription_status, plan_name, created_at, next_payment_date')
             .eq('organization_id', organizationId)
             .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        activeSub = fallbackSub
-    }
+        : { data: [] as SubscriptionRow[] }
+    const activeSub = (subs as SubscriptionRow[] | null || []).find(sub => sub.subscription_status === 'active') || (subs as SubscriptionRow[] | null || [])[0] || null
 
     let globalDaysRemaining = 999
 

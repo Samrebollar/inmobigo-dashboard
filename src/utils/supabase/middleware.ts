@@ -98,29 +98,37 @@ export async function updateSession(request: NextRequest) {
         return supabaseResponse
     }
 
+    // Las rutas /api validan su propia sesión y permisos; ninguna regla de rol
+    // de abajo aplica a ellas, así que no se consultan roles ni suscripción.
+    if (user && pathname.startsWith('/api')) {
+        return supabaseResponse
+    }
+
     if (user) {
         const path = request.nextUrl.pathname
 
         // 1. Fetch Role from multiple layers (Strict to Weak)
+        // Las tres consultas son independientes: se hacen en paralelo para no
+        // sumar tres viajes a la base de datos en cada navegación.
         const adminSupabase = createAdminClient()
 
-        const { data: orgUser } = await adminSupabase
-            .from('organization_users')
-            .select('role_new, organization_id')
-            .eq('user_id', user.id)
-            .maybeSingle()
-
-        const { data: profile } = await adminSupabase
-            .from('profiles')
-            .select('role_new, user_type')
-            .eq('id', user.id)
-            .maybeSingle()
-
-        const { data: resident } = await adminSupabase
-            .from('residents')
-            .select('id, condominiums(organization_id)')
-            .eq('user_id', user.id)
-            .maybeSingle()
+        const [{ data: orgUser }, { data: profile }, { data: resident }] = await Promise.all([
+            adminSupabase
+                .from('organization_users')
+                .select('role_new, organization_id')
+                .eq('user_id', user.id)
+                .maybeSingle(),
+            adminSupabase
+                .from('profiles')
+                .select('role_new, user_type')
+                .eq('id', user.id)
+                .maybeSingle(),
+            adminSupabase
+                .from('residents')
+                .select('id, condominiums(organization_id)')
+                .eq('user_id', user.id)
+                .maybeSingle(),
+        ])
 
         let role = 'viewer'
         if (orgUser?.role_new) {
@@ -137,17 +145,31 @@ export async function updateSession(request: NextRequest) {
         let orgId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
         let businessType = 'condominio'
 
-        if (orgId) {
-            const { data: org } = await adminSupabase
-                .from('organizations')
-                .select('business_type')
-                .eq('id', orgId)
-                .maybeSingle()
-            if (org?.business_type) {
-                businessType = org.business_type
-            }
-        }
+        const isPlansPage = path.startsWith('/dashboard/configuracion/planes')
+        const isProfilePage = path.startsWith('/dashboard/perfil')
+        const needsSubscription = !isPlansPage && !isProfilePage
 
+        // El tipo de negocio y la suscripción solo dependen de orgId: se piden juntos.
+        const [orgRes, subscriptionRes] = orgId
+            ? await Promise.all([
+                adminSupabase
+                    .from('organizations')
+                    .select('business_type')
+                    .eq('id', orgId)
+                    .maybeSingle(),
+                needsSubscription
+                    ? adminSupabase
+                        .from('subscriptions')
+                        .select('subscription_status, created_at')
+                        .eq('organization_id', orgId)
+                        .eq('subscription_status', 'active')
+                        .maybeSingle()
+                    : Promise.resolve({ data: null }),
+            ])
+            : [{ data: null }, { data: null }]
+        if (orgRes.data?.business_type) {
+            businessType = orgRes.data.business_type
+        }
 
         if (role === 'resident' || role === 'tenant') {
             if (businessType === 'propiedades') {
@@ -234,17 +256,8 @@ export async function updateSession(request: NextRequest) {
         }
 
         // --- SaaS Professional Blocking Logic ---
-        const isPlansPage = path.startsWith('/dashboard/configuracion/planes')
-        const isProfilePage = path.startsWith('/dashboard/perfil')
-        const isApiRoute = path.startsWith('/api')
-
-        if (!isPlansPage && !isProfilePage && !isApiRoute) {
-            const { data: subscription } = await adminSupabase
-                .from('subscriptions')
-                .select('subscription_status, created_at')
-                .eq('organization_id', orgId)
-                .eq('subscription_status', 'active')
-                .maybeSingle()
+        if (needsSubscription) {
+            const subscription = subscriptionRes.data
 
             if (subscription) {
                 const createdAt = new Date(subscription.created_at)

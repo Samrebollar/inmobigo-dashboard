@@ -6,6 +6,8 @@ import { LayoutDashboard, Building2, Users, Receipt, Settings, Wrench, BarChart3
 import { DashboardLayoutClient } from '@/components/dashboard/dashboard-layout-client'
 import { SubscriptionLockWrapper } from '@/components/shared/SubscriptionLockWrapper'
 
+type SubscriptionRow = { subscription_status: string | null; plan_name: string | null; created_at: string; next_payment_date: string | null }
+
 export default async function DashboardLayout({
     children,
 }: {
@@ -24,38 +26,39 @@ export default async function DashboardLayout({
     const { createAdminClient } = await import('@/utils/supabase/admin')
     const adminSupabase = createAdminClient()
 
-    // 1. Check if Admin/Staff (STRICT: Must be in organization_users)
+    // 1. Staff (organization_users), 2. Residente y 3. Perfil: consultas
+    // independientes, se piden en paralelo para no sumar viajes a la base.
     // We use adminSupabase here to bypass the RLS recursion error in organization_users
-    const { data: orgUser } = await adminSupabase
-        .from('organization_users')
-        .select(`
-            organization_id,
-            role_new,
-            organizations (
-                business_type
-            )
-        `)
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const [{ data: orgUser }, { data: resident }, { data: profile }] = await Promise.all([
+        adminSupabase
+            .from('organization_users')
+            .select(`
+                organization_id,
+                role_new,
+                organizations (
+                    business_type,
+                    created_at
+                )
+            `)
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        adminSupabase
+            .from('residents')
+            .select('id, first_name, last_name, condominiums(organization_id)')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        adminSupabase
+            .from('profiles')
+            .select('full_name, avatar_url, role_new')
+            .eq('id', user.id)
+            .maybeSingle(),
+    ])
 
     const businessType = (orgUser?.organizations as any)?.business_type || 'condominio'
     const isPropiedades = businessType === 'propiedades'
-
-    // 2. Check if Resident (STRICT: Must be in residents)
-    const { data: resident } = await adminSupabase
-        .from('residents')
-        .select('id, first_name, last_name, condominiums(organization_id)')
-        .eq('user_id', user.id)
-        .maybeSingle()
+    const orgCreatedAt: string | null = (orgUser?.organizations as { created_at?: string } | null)?.created_at || null
 
     const isMetadataResident = user.user_metadata?.role === 'resident'
-
-    // 3. Get Profile for Name fallback and Avatar
-    const { data: profile } = await adminSupabase
-        .from('profiles')
-        .select('full_name, avatar_url, role_new')
-        .eq('id', user.id)
-        .maybeSingle()
 
     // Construction of Name + First Surname
     let displayName = 'Usuario'
@@ -101,26 +104,32 @@ export default async function DashboardLayout({
 
     const organizationId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
 
-    // Prioritize active subscriptions, fallback to the latest created overall
-    let { data: activeSub } = await adminSupabase
-        .from('subscriptions')
-        .select('subscription_status, plan_name, created_at, next_payment_date')
-        .eq('organization_id', organizationId)
-        .eq('subscription_status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+    const isStaff = ['owner', 'admin', 'super_admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
 
-    if (!activeSub) {
-        const { data: fallbackSub } = await adminSupabase
-            .from('subscriptions')
-            .select('subscription_status, plan_name, created_at, next_payment_date')
-            .eq('organization_id', organizationId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        activeSub = fallbackSub
-    }
+    // Suscripción (la más reciente; se prioriza la activa), fecha de alta de la
+    // organización y mensajes sin leer: todo depende solo de organizationId,
+    // así que va en un solo viaje en paralelo.
+    const [{ data: subs }, orgCreatedRes, unreadRes] = await Promise.all([
+        organizationId
+            ? adminSupabase
+                .from('subscriptions')
+                .select('subscription_status, plan_name, created_at, next_payment_date')
+                .eq('organization_id', organizationId)
+                .order('created_at', { ascending: false })
+            : Promise.resolve({ data: [] as SubscriptionRow[] }),
+        organizationId && !orgCreatedAt
+            ? adminSupabase.from('organizations').select('created_at').eq('id', organizationId).maybeSingle()
+            : Promise.resolve({ data: orgCreatedAt ? { created_at: orgCreatedAt } : null }),
+        isStaff && organizationId
+            ? adminSupabase
+                .from('resident_messages')
+                .select('id', { count: 'exact', head: true })
+                .eq('organization_id', organizationId)
+                .eq('sender_role', 'resident')
+                .is('read_at', null)
+            : Promise.resolve({ count: 0 }),
+    ])
+    const activeSub = (subs as SubscriptionRow[] | null || []).find(sub => sub.subscription_status === 'active') || (subs as SubscriptionRow[] | null || [])[0] || null
 
     const isDemoMode = !activeSub && role !== 'resident' && role !== 'tenant'
     
@@ -142,7 +151,7 @@ export default async function DashboardLayout({
         }
     } else if (organizationId) {
         // Fallback to org creation date
-        const { data: org } = await adminSupabase.from('organizations').select('created_at').eq('id', organizationId).maybeSingle()
+        const org = orgCreatedRes.data
         if (org?.created_at) {
             const nextPayment = new Date(new Date(org.created_at).getTime() + 30 * 24 * 60 * 60 * 1000)
             const now = new Date()
@@ -162,7 +171,6 @@ export default async function DashboardLayout({
     const isResident = role === 'resident' || role === 'tenant'
 
     // RBAC Logic for Sidebar
-    const isStaff = ['owner', 'admin', 'super_admin', 'manager', 'accountant', 'admin_condominio', 'admin_propiedad', 'staff', 'security'].includes(role)
     const isAdmin = ['owner', 'admin', 'super_admin', 'admin_condominio', 'admin_propiedad'].includes(role)
 
     const showProperties = isStaff
@@ -173,16 +181,7 @@ export default async function DashboardLayout({
     const showReports = isStaff
     const showNotices = isStaff
 
-    let unreadMessagesCount = 0
-    if (isStaff && organizationId) {
-        const { count } = await adminSupabase
-            .from('resident_messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organizationId)
-            .eq('sender_role', 'resident')
-            .is('read_at', null)
-        unreadMessagesCount = count || 0
-    }
+    const unreadMessagesCount = unreadRes.count || 0
 
     const sidebarContent = (
         <>

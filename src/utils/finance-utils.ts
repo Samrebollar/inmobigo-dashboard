@@ -659,6 +659,26 @@ export function calculateCondoMonthlyFinancials({
         }
     })
 
+    // Arrastre de periodos anteriores: todo lo que venció ANTES del periodo
+    // seleccionado y sigue sin pagarse (cuotas de mantenimiento, multas, deuda
+    // previa capturada al dar de alta al residente, años pasados). Antes solo se
+    // miraba el mes elegido, así que la deuda previa de agosto de un residente
+    // desaparecía por completo al ver septiembre.
+    invoices.forEach(inv => {
+        const dateStr = inv.due_date || inv.created_at
+        if (!dateStr) return
+        const parts = getLocalDateParts(dateStr)
+        if (!parts) return
+        const isBeforePeriod = parts.year < selectedYear || (parts.year === selectedYear && parts.month < firstMonth)
+        if (!isBeforePeriod) return
+        if (inv.status !== 'pending' && inv.status !== 'overdue') return
+        const bal = Number(inv.balance_due ?? inv.amount ?? 0)
+        if (bal > 0) {
+            saldoInicialPendiente += bal
+            if (inv.resident_id) debtorResidents.add(inv.resident_id)
+        }
+    })
+
     // Saldo inicial cargado a mano en residents.debt_amount (Propiedades > Residentes,
     // al dar de alta o editar) para quienes NO tengan ya una factura real 'initial_balance'
     // representando esa misma deuda — si ya existe esa factura, se cuenta arriba y sumar

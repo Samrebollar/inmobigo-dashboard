@@ -15,13 +15,12 @@ import { differenceInDays, parseISO, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Eye, Pencil, CreditCard, Trash2, MoreHorizontal, FileSpreadsheet, Calculator, History, ChevronDown } from 'lucide-react'
+import { Eye, Pencil, CreditCard, Trash2, MoreHorizontal, FileSpreadsheet } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Label } from '@/components/ui/label'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import Papa from 'papaparse'
 import { motion } from 'framer-motion'
-import { CashRegisterArqueoModal } from '@/components/finance/CashRegisterArqueoModal'
 
 // Helper to format date
 const formatDate = (dateStr?: string) => {
@@ -88,10 +87,6 @@ function BillingPageContent() {
     const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
 
-    const [isArqueoOpen, setIsArqueoOpen] = useState(false)
-    const [isArqueoMenuOpen, setIsArqueoMenuOpen] = useState(false)
-    const [isLoadingArqueo, setIsLoadingArqueo] = useState(false)
-    const [arqueoInvoices, setArqueoInvoices] = useState<Invoice[]>([])
 
     useEffect(() => {
         if (!demoLoading) {
@@ -189,23 +184,6 @@ function BillingPageContent() {
     const cancelDelete = () => {
         setIsDeleteModalOpen(false)
         setInvoiceToDelete(null)
-    }
-
-    // El Arqueo Diario necesita ver TODOS los recibos de hoy, no solo la
-    // página cargada en la tabla (que puede estar filtrada a otro
-    // condominio/estado/periodo). Se pide aparte, sin paginación.
-    const openArqueo = async () => {
-        setIsArqueoMenuOpen(false)
-        if (organizationId) {
-            setIsLoadingArqueo(true)
-            try {
-                const data = await financeService.getTodayInvoices(organizationId)
-                setArqueoInvoices(data)
-            } finally {
-                setIsLoadingArqueo(false)
-            }
-        }
-        setIsArqueoOpen(true)
     }
 
     const invoiceToDeleteObj = invoices.find(inv => inv.id === invoiceToDelete)
@@ -601,45 +579,6 @@ function BillingPageContent() {
                         <span className="text-sm text-zinc-400">Total en esta página:</span>
                         <span className="font-medium text-white">${totalAmount.toLocaleString()}</span>
                     </div>
-                        <div className="relative mr-2">
-                            <Button 
-                                variant="outline" 
-                                className="border-indigo-500/20 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors"
-                                onClick={() => setIsArqueoMenuOpen(!isArqueoMenuOpen)}
-                            >
-                                <Calculator className="mr-2 h-4 w-4" /> Arqueo Diario <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
-                            </Button>
-                            
-                            {isArqueoMenuOpen && (
-                                <>
-                                    <div 
-                                        className="fixed inset-0 z-40" 
-                                        onClick={() => setIsArqueoMenuOpen(false)} 
-                                    />
-                                    <div className="absolute right-0 mt-2 w-56 rounded-md shadow-[0_0_15px_rgba(79,70,229,0.15)] bg-zinc-900 ring-1 ring-black ring-opacity-5 border border-indigo-500/20 z-50 overflow-hidden">
-                                        <div className="py-1" role="menu">
-                                            <button
-                                                onClick={openArqueo}
-                                                className="w-full text-left flex items-center px-4 py-2 text-sm text-indigo-300 hover:bg-indigo-500/10 hover:text-indigo-200 transition-colors"
-                                                role="menuitem"
-                                            >
-                                                <Calculator className="mr-3 h-4 w-4" />
-                                                Realizar Arqueo
-                                            </button>
-                                            <Link
-                                                href="/dashboard/finance/arqueos"
-                                                onClick={() => setIsArqueoMenuOpen(false)}
-                                                className="w-full text-left flex items-center px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-                                                role="menuitem"
-                                            >
-                                                <History className="mr-3 h-4 w-4 text-emerald-500" />
-                                                Historial de Arqueos
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </>
-                            )}
-                        </div>
                         <div className="relative">
                             <Button 
                                 variant="outline" 
@@ -749,7 +688,11 @@ function BillingPageContent() {
                                                     {formatDate(inv.created_at)}
                                                 </td>
                                                 <td className="px-6 py-4 text-center min-w-[120px]">
-                                                    {daysOverdue > 0 ? (
+                                                    {inv.status === 'paid' ? (
+                                                        <span className="text-emerald-500 text-xs">Pagado</span>
+                                                    ) : inv.status === 'cancelled' ? (
+                                                        <span className="text-zinc-500 text-xs">Cancelado</span>
+                                                    ) : daysOverdue > 0 ? (
                                                         <Badge variant="destructive" className="bg-red-500/10 text-red-500 border-red-500/20">
                                                             +{daysOverdue} días
                                                         </Badge>
@@ -960,13 +903,6 @@ function BillingPageContent() {
                     </div>
                 </div>
             </Modal>
-
-            <CashRegisterArqueoModal
-                isOpen={isArqueoOpen}
-                onClose={() => setIsArqueoOpen(false)}
-                invoices={arqueoInvoices}
-                getPaymentMethod={getPaymentMethod}
-            />
         </div>
     )
 }

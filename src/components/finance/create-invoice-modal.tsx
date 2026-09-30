@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/modal'
-import { Loader2, Plus, Mail, Phone, ChevronRight } from 'lucide-react'
+import { Loader2, Mail, Phone, ChevronRight, Wallet, FilePlus2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import { residentsService } from '@/services/residents-service'
 import { financeService } from '@/services/finance-service'
 import { propertiesService } from '@/services/properties-service'
@@ -13,7 +13,7 @@ import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { InvoiceType } from '@/types/finance'
+import { CreateInvoiceDTO, InvoiceType, ResidentInvoice } from '@/types/finance'
 
 // Mismo mapeo de categorías usadas en el alta de deuda inicial de un residente
 // (src/app/actions/resident-actions.ts) — así una Multa o Cuota Extraordinaria
@@ -21,6 +21,50 @@ import { InvoiceType } from '@/types/finance'
 const CONCEPT_TO_INVOICE_TYPE: Record<string, InvoiceType> = {
     'Multa': 'fine',
     'Cuota Extraordinaria': 'special_assessment',
+}
+
+const TYPE_LABEL: Record<string, string> = {
+    maintenance: 'Cuota de Mantenimiento',
+    initial_balance: 'Saldo inicial',
+    fine: 'Multa',
+    special_assessment: 'Cuota Extraordinaria',
+    manual_payment: 'Cargo manual',
+    custom: 'Cargo',
+}
+
+const PAYMENT_METHODS = ['Efectivo', 'Transferencia', 'Tarjeta']
+
+// Id del renglón "saldo inicial capturado" (residents.debt_amount sin factura)
+const LEGACY_DEBT_ID = '__legacy_debt__'
+
+type Mode = 'cobrar' | 'cargo'
+
+type DebtRow = {
+    id: string
+    concept: string
+    period: string
+    dueDate: string
+    balance: number
+    amount: number
+    daysOverdue: number
+    invoice?: ResidentInvoice
+}
+
+const money = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const todayMx = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+
+function daysBetween(fromYmd: string, toYmd: string) {
+    const a = new Date(`${fromYmd}T12:00:00Z`).getTime()
+    const b = new Date(`${toYmd}T12:00:00Z`).getTime()
+    return Math.round((b - a) / 86400000)
+}
+
+function periodLabel(ymd: string) {
+    if (!ymd) return ''
+    const d = new Date(`${ymd.slice(0, 10)}T12:00:00Z`)
+    const label = d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 interface CreateInvoiceModalProps {
@@ -42,107 +86,158 @@ export function CreateInvoiceModal({
 }: CreateInvoiceModalProps) {
     const { isDemo, loading: demoLoading } = useDemoMode()
     const { isPropiedades } = useUserRole()
+    const residentLabel = isPropiedades ? 'Inquilino' : 'Residente'
+    const baseConcept = isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'
+
     const [loading, setLoading] = useState(false)
-    const [loadingData, setLoadingData] = useState(false)
+    const [loadingDebts, setLoadingDebts] = useState(false)
 
     // Data
     const [condominiums, setCondominiums] = useState<Condominium[]>([])
     const [residents, setResidents] = useState<Resident[]>([])
+    const [debtRows, setDebtRows] = useState<DebtRow[]>([])
 
     // Form
+    const [mode, setMode] = useState<Mode>('cobrar')
     const [selectedCondoId, setSelectedCondoId] = useState(defaultCondominiumId)
+    const [residentId, setResidentId] = useState('')
     const [paymentMethod, setPaymentMethod] = useState('Efectivo')
-    const [activeDebt, setActiveDebt] = useState<number>(0)
+    const [paymentDate, setPaymentDate] = useState(todayMx())
+    const [notes, setNotes] = useState('')
 
-    const [paymentAmount, setPaymentAmount] = useState<string>('')
-    const [residentInvoices, setResidentInvoices] = useState<any[]>([])
+    // Cobrar adeudos
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [amountToCharge, setAmountToCharge] = useState('')
+    const [amountEdited, setAmountEdited] = useState(false)
+    const [cashReceived, setCashReceived] = useState('')
 
-    const [formData, setFormData] = useState({
-        residentId: '',
-        concept: isPropiedades ? 'Renta' : 'Cuota de Mantenimiento', // Default value
-
+    // Nuevo cargo
+    const [charge, setCharge] = useState({
+        concept: baseConcept,
         amount: '',
         dueDate: format(new Date(), 'yyyy-MM-dd'),
-        notes: ''
+        paidNow: true,
     })
 
-    // 1. Load Condominiums on Open
+    const selectedResident = defaultResident || residents.find(r => r.id === residentId)
+
+    // Reinicia el formulario cada vez que se abre
     useEffect(() => {
-        if (isOpen && !demoLoading) {
-            loadCondominiums()
+        if (!isOpen) return
+        setNotes('')
+        setPaymentMethod('Efectivo')
+        setPaymentDate(todayMx())
+        setCashReceived('')
+        setAmountEdited(false)
+        setCharge({ concept: baseConcept, amount: '', dueDate: format(new Date(), 'yyyy-MM-dd'), paidNow: true })
+        if (defaultResident) {
+            if (defaultResident.condominium_id) setSelectedCondoId(defaultResident.condominium_id)
+            setResidentId(defaultResident.id)
+        } else {
+            setResidentId('')
+            if (defaultCondominiumId) setSelectedCondoId(defaultCondominiumId)
         }
+    }, [isOpen, defaultResident, defaultCondominiumId, baseConcept])
+
+    useEffect(() => {
+        if (isOpen && !demoLoading) loadCondominiums()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, organizationId, demoLoading])
 
-    // 2. Load Residents when Selected Condo Changes
     useEffect(() => {
-        if (isOpen && selectedCondoId) {
-            loadResidents(selectedCondoId)
-        } else {
-            setResidents([])
-        }
+        if (isOpen && selectedCondoId) loadResidents(selectedCondoId)
+        else setResidents([])
     }, [isOpen, selectedCondoId])
 
-    // 3. Handle Selecting Resident -> Auto Select Condo
+    // Adeudos del residente elegido: todas sus facturas sin pagar (vencidas,
+    // del mes o por vencer), de la más antigua a la más reciente.
     useEffect(() => {
-        if (formData.residentId) {
-            const res = residents.find(r => r.id === formData.residentId)
-            if (res && res.condominium_id && res.condominium_id !== selectedCondoId) {
-                setSelectedCondoId(res.condominium_id)
-            }
+        if (!isOpen) return
+        const res = selectedResident
+        if (!res) {
+            setDebtRows([])
+            setSelectedIds(new Set())
+            return
         }
-    }, [formData.residentId, residents])
+        let cancelled = false
+        const load = async () => {
+            setLoadingDebts(true)
+            try {
+                const invoices = await financeService.getByResident(res.id)
+                const today = todayMx()
+                const rows: DebtRow[] = invoices
+                    .filter(inv => ['pending', 'overdue', 'partial'].includes(String(inv.status)) && Number(inv.balance_due ?? inv.amount) > 0)
+                    .map(inv => {
+                        const due = String(inv.due_date || inv.created_at || '').slice(0, 10)
+                        const concept = inv.description?.trim() || TYPE_LABEL[inv.invoice_type] || 'Cargo'
+                        return {
+                            id: inv.id,
+                            concept,
+                            period: periodLabel(due),
+                            dueDate: due,
+                            balance: Number(inv.balance_due ?? inv.amount),
+                            amount: Number(inv.amount),
+                            daysOverdue: due ? Math.max(0, daysBetween(due, today)) : 0,
+                            invoice: inv,
+                        }
+                    })
+                    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
-    // 4. Handle Default Resident
-    useEffect(() => {
-        if (isOpen && defaultResident) {
-            // Ensure condo is set to resident's condo
-            if (defaultResident.condominium_id) {
-                setSelectedCondoId(defaultResident.condominium_id)
-            }
-            setFormData(prev => ({
-                ...prev,
-                residentId: defaultResident.id
-            }))
-        } else if (defaultCondominiumId) {
-            setSelectedCondoId(defaultCondominiumId)
-        }
-    }, [isOpen, defaultResident, defaultCondominiumId])
-
-
-    useEffect(() => {
-        const fetchResidentDebt = async () => {
-            const currentResId = formData.residentId
-            const selectedResident = defaultResident || residents.find(r => r.id === currentResId)
-            
-            if (selectedResident) {
-                try {
-                    const invoices = selectedResident.unit_id ? await financeService.getByUnit(selectedResident.unit_id) : []
-                    const pending = invoices.filter(inv => inv.status === 'pending' || inv.status === 'overdue')
-                    const debt = pending.reduce((acc, inv) => acc + (inv.balance_due ?? inv.amount), 0) + Number(selectedResident.debt_amount || 0)
-                    
-                    setActiveDebt(debt)
-                    setPaymentAmount(debt.toString())
-                    setResidentInvoices(pending)
-                } catch (error: any) {
-                    if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
-                        console.error('Error fetching debt:', error)
-                    }
-                    setActiveDebt(0)
-                    setResidentInvoices([])
+                // Saldo inicial capturado a mano sin factura (datos antiguos)
+                const legacy = invoices.length === 0 ? Number(res.debt_amount || 0) : 0
+                if (legacy > 0) {
+                    rows.unshift({ id: LEGACY_DEBT_ID, concept: 'Saldo inicial capturado', period: 'Anterior al alta', dueDate: '', balance: legacy, amount: legacy, daysOverdue: 0 })
                 }
-            } else {
-                setActiveDebt(0)
-                setPaymentAmount('')
-                setResidentInvoices([])
+                if (cancelled) return
+                setDebtRows(rows)
+                // Por defecto se seleccionan los vencidos (o todo si no hay vencidos)
+                const overdue = rows.filter(r => r.daysOverdue > 0 || r.id === LEGACY_DEBT_ID)
+                setSelectedIds(new Set((overdue.length > 0 ? overdue : rows).map(r => r.id)))
+                setAmountEdited(false)
+                setMode(rows.length > 0 ? 'cobrar' : 'cargo')
+            } catch (error) {
+                console.error('Error cargando adeudos:', error)
+                if (!cancelled) setDebtRows([])
+            } finally {
+                if (!cancelled) setLoadingDebts(false)
             }
         }
-        
-        if (isOpen) {
-            fetchResidentDebt()
-        }
-    }, [formData.residentId, defaultResident, residents, isOpen])
+        load()
+        return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, selectedResident?.id])
 
+    const totalDebt = useMemo(() => debtRows.reduce((s, r) => s + r.balance, 0), [debtRows])
+    const overdueDebt = useMemo(() => debtRows.filter(r => r.daysOverdue > 0 || r.id === LEGACY_DEBT_ID).reduce((s, r) => s + r.balance, 0), [debtRows])
+    const selectedRows = useMemo(() => debtRows.filter(r => selectedIds.has(r.id)), [debtRows, selectedIds])
+    const selectedTotal = useMemo(() => selectedRows.reduce((s, r) => s + r.balance, 0), [selectedRows])
 
+    // El monto a cobrar sigue a la selección mientras no se edite a mano
+    useEffect(() => {
+        if (!amountEdited) setAmountToCharge(selectedTotal > 0 ? selectedTotal.toFixed(2) : '')
+    }, [selectedTotal, amountEdited])
+
+    const chargeAmount = Math.min(parseFloat(amountToCharge) || 0, selectedTotal)
+    const remainingAfter = Math.max(0, totalDebt - chargeAmount)
+    const cash = parseFloat(cashReceived) || 0
+    const change = paymentMethod === 'Efectivo' && cash > 0 ? cash - chargeAmount : 0
+
+    const toggleRow = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+        setAmountEdited(false)
+    }
+
+    const selectPreset = (preset: 'vencido' | 'todo' | 'ninguno') => {
+        if (preset === 'ninguno') setSelectedIds(new Set())
+        else if (preset === 'todo') setSelectedIds(new Set(debtRows.map(r => r.id)))
+        else setSelectedIds(new Set(debtRows.filter(r => r.daysOverdue > 0 || r.id === LEGACY_DEBT_ID).map(r => r.id)))
+        setAmountEdited(false)
+    }
 
     const loadCondominiums = async () => {
         try {
@@ -158,230 +253,252 @@ export function CreateInvoiceModal({
 
             setCondominiums(data)
 
-            // If we have a default condo but it's not in the list, force add it if it's from demoDb
             if (defaultCondominiumId && !data.find(c => c.id === defaultCondominiumId)) {
                 const specificDemo = demoDb.getProperties().find(p => p.id === defaultCondominiumId)
                 if (specificDemo) {
                     setCondominiums(prev => [...prev, specificDemo as Condominium])
                 }
             }
-
-        } catch (error: any) {
-            if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
-                console.error('Error loading condos:', error)
-            }
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : ''
+            if (!msg.includes('abort')) console.error('Error loading condos:', error)
         }
     }
 
     const loadResidents = async (condoId: string) => {
-        setLoadingData(true)
         try {
             const data = await residentsService.getByCondominium(condoId)
             setResidents(data)
-        } catch (error: any) {
-            if (error?.name !== 'AbortError' && !error?.message?.includes('aborted') && !error?.message?.includes('abort')) {
-                console.error('Error loading residents:', error)
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : ''
+            if (!msg.includes('abort')) console.error('Error loading residents:', error)
+        }
+    }
+
+    const condoName = () => condominiums.find(c => c.id === (selectedResident?.condominium_id || selectedCondoId))?.name || 'Condominio'
+
+    const downloadReceipt = (opts: {
+        folio: string
+        rows: { concept: string, period: string, amount: number }[]
+        total: number
+        method: string
+        remaining: number
+        received?: number
+        change?: number
+    }) => {
+        if (!selectedResident) return
+        try {
+            const doc = new jsPDF()
+            doc.setFillColor(79, 70, 229)
+            doc.rect(0, 0, 210, 35, 'F')
+            doc.setFontSize(22)
+            doc.setTextColor(255, 255, 255)
+            doc.setFont('helvetica', 'bold')
+            doc.text('RECIBO DE PAGO', 14, 22)
+            doc.setFontSize(10)
+            doc.setFont('helvetica', 'normal')
+            doc.text(`Folio: ${opts.folio}`, 145, 16)
+            doc.text(`Fecha: ${new Date(`${paymentDate}T12:00:00Z`).toLocaleDateString('es-MX', { timeZone: 'UTC' })}`, 145, 23)
+
+            doc.setFontSize(12)
+            doc.setTextColor(40, 40, 40)
+            doc.setFont('helvetica', 'bold')
+            doc.text(`INFORMACIÓN DEL ${residentLabel.toUpperCase()}`, 14, 50)
+            doc.setFontSize(10)
+            doc.setFont('helvetica', 'normal')
+            doc.text(`Nombre: ${selectedResident.first_name} ${selectedResident.last_name}`, 14, 60)
+            doc.text(`Unidad: ${selectedResident.unit_number || 'S/N'}`, 14, 66)
+            doc.text(`${isPropiedades ? 'Propiedad' : 'Condominio'}: ${condoName()}`, 14, 72)
+
+            doc.setDrawColor(220, 220, 220)
+            doc.line(14, 80, 196, 80)
+
+            doc.setFontSize(12)
+            doc.setFont('helvetica', 'bold')
+            doc.text('DETALLE DEL PAGO', 14, 92)
+
+            autoTable(doc, {
+                head: [['Concepto', 'Periodo', 'Monto pagado']],
+                body: opts.rows.map(r => [r.concept, r.period || '—', money(r.amount)]),
+                startY: 98,
+                styles: { fontSize: 10, cellPadding: 4 },
+                headStyles: { fillColor: [79, 70, 229] },
+                alternateRowStyles: { fillColor: [245, 245, 245] },
+                columnStyles: { 2: { halign: 'right' } },
+            })
+
+            let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12
+            doc.setFontSize(10)
+            doc.setTextColor(60, 60, 60)
+            doc.setFont('helvetica', 'normal')
+            doc.text(`Método de pago: ${opts.method}`, 14, y)
+            if (opts.received && opts.received > 0) {
+                doc.text(`Efectivo recibido: ${money(opts.received)}`, 14, y + 6)
+                doc.text(`Cambio: ${money(Math.max(0, opts.change || 0))}`, 14, y + 12)
             }
-        } finally {
-            setLoadingData(false)
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(11)
+            doc.text(`Total pagado: ${money(opts.total)}`, 120, y)
+            doc.setFontSize(12)
+            doc.setTextColor(opts.remaining > 0 ? 244 : 16, opts.remaining > 0 ? 63 : 185, opts.remaining > 0 ? 94 : 129)
+            doc.text(`Saldo pendiente: ${money(opts.remaining)}`, 120, y + 8)
+
+            if (notes) {
+                y += 24
+                doc.setFontSize(10)
+                doc.setTextColor(40, 40, 40)
+                doc.text('Notas:', 14, y)
+                doc.setFont('helvetica', 'normal')
+                doc.setTextColor(100, 100, 100)
+                doc.text(doc.splitTextToSize(notes, 180), 14, y + 6)
+            }
+
+            doc.setFontSize(8)
+            doc.setTextColor(150, 150, 150)
+            doc.setFont('helvetica', 'normal')
+            doc.text('Este documento es un comprobante de operación digital generado por InmobiGo.', 14, 275)
+            doc.text('Conserve este recibo para cualquier aclaración futura.', 14, 281)
+
+            doc.save(`Recibo_${selectedResident.last_name}_${opts.folio}.pdf`)
+        } catch (pdfError) {
+            console.error('Error generating receipt PDF:', pdfError)
+            toast.error('El pago se registró, pero no se pudo generar el PDF del recibo.')
+        }
+    }
+
+    // ── Cobrar adeudos existentes (no crea cargos nuevos: abona a las facturas) ──
+    const handleCollect = async () => {
+        if (!selectedResident) return
+        if (selectedRows.length === 0 || chargeAmount <= 0) {
+            toast.error('Selecciona al menos un adeudo y un monto mayor a $0.')
+            return
+        }
+        if (paymentMethod === 'Efectivo' && cash > 0 && cash < chargeAmount) {
+            toast.error('El efectivo recibido es menor al monto a cobrar.')
+            return
+        }
+
+        let remainingToApply = chargeAmount
+        const applied: { concept: string, period: string, amount: number }[] = []
+        let folio = ''
+        const paidAt = paymentDate === todayMx() ? new Date().toISOString() : `${paymentDate}T12:00:00-06:00`
+
+        // Se aplica primero a lo más antiguo de lo seleccionado
+        for (const row of selectedRows) {
+            if (remainingToApply <= 0.009) break
+            const toApply = Math.min(remainingToApply, row.balance)
+            if (row.id === LEGACY_DEBT_ID) {
+                await residentsService.update(selectedResident.id, { debt_amount: Math.max(0, row.balance - toApply) })
+            } else {
+                const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
+                    invoiceId: row.id,
+                    amount: Number(toApply.toFixed(2)),
+                    paymentMethod,
+                    notes: notes || undefined,
+                    paidAt,
+                })
+                if (!folio && payment?.folio) folio = payment.folio
+            }
+            applied.push({ concept: row.concept, period: row.period, amount: toApply })
+            remainingToApply -= toApply
+        }
+
+        downloadReceipt({
+            folio: folio || `REC-${Date.now().toString().slice(-6)}`,
+            rows: applied,
+            total: chargeAmount,
+            method: paymentMethod,
+            remaining: remainingAfter,
+            received: paymentMethod === 'Efectivo' ? cash : undefined,
+            change,
+        })
+        toast.success(`Pago de ${money(chargeAmount)} registrado`, {
+            description: remainingAfter > 0 ? `Saldo pendiente: ${money(remainingAfter)}` : 'El residente quedó al corriente.',
+        })
+    }
+
+    // ── Nuevo cargo (multa, cuota extraordinaria, etc.) ──
+    const handleCreateCharge = async () => {
+        if (!selectedResident) return
+        const amount = parseFloat(charge.amount)
+        if (!amount || amount <= 0) {
+            toast.error('Ingresa un monto mayor a $0.')
+            return
+        }
+        const paid = charge.paidNow
+        const created = await financeService.create({
+            organization_id: organizationId,
+            condominium_id: selectedResident.condominium_id || selectedCondoId,
+            resident_id: selectedResident.id,
+            unit_id: selectedResident.unit_id,
+            amount,
+            status: paid ? 'paid' : 'pending',
+            invoice_type: CONCEPT_TO_INVOICE_TYPE[charge.concept],
+            due_date: charge.dueDate,
+            description: notes ? `${charge.concept} - ${notes}` : charge.concept,
+            payment_method: paid ? paymentMethod : null,
+            ...(paid && { paid_at: new Date().toISOString(), paid_amount: amount, balance_due: 0 })
+        } as unknown as CreateInvoiceDTO)
+
+        if (paid) {
+            downloadReceipt({
+                folio: created?.folio || (created?.id ? `FAC-${created.id.substring(0, 8).toUpperCase()}` : `REC-${Date.now().toString().slice(-6)}`),
+                rows: [{ concept: charge.concept, period: periodLabel(charge.dueDate), amount }],
+                total: amount,
+                method: paymentMethod,
+                remaining: totalDebt,
+                received: paymentMethod === 'Efectivo' ? cash : undefined,
+                change: paymentMethod === 'Efectivo' && cash > 0 ? cash - amount : 0,
+            })
+            toast.success(`Recibo de ${money(amount)} creado y cobrado`)
+        } else {
+            toast.success(`Cargo de ${money(amount)} creado`, { description: `Vence el ${new Date(`${charge.dueDate}T12:00:00Z`).toLocaleDateString('es-MX', { timeZone: 'UTC' })}` })
         }
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!selectedResident) {
+            toast.error(`Selecciona un ${residentLabel.toLowerCase()}.`)
+            return
+        }
+        if (!selectedResident.unit_id) {
+            toast.error('Unidad no asignada', { description: `El ${residentLabel.toLowerCase()} no tiene una unidad vinculada.` })
+            return
+        }
         setLoading(true)
-
         try {
-            const selectedResident = defaultResident || residents.find(r => r.id === formData.residentId)
-            if (!selectedResident || !selectedResident.unit_id) {
-                toast.error('Error', { description: 'Residente o unidad no válidos.' })
-                return
-            }
-
-            let createdInvoice: any = null
-            // Solo se interpreta como "abonar/liquidar deuda anterior" cuando el
-            // concepto elegido es explícitamente ese — antes se activaba con solo
-            // tener deuda pendiente y método Efectivo, sin importar el concepto
-            // (Multa, Cuota Extraordinaria, etc.), así que crear cualquier cargo
-            // nuevo a un residente que ya debía algo terminaba aplicándose como
-            // pago de la deuda vieja en vez de generar el cargo solicitado.
-            const isSettlingDebt = activeDebt > 0 && parseFloat(paymentAmount) > 0 && paymentMethod === 'Efectivo' && formData.concept === 'Abono a Deuda'
-
-            if (isSettlingDebt) {
-                // Cada abono genera su propio recibo (resident_invoice_payments), con su
-                // propio folio, fecha y método — así un residente que paga en varias
-                // exhibiciones tiene un comprobante independiente por cada pago, en vez
-                // de que el último pago sobreescriba el registro del anterior.
-                // Se liquidan primero las facturas más antiguas.
-                const sortedPending = [...residentInvoices].sort(
-                    (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
-                )
-
-                let remainingToApply = parseFloat(paymentAmount)
-                let lastPayment: any = null
-                for (const inv of sortedPending) {
-                    if (remainingToApply <= 0) break
-                    const currentDebt = inv.balance_due ?? inv.amount
-                    if (currentDebt <= 0) continue
-
-                    const amountToApply = Math.min(remainingToApply, currentDebt)
-                    const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
-                        invoiceId: inv.id,
-                        amount: amountToApply,
-                        paymentMethod,
-                        notes: formData.notes || undefined,
-                    })
-                    lastPayment = payment
-                    remainingToApply -= amountToApply
-                }
-                if (lastPayment) {
-                    createdInvoice = { id: lastPayment.invoice_id, folio: lastPayment.folio }
-                }
-                if (remainingToApply > 0 && selectedResident.debt_amount) {
-                    const currentInitialDebt = Number(selectedResident.debt_amount)
-                    await residentsService.update(selectedResident.id, { debt_amount: Math.max(0, currentInitialDebt - remainingToApply) })
-                }
-            } else {
-                createdInvoice = await financeService.create({
-                    organization_id: organizationId,
-                    condominium_id: selectedCondoId,
-                    resident_id: selectedResident.id,
-                    unit_id: selectedResident.unit_id,
-                    amount: parseFloat(formData.amount),
-                    status: paymentMethod === 'Efectivo' ? 'paid' : 'pending',
-                    invoice_type: CONCEPT_TO_INVOICE_TYPE[formData.concept],
-                    due_date: formData.dueDate,
-                    description: formData.notes ? `${formData.concept} - ${formData.notes}` : formData.concept,
-                    payment_method: paymentMethod,
-                    ...(paymentMethod === 'Efectivo' && { paid_at: new Date().toISOString(), paid_amount: parseFloat(formData.amount), balance_due: 0 })
-                } as any)
-            }
-
-            // PDF Generation — recibo completo con folio de la factura existente o nueva
-            try {
-                const doc = new jsPDF()
-                const pdfFolio = createdInvoice?.folio
-                    || (createdInvoice?.id ? `FAC-${createdInvoice.id.substring(0, 8).toUpperCase()}` : null)
-                    || `REC-${Date.now().toString().slice(-6)}`
-                const amountForPDF = isSettlingDebt
-                    ? parseFloat(paymentAmount) || parseFloat(formData.amount) || 0
-                    : parseFloat(formData.amount) || 0
-
-                // ─── Header Banner ───────────────────────────────────────────────
-                doc.setFillColor(79, 70, 229)
-                doc.rect(0, 0, 210, 35, 'F')
-                doc.setFontSize(22)
-                doc.setTextColor(255, 255, 255)
-                doc.setFont('helvetica', 'bold')
-                doc.text('RECIBO DE PAGO', 14, 22)
-                doc.setFontSize(10)
-                doc.setFont('helvetica', 'normal')
-                doc.text(`Folio: ${pdfFolio}`, 150, 16)
-                doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
-
-                // ─── Resident Info ───────────────────────────────────────────────
-                doc.setFontSize(12)
-                doc.setTextColor(40, 40, 40)
-                doc.setFont('helvetica', 'bold')
-                doc.text('INFORMACIÓN DEL RESIDENTE', 14, 50)
-                doc.setFontSize(10)
-                doc.setFont('helvetica', 'normal')
-                doc.text(`Nombre: ${selectedResident.first_name} ${selectedResident.last_name}`, 14, 60)
-                doc.text(`Unidad: ${selectedResident.unit_number || 'S/N'}`, 14, 66)
-                doc.text(`Condominio: ${condominiums.find(c => c.id === selectedCondoId)?.name || 'Condominio'}`, 14, 72)
-
-                // ─── Divider ─────────────────────────────────────────────────────
-                doc.setDrawColor(220, 220, 220)
-                doc.line(14, 80, 196, 80)
-
-                // ─── Payment Details ─────────────────────────────────────────────
-                doc.setFontSize(12)
-                doc.setFont('helvetica', 'bold')
-                doc.text('DETALLES DEL PAGO', 14, 92)
-
-                autoTable(doc, {
-                    head: [['Concepto', 'Monto Pagado', 'Método de Pago']],
-                    body: [[
-                        formData.concept,
-                        `$${amountForPDF.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-                        paymentMethod
-                    ]],
-                    startY: 98,
-                    styles: { fontSize: 10, cellPadding: 5 },
-                    headStyles: { fillColor: [79, 70, 229] },
-                    alternateRowStyles: { fillColor: [245, 245, 245] },
-                })
-
-                const finalY = (doc as any).lastAutoTable.finalY + 15
-
-                // Notes
-                if (formData.notes) {
-                    doc.setFontSize(10)
-                    doc.setFont('helvetica', 'bold')
-                    doc.setTextColor(40, 40, 40)
-                    doc.text('Notas:', 14, finalY)
-                    doc.setFont('helvetica', 'normal')
-                    doc.setTextColor(100, 100, 100)
-                    const splitNotes = doc.splitTextToSize(formData.notes, 90)
-                    doc.text(splitNotes, 14, finalY + 6)
-                }
-
-                // ─── Totals ──────────────────────────────────────────────────────
-                doc.setFontSize(11)
-                doc.setFont('helvetica', 'bold')
-                doc.setTextColor(60, 60, 60)
-                doc.text(`Total Procesado: $${amountForPDF.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
-                const newBalance = Math.max(0, activeDebt - amountForPDF)
-                doc.setFontSize(12)
-                doc.setTextColor(244, 63, 94)
-                doc.text(`Nuevo Saldo Pendiente: $${newBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY + 8)
-
-                // ─── Footer ──────────────────────────────────────────────────────
-                doc.setFontSize(8)
-                doc.setTextColor(150, 150, 150)
-                doc.setFont('helvetica', 'normal')
-                doc.text('Este documento es un comprobante de operación digital generado por InmobiGo SaaS.', 14, 275)
-                doc.text('Conserve este recibo para cualquier aclaración futura.', 14, 281)
-
-                doc.save(`Recibo_${selectedResident.last_name}_${Date.now().toString().slice(-4)}.pdf`)
-                toast.success('Comprobante PDF generado y descargado.')
-            } catch (pdfError) {
-                console.error('Error generating receipt PDF:', pdfError)
-                toast.error('Error al generar el archivo PDF del recibo.')
-            }
-
+            if (mode === 'cobrar') await handleCollect()
+            else await handleCreateCharge()
             if (onSuccess) onSuccess()
             onClose()
-        } catch (error: any) {
-            toast.error('Error al procesar.')
+        } catch (error) {
+            toast.error('No se pudo procesar', { description: error instanceof Error ? error.message : undefined })
         } finally {
             setLoading(false)
         }
     }
 
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Nuevo Recibo" className="max-w-xl">
-            <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
-                
-                {/* Scrollable Content Container */}
-                <div className="flex-1 overflow-y-auto px-1 pr-3 space-y-5 custom-scrollbar max-h-[60vh]">
-                    
-                    {/* Resident Selection Section */}
-                    <div className="space-y-2">
-                        <label className="text-sm font-semibold text-slate-300">{isPropiedades ? 'Inquilino' : 'Residente'}</label>
+    const inputCls = 'w-full bg-slate-900 border border-slate-700/50 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-blue-500/50 shadow-sm'
+    const footerTotal = mode === 'cobrar' ? chargeAmount : (parseFloat(charge.amount) || 0)
+    const showCash = paymentMethod === 'Efectivo' && (mode === 'cobrar' || charge.paidNow)
 
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Nuevo Recibo" className="max-w-2xl">
+            <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
+                <div className="flex-1 overflow-y-auto px-1 pr-3 space-y-5 custom-scrollbar max-h-[62vh]">
+
+                    {/* Residente */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-semibold text-slate-300">{residentLabel}</label>
                         {defaultResident ? (
-                            // Read-Only Card Style driven by provided image
-                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 flex items-center justify-between group hover:border-slate-600 transition-colors cursor-default">
+                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    {/* Only verify if first_name exists to prevent runtime error if empty */}
                                     <div className="w-9 h-9 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold border border-indigo-500/30 text-sm">
                                         {defaultResident.first_name?.[0]}{defaultResident.last_name?.[0]}
                                     </div>
                                     <div>
-                                        <div className="text-white font-medium text-sm flex items-center gap-2">
-                                            {defaultResident.first_name} {defaultResident.last_name}
-                                        </div>
+                                        <div className="text-white font-medium text-sm">{defaultResident.first_name} {defaultResident.last_name}</div>
                                         <div className="text-slate-400 text-xs flex items-center gap-3 mt-0.5">
                                             <span className="flex items-center gap-1"><Mail size={10} /> {defaultResident.email}</span>
                                             <span className="flex items-center gap-1"><Phone size={10} /> {defaultResident.phone}</span>
@@ -389,34 +506,31 @@ export function CreateInvoiceModal({
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 text-slate-400">
-                                    <span className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700">{defaultResident.unit_number || 'B-10'}</span>
+                                    <span className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700">{defaultResident.unit_number || 'S/N'}</span>
                                     <ChevronRight size={14} />
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-xs font-medium text-slate-500">Condominio</label>
+                                    <label className="text-xs font-medium text-slate-500">{isPropiedades ? 'Propiedad' : 'Condominio'}</label>
                                     <select
                                         className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-indigo-500/50"
                                         required
                                         value={selectedCondoId}
-                                        onChange={(e) => {
-                                            setSelectedCondoId(e.target.value)
-                                            setFormData(prev => ({ ...prev, residentId: '' }))
-                                        }}
+                                        onChange={(e) => { setSelectedCondoId(e.target.value); setResidentId('') }}
                                     >
-                                        <option value="">Condominio...</option>
+                                        <option value="">Seleccionar...</option>
                                         {condominiums.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs font-medium text-slate-500">{isPropiedades ? 'Inquilino' : 'Residente'}</label>
+                                    <label className="text-xs font-medium text-slate-500">{residentLabel}</label>
                                     <select
                                         className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-indigo-500/50"
                                         required
-                                        value={formData.residentId}
-                                        onChange={(e) => setFormData({ ...formData, residentId: e.target.value })}
+                                        value={residentId}
+                                        onChange={(e) => setResidentId(e.target.value)}
                                         disabled={!selectedCondoId}
                                     >
                                         <option value="">Seleccionar...</option>
@@ -429,186 +543,237 @@ export function CreateInvoiceModal({
                         )}
                     </div>
 
-                    {/* Concept */}
-                    <div className="space-y-1">
-                        <label className="text-sm font-semibold text-slate-300">Concepto</label>
-                        <select
-                            className="w-full bg-slate-900 border border-slate-700/50 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-indigo-500/50 appearance-none shadow-sm"
-                            required
-                            value={formData.concept}
-                            onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
-                        >
-                             <option value={isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'}>{isPropiedades ? 'Renta' : 'Cuota de Mantenimiento'}</option>
-                             <option value="Multa">Multa</option>
-                             <option value="Cuota Extraordinaria">Cuota Extraordinaria</option>
-                             <option value="Reserva Amenidad">Reserva Amenidad</option>
-                             <option value="Pago de Atraso">Pago de Atraso</option>
-                             <option value="Abono a Deuda">Abono a Deuda</option>
-                             <option value="Otro">Otro</option>
-                        </select>
-                        <button type="button" className="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 transition-colors mt-1 pl-1">
-                            <Plus size={12} /> Agregar línea adicional
-                        </button>
-                    </div>
-
-                    {/* Active Debt Display & Repayment */}
-                    {activeDebt > 0 && (
-                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-amber-400 flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                                    Deuda acumulada pendiente:
-                                </span>
-                                <span className="text-base font-bold text-amber-300">
-                                    ${activeDebt.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                </span>
-                            </div>
-
-                                <div className="space-y-2 pt-2 border-t border-amber-500/10">
-                                    <label className="text-xs font-semibold text-slate-300">¿Desea abonar o liquidar deuda?</label>
-                                    <div className="flex gap-3 items-center">
-                                        <div className="relative flex-1 group">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
-                                            <input
-                                                type="number"
-                                                value={paymentAmount}
-                                                onChange={(e) => setPaymentAmount(e.target.value)}
-                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 pl-6 pr-3 text-sm text-white focus:outline-none focus:border-amber-500/50"
-                                                placeholder="0.00"
-                                            />
-                                        </div>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => {
-                                                const amountToPay = parseFloat(paymentAmount) || 0
-                                                if (amountToPay > 0 && amountToPay <= activeDebt) {
-                                                    setFormData(prev => ({ ...prev, amount: amountToPay.toString() }))
-                                                    toast.success(`Monto de abono ($${amountToPay}) copiado al recibo.`)
-                                                } else {
-                                                    toast.error('Ingrese un monto válido para abonar.')
-                                                }
-                                            }}
-                                            className="text-xs font-medium text-emerald-400 hover:text-emerald-300 px-3 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex-shrink-0"
-                                        >
-                                            Abonar
-                                        </button>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => {
-                                                setPaymentAmount(activeDebt.toString())
-                                                setFormData(prev => ({ ...prev, amount: activeDebt.toString() }))
-                                                toast.success(`Monto de liquidación ($${activeDebt}) copiado al recibo.`)
-                                            }}
-                                            className="text-xs font-medium text-amber-400 hover:text-amber-300 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all flex-shrink-0"
-                                        >
-                                            Liquidar Total
-                                        </button>
-                                    </div>
-                                    {parseFloat(paymentAmount) < activeDebt && parseFloat(paymentAmount) > 0 && (
-                                        <div className="text-xs text-slate-400 flex justify-between pt-1 font-medium">
-                                            <span>Restante (Nuevo Saldo):</span>
-                                            <span className="font-semibold text-rose-400">
-                                                ${(activeDebt - parseFloat(paymentAmount)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
-                                    )}
+                    {/* Resumen de cuenta */}
+                    {selectedResident && (
+                        loadingDebts ? (
+                            <div className="flex items-center gap-2 text-sm text-slate-400 py-2"><Loader2 className="h-4 w-4 animate-spin" /> Consultando estado de cuenta…</div>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-rose-300/80">Vencido</p>
+                                    <p className="text-base font-bold text-rose-300">{money(overdueDebt)}</p>
                                 </div>
+                                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-amber-300/80">Por vencer</p>
+                                    <p className="text-base font-bold text-amber-300">{money(totalDebt - overdueDebt)}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-3">
+                                    <p className="text-[11px] uppercase tracking-wide text-slate-400">Adeudo total</p>
+                                    <p className="text-base font-bold text-white">{money(totalDebt)}</p>
+                                </div>
+                            </div>
+                        )
+                    )}
+
+                    {/* Modo */}
+                    {selectedResident && !loadingDebts && (
+                        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
+                            <button type="button" onClick={() => setMode('cobrar')}
+                                className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'cobrar' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-white'}`}>
+                                <Wallet size={15} /> Cobrar adeudos {debtRows.length > 0 && <span className="text-xs opacity-80">({debtRows.length})</span>}
+                            </button>
+                            <button type="button" onClick={() => setMode('cargo')}
+                                className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'cargo' ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:text-white'}`}>
+                                <FilePlus2 size={15} /> Nuevo cargo
+                            </button>
                         </div>
                     )}
 
-                    {/* Amount & Date Row */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* ── Cobrar adeudos ── */}
+                    {selectedResident && !loadingDebts && mode === 'cobrar' && (
+                        debtRows.length === 0 ? (
+                            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-center gap-3">
+                                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                                <div>
+                                    <p className="text-sm font-medium text-emerald-300">Está al corriente</p>
+                                    <p className="text-xs text-slate-400">No tiene adeudos pendientes. Usa &quot;Nuevo cargo&quot; para cobrar otro concepto.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-semibold text-slate-300">Selecciona lo que va a pagar</label>
+                                    <div className="flex gap-1.5 text-[11px]">
+                                        {(['vencido', 'todo', 'ninguno'] as const).map(p => (
+                                            <button key={p} type="button" onClick={() => selectPreset(p)}
+                                                className="px-2 py-1 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800 capitalize">
+                                                {p === 'vencido' ? 'Solo vencido' : p === 'todo' ? 'Todo' : 'Ninguno'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 divide-y divide-slate-800 overflow-hidden">
+                                    {debtRows.map(row => {
+                                        const checked = selectedIds.has(row.id)
+                                        const overdue = row.daysOverdue > 0 || row.id === LEGACY_DEBT_ID
+                                        return (
+                                            <label key={row.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-slate-800/60' : 'hover:bg-slate-900'}`}>
+                                                <input type="checkbox" checked={checked} onChange={() => toggleRow(row.id)}
+                                                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-emerald-500" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm text-white truncate">{row.concept}</p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {row.period}{row.dueDate && ` · vence ${new Date(`${row.dueDate}T12:00:00Z`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' })}`}
+                                                    </p>
+                                                </div>
+                                                {overdue ? (
+                                                    <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                                                        <AlertTriangle size={11} /> {row.id === LEGACY_DEBT_ID ? 'Saldo previo' : `Vencido · ${row.daysOverdue} días`}
+                                                    </span>
+                                                ) : (
+                                                    <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                                        <Clock size={11} /> Por vencer
+                                                    </span>
+                                                )}
+                                                <div className="text-right">
+                                                    <p className="text-sm font-semibold text-white">{money(row.balance)}</p>
+                                                    {row.balance < row.amount && <p className="text-[11px] text-slate-500">de {money(row.amount)}</p>}
+                                                </div>
+                                            </label>
+                                        )
+                                    })}
+                                </div>
 
-                        <div className="space-y-1">
-                            <label className="text-sm font-semibold text-slate-300">Monto</label>
-                            <div className="relative group">
-                                <input
-                                    type="number"
-                                    placeholder="$0.00"
-                                    className="w-full bg-slate-900 border border-slate-700/50 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 font-medium shadow-sm"
-                                    required
-                                    value={formData.amount}
-                                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-semibold text-slate-300">Monto a cobrar</label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
+                                            <input type="number" step="0.01" min="0" max={selectedTotal}
+                                                className={`${inputCls} pl-6 font-medium`}
+                                                value={amountToCharge}
+                                                onChange={(e) => { setAmountToCharge(e.target.value); setAmountEdited(true) }} />
+                                        </div>
+                                        {parseFloat(amountToCharge) > selectedTotal + 0.009 && (
+                                            <p className="text-xs text-amber-400">No puede ser mayor a lo seleccionado ({money(selectedTotal)}).</p>
+                                        )}
+                                        {chargeAmount > 0 && chargeAmount < selectedTotal - 0.009 && (
+                                            <p className="text-xs text-slate-400">Abono parcial: se aplica primero a lo más antiguo.</p>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-semibold text-slate-300">Fecha de pago</label>
+                                        <input type="date" max={todayMx()} className={`${inputCls} text-slate-300 [color-scheme:dark]`}
+                                            value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    )}
+
+                    {/* ── Nuevo cargo ── */}
+                    {selectedResident && !loadingDebts && mode === 'cargo' && (
+                        <div className="space-y-4">
+                            <div className="space-y-1">
+                                <label className="text-sm font-semibold text-slate-300">Concepto</label>
+                                <select className={inputCls} required value={charge.concept}
+                                    onChange={(e) => setCharge({ ...charge, concept: e.target.value })}>
+                                    <option value={baseConcept}>{baseConcept}</option>
+                                    <option value="Multa">Multa</option>
+                                    <option value="Cuota Extraordinaria">Cuota Extraordinaria</option>
+                                    <option value="Reserva Amenidad">Reserva Amenidad</option>
+                                    <option value="Otro">Otro</option>
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-sm font-semibold text-slate-300">Monto</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
+                                        <input type="number" step="0.01" min="0" placeholder="0.00" className={`${inputCls} pl-6 font-medium`} required
+                                            value={charge.amount} onChange={(e) => setCharge({ ...charge, amount: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-sm font-semibold text-slate-300">Fecha de vencimiento</label>
+                                    <input type="date" className={`${inputCls} text-slate-300 [color-scheme:dark]`} required
+                                        value={charge.dueDate} onChange={(e) => setCharge({ ...charge, dueDate: e.target.value })} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800 text-sm">
+                                <button type="button" onClick={() => setCharge({ ...charge, paidNow: true })}
+                                    className={`py-2 rounded-lg font-medium ${charge.paidNow ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>
+                                    Lo paga ahora
+                                </button>
+                                <button type="button" onClick={() => setCharge({ ...charge, paidNow: false })}
+                                    className={`py-2 rounded-lg font-medium ${!charge.paidNow ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>
+                                    Dejar pendiente
+                                </button>
                             </div>
                         </div>
+                    )}
+
+                    {/* Notas */}
+                    {selectedResident && !loadingDebts && (
                         <div className="space-y-1">
-                            <div className="flex justify-between items-center">
-                                <label className="text-sm font-semibold text-slate-300">Fecha de Vencimiento</label>
-                            </div>
-                            <div className="relative">
-                                <input
-                                    type="date"
-                                    className="w-full bg-slate-900 border border-slate-700/50 rounded-lg py-2.5 px-3 text-sm text-slate-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark] shadow-sm"
-                                    required
-                                    value={formData.dueDate}
-                                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                                />
-                            </div>
+                            <label className="text-sm font-semibold text-slate-300">Notas <span className="text-slate-500 font-normal">(opcional)</span></label>
+                            <textarea
+                                className={`${inputCls} min-h-[64px] resize-none placeholder:text-slate-600`}
+                                placeholder="Ej. Pagó en caja de administración"
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                            />
                         </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div className="space-y-1">
-                        <label className="text-sm font-semibold text-slate-300">Notas <span className="text-slate-500 font-normal">(opcional)</span></label>
-                        <textarea
-                            className="w-full bg-slate-900 border border-slate-700/50 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-blue-500/50 min-h-[70px] resize-none shadow-sm placeholder:text-slate-600"
-                            placeholder="Escribe detalles adicionales para la factura..."
-                            value={formData.notes}
-                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        />
-                    </div>
-
+                    )}
                 </div>
 
-                {/* Summary Footer */}
+                {/* Resumen */}
                 <div className="bg-slate-950/50 rounded-xl p-4 space-y-3 border border-slate-800 mt-4 shrink-0">
-                    <div className="flex justify-between items-center text-sm">
-
-                        <span className="text-slate-400">Subtotal</span>
-                        <div className="flex items-center gap-2">
-                            {/* Payment Method Selector Mock */}
-                            <select 
-                                value={paymentMethod}
-                                onChange={(e) => setPaymentMethod(e.target.value)}
-                                className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-400 focus:outline-none"
-                            >
-                                <option value="Efectivo">Efectivo</option>
-                            </select>
-
+                    {(mode === 'cobrar' || charge.paidNow) && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                            <span className="text-slate-400">Método de pago</span>
+                            <div className="flex gap-1">
+                                {PAYMENT_METHODS.map(m => (
+                                    <button key={m} type="button" onClick={() => setPaymentMethod(m)}
+                                        className={`px-3 py-1 rounded-md text-xs border transition-colors ${paymentMethod === m ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'border-slate-800 text-slate-400 hover:text-white'}`}>
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                        <span className="text-slate-400">Mora estimada: <span className="text-slate-500">$0</span></span>
-                        <span className="text-slate-200 font-medium">${formData.amount || '0'}</span>
-                    </div>
+                    )}
+                    {showCash && footerTotal > 0 && (
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-slate-400">Efectivo recibido</span>
+                            <div className="flex items-center gap-3">
+                                <div className="relative w-32">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
+                                    <input type="number" step="0.01" min="0" placeholder={footerTotal.toFixed(2)}
+                                        className="w-full bg-slate-900 border border-slate-800 rounded-md py-1 pl-5 pr-2 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                                        value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} />
+                                </div>
+                                {cash > 0 && (
+                                    <span className={`text-xs font-medium ${cash - footerTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {cash - footerTotal >= 0 ? `Cambio ${money(cash - footerTotal)}` : `Faltan ${money(footerTotal - cash)}`}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {mode === 'cobrar' && selectedResident && debtRows.length > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-400">Saldo después del pago</span>
+                            <span className={`font-medium ${remainingAfter > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{money(remainingAfter)}</span>
+                        </div>
+                    )}
                     <div className="border-t border-slate-800 pt-3 flex justify-between items-center">
-                        <span className="text-slate-200 font-semibold">Total</span>
-                        <span className="text-white font-bold text-lg">${formData.amount || '0'}</span>
+                        <span className="text-slate-200 font-semibold">{mode === 'cobrar' ? `Total a cobrar${selectedRows.length ? ` (${selectedRows.length})` : ''}` : 'Total'}</span>
+                        <span className="text-white font-bold text-lg">{money(footerTotal)}</span>
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex justify-end gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={loading}
-                            className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700"
-                        >
+                        <button type="button" onClick={onClose} disabled={loading}
+                            className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700">
                             Cancelar
                         </button>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="flex items-center gap-2 px-6 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50"
-                        >
-                            {loading ? <Loader2 className="animate-spin h-4 w-4" /> : null}
-                            Crear Recibo
-
+                        <button type="submit"
+                            disabled={loading || !selectedResident || loadingDebts || (mode === 'cobrar' && (chargeAmount <= 0 || parseFloat(amountToCharge) > selectedTotal + 0.009))}
+                            className={`flex items-center gap-2 px-6 py-2 text-sm font-medium text-white rounded-lg shadow-lg transition-all disabled:opacity-50 ${mode === 'cobrar' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'}`}>
+                            {loading && <Loader2 className="animate-spin h-4 w-4" />}
+                            {mode === 'cobrar' ? `Cobrar ${money(chargeAmount)}` : (charge.paidNow ? 'Crear y cobrar' : 'Crear cargo')}
                         </button>
                     </div>
                 </div>
-
             </form>
         </Modal>
     )

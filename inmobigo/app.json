@@ -9,9 +9,11 @@
     "scheme": "inmobigo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "mx.inmobigo.app"
     },
     "android": {
+      "package": "mx.inmobigo.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

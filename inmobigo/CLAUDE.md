@@ -42,3 +42,8 @@ Supabase en `src/lib/supabase.ts`.
 - `npx expo start` para desarrollo; `npx tsc --noEmit` y `npx expo lint` antes de
   dar algo por terminado.
 - Instalar dependencias siempre con `npx expo install <paquete>`.
+- Builds en la nube (EAS, proyecto `@inmobigo/inmobigo`): `.env` no se sube, así que
+  `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` se configuran en
+  expo.dev › Environment variables (entornos `preview` y `production`); cada perfil
+  de `eas.json` usa su `environment`. La app vive en la carpeta `inmobigo/` del repo
+  (base directory para EAS).

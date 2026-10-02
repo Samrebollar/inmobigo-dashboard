@@ -1,0 +1,16 @@
+# Publica una actualización (EAS Update) en la rama "preview".
+# Se puede abrir en Expo Go (QR de qr.expo.dev con el groupId) y la reciben
+# las builds del canal "preview". Se ejecuta manualmente.
+name: Publish preview update
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  publish_update:
+    name: Publish update (preview)
+    type: update
+    environment: preview
+    params:
+      branch: preview
+      message: Vista previa InmobiGo

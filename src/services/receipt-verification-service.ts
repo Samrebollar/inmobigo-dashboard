@@ -27,6 +27,8 @@ export interface VerifiedReceipt {
     adminCardPath: string | null
     canceledAt: string | null
     cancelReason: string | null
+    /** Recibo vigente que reemplazó a este (si se canceló y reemitió) */
+    replacedBy: { token: string; shortCode: string } | null
 }
 
 /** "Clara Suaste López" → "Clara S." (la página de verificación es pública). */
@@ -63,16 +65,26 @@ export async function getVerifiedReceipt(token: string): Promise<VerifiedReceipt
     const { data: receipt } = await admin.from('payment_receipts').select('*').eq('verify_token', token).maybeSingle()
     if (!receipt) return null
 
-    // Otros pagos del mismo cobro (mismo folio y residente)
+    // Otros pagos del mismo cobro (mismo folio y residente). Un recibo vigente se
+    // agrupa con los vigentes; uno cancelado, con los cancelados en el mismo acto.
     let group = [receipt]
     if (receipt.folio && receipt.resident_id) {
-        const { data: siblings } = await admin
+        let query = admin
             .from('payment_receipts')
             .select('*')
             .eq('folio', receipt.folio)
             .eq('resident_id', receipt.resident_id)
-            .order('issued_at', { ascending: true })
+        query = receipt.status === 'cancelado'
+            ? query.eq('status', 'cancelado').eq('canceled_at', receipt.canceled_at)
+            : query.neq('status', 'cancelado')
+        const { data: siblings } = await query.order('issued_at', { ascending: true })
         if (siblings && siblings.length > 0) group = siblings
+    }
+
+    let replacedBy: VerifiedReceipt['replacedBy'] = null
+    if (receipt.replaced_by) {
+        const { data: next } = await admin.from('payment_receipts').select('verify_token, short_code').eq('id', receipt.replaced_by).maybeSingle()
+        if (next) replacedBy = { token: next.verify_token, shortCode: next.short_code }
     }
 
     const sealResults = group.map((r) => {
@@ -114,5 +126,6 @@ export async function getVerifiedReceipt(token: string): Promise<VerifiedReceipt
         adminCardPath: card?.is_public ? `/administrador/${card.public_token}` : null,
         canceledAt: group.find((r) => r.canceled_at)?.canceled_at || null,
         cancelReason: group.find((r) => r.cancel_reason)?.cancel_reason || null,
+        replacedBy,
     }
 }

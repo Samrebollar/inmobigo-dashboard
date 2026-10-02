@@ -105,8 +105,9 @@ export function SignatureCard({ initialSignature }: { initialSignature: { url: s
             setSignature({ url: result.url, updatedAt: new Date().toISOString() })
             setEditing(false)
             setHasStrokes(false)
-            toast.success(result.activated > 0
-                ? `Firma guardada. Se firmaron ${result.activated} recibo${result.activated === 1 ? '' : 's'} que estaban pendientes.`
+            const total = result.activated + result.updated
+            toast.success(total > 0
+                ? `Firma guardada. Se actualizó en ${total} recibo${total === 1 ? '' : 's'} ya emitido${total === 1 ? '' : 's'}.`
                 : 'Firma guardada. Se estampará en los recibos que registres.')
         } catch (error: any) {
             toast.error(error.message || 'No se pudo guardar la firma')
@@ -136,7 +137,7 @@ export function SignatureCard({ initialSignature }: { initialSignature: { url: s
                 )}
             </div>
             <p className="text-sm text-zinc-500 mb-5">
-                Tu firma se estampa en cada recibo de pago que registres o valides, junto con tu nombre, la matrícula SEDETUS y el sello digital.
+                Tu firma se estampa en cada recibo de pago que registres o valides, junto con tu nombre, la matrícula SEDETUS y el sello digital. Si la cambias, se actualiza en todos tus recibos vigentes.
                 {!signature && <span className="text-amber-400"> Sin firma no podrás registrar ni validar pagos.</span>}
             </p>
 

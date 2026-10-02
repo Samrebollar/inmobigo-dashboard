@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { canOperateOrgFinance } from '@/lib/finance-auth'
 import { distinctLegalName } from '@/types/admin-identity'
+import { issuePaymentReceipt } from '@/lib/payment-receipts'
 
 export interface ReceiptStamp {
     verifyUrl: string
@@ -57,29 +58,50 @@ export async function getReceiptStampAction(lookup: ReceiptStampLookup): Promise
     if (lookup.folio) attempts.push(['folio', lookup.folio, true])
     if (lookup.invoiceId) attempts.push(['invoice_id', lookup.invoiceId, false])
 
-    let receipt: any = null
-    for (const [column, value, oldestFirst] of attempts) {
-        const { data } = await admin
-            .from('payment_receipts')
-            .select('*')
-            .eq(column, value)
-            .order('issued_at', { ascending: oldestFirst })
-            .limit(1)
-            .maybeSingle()
-        if (data) {
-            receipt = data
-            break
-        }
-    }
-    if (!receipt) return null
-
     // Autorización: equipo de la organización o el residente dueño del pago
-    let allowed = !!receipt.organization_id && await canOperateOrgFinance(admin, user.id, receipt.organization_id)
-    if (!allowed && receipt.resident_id) {
-        const { data: resident } = await admin.from('residents').select('user_id').eq('id', receipt.resident_id).maybeSingle()
-        allowed = resident?.user_id === user.id
+    const canAccess = async (organizationId: string | null, residentId: string | null) => {
+        if (organizationId && await canOperateOrgFinance(admin, user.id, organizationId)) return true
+        if (!residentId) return false
+        const { data: resident } = await admin.from('residents').select('user_id').eq('id', residentId).maybeSingle()
+        return resident?.user_id === user.id
     }
-    if (!allowed) return null
+
+    // El recibo vigente tiene prioridad sobre uno cancelado del mismo pago
+    const findReceipt = async () => {
+        for (const [column, value, oldestFirst] of attempts) {
+            for (const activeOnly of [true, false]) {
+                let query = admin.from('payment_receipts').select('*').eq(column, value)
+                if (activeOnly) query = query.neq('status', 'cancelado')
+                const { data } = await query.order('issued_at', { ascending: oldestFirst }).limit(1).maybeSingle()
+                if (data) return data
+            }
+        }
+        return null
+    }
+
+    let receipt: any = await findReceipt()
+
+    // Pago anterior a los recibos validados: se emite su recibo en este momento
+    // (lo firma el administrador principal) y se vuelve a buscar.
+    if (!receipt) {
+        const paymentColumn = lookup.paymentId ? 'id' : lookup.folio ? 'folio' : 'invoice_id'
+        const paymentValue = lookup.paymentId || lookup.folio || lookup.invoiceId
+        if (!paymentValue) return null
+        const { data: payments } = await admin
+            .from('resident_invoice_payments')
+            .select('id, organization_id, resident_id')
+            .eq(paymentColumn, paymentValue)
+            .limit(20)
+        const first = payments?.[0]
+        if (!first || !(await canAccess(first.organization_id, first.resident_id))) return null
+        for (const p of payments!) {
+            if (p.organization_id === first.organization_id) await issuePaymentReceipt(admin, p.id, 'historico')
+        }
+        receipt = await findReceipt()
+        if (!receipt) return null
+    }
+
+    if (!(await canAccess(receipt.organization_id, receipt.resident_id))) return null
 
     // La firma está en un bucket privado: se incrusta como data URL
     let signatureDataUrl: string | null = null

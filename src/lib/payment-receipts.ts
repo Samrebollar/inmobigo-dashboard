@@ -149,7 +149,7 @@ export async function issuePaymentReceipt(
                 ? admin.from('residents').select('first_name, last_name, units(unit_number), condominiums(name)').eq('id', payment.resident_id).maybeSingle()
                 : Promise.resolve({ data: null }),
             organizationId
-                ? admin.from('admin_public_profiles').select('admin_type, display_name, committee_members, sedetus_registration_number, sedetus_expiry_date').eq('organization_id', organizationId).maybeSingle()
+                ? admin.from('admin_public_profiles').select('admin_type, display_name, legal_name, committee_members, sedetus_registration_number, sedetus_expiry_date').eq('organization_id', organizationId).maybeSingle()
                 : Promise.resolve({ data: null }),
         ])
 
@@ -206,6 +206,7 @@ export async function issuePaymentReceipt(
             signer_signature_path: signer?.signature_path || null,
             admin_type: identity?.admin_type || null,
             admin_display_name: identity?.display_name || null,
+            admin_legal_name: identity?.admin_type === 'empresa' ? identity?.legal_name || null : null,
             sedetus_registration_number: identity?.sedetus_registration_number || null,
             sedetus_expiry_date: identity?.sedetus_expiry_date || null,
             status: signer?.signature_path ? 'valido' : 'firma_pendiente',

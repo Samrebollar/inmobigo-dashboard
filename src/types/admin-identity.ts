@@ -63,4 +63,25 @@ export const SEDETUS_STATUS_LABEL: Record<SedetusStatus, string> = {
     sin_registro: 'Sin registrar',
 }
 
+/**
+ * ¿El nombre comercial y la razón social son el mismo nombre? Se comparan sin
+ * mayúsculas, acentos, puntuación ni espacios extra, para no repetirlo.
+ */
+export function isSameBusinessName(a: string | null | undefined, b: string | null | undefined): boolean {
+    const normalize = (v: string) => v
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9ñ]+/g, ' ')
+        .trim()
+    return !!a && !!b && normalize(a) === normalize(b)
+}
+
+/** Razón social a mostrar junto al nombre comercial (null si es igual o no hay). */
+export function distinctLegalName(displayName: string | null | undefined, legalName: string | null | undefined): string | null {
+    if (!legalName?.trim()) return null
+    if (!displayName?.trim()) return legalName.trim()
+    return isSameBusinessName(displayName, legalName) ? null : legalName.trim()
+}
+
 export const COMMITTEE_POSITIONS = ['Presidente', 'Tesorero', 'Secretario', 'Vocal', 'Suplente'] as const

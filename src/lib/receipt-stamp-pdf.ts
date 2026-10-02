@@ -75,6 +75,7 @@ export async function drawReceiptStamp(doc: jsPDF, stamp: ReceiptStamp, startY: 
     const lines = [
         stamp.signerPosition,
         stamp.adminLabel ? `En nombre de: ${stamp.adminLabel}` : null,
+        stamp.adminLegalName ? `Razón social: ${stamp.adminLegalName}` : null,
         `Matrícula SEDETUS: ${stamp.sedetusNumber || 'Sin registrar'}`,
         `Validado: ${formatIssuedAt(stamp.issuedAt)}${stamp.validationMode === 'automatico' ? ' (pago en línea confirmado)' : ''}`,
     ].filter(Boolean) as string[]

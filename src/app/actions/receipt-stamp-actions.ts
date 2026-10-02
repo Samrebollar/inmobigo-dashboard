@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { canOperateOrgFinance } from '@/lib/finance-auth'
+import { distinctLegalName } from '@/types/admin-identity'
 
 export interface ReceiptStamp {
     verifyUrl: string
@@ -12,6 +13,8 @@ export interface ReceiptStamp {
     signerName: string
     signerPosition: string
     adminLabel: string | null
+    /** Razón social, solo si es distinta del nombre comercial */
+    adminLegalName: string | null
     sedetusNumber: string | null
     issuedAt: string
     sealShort: string | null
@@ -98,6 +101,7 @@ export async function getReceiptStampAction(lookup: ReceiptStampLookup): Promise
         signerName: receipt.signer_name || 'Administración',
         signerPosition: receipt.signer_position || 'Administración',
         adminLabel,
+        adminLegalName: receipt.admin_type === 'empresa' ? distinctLegalName(receipt.admin_display_name, receipt.admin_legal_name) : null,
         sedetusNumber: receipt.sedetus_registration_number,
         issuedAt: receipt.issued_at,
         sealShort: receipt.seal ? receipt.seal.slice(0, 32).toUpperCase().match(/.{1,8}/g)!.join(' ') : null,

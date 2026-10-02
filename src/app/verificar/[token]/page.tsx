@@ -16,6 +16,7 @@ import {
     Home,
     ExternalLink,
     Hash,
+    FileText,
 } from 'lucide-react'
 import { getVerifiedReceipt } from '@/services/receipt-verification-service'
 
@@ -150,6 +151,7 @@ export default async function VerificarReciboPage({ params }: { params: Promise<
                         label={isEmpresa ? 'Empresa administradora' : receipt.adminType === 'comite' ? 'Comité de administración' : 'Administración'}
                         value={receipt.adminDisplayName}
                     />
+                    <Row icon={FileText} label="Razón social" value={receipt.adminLegalName} />
                     <Row
                         icon={BadgeCheck}
                         label="Matrícula SEDETUS"

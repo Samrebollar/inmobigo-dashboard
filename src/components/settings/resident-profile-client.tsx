@@ -113,6 +113,9 @@ export default function ResidentProfileClient({
 
     // Ficha pública (Empresa o Comité) + QR — solo la recibe el admin real de la organización
     const [adminIdentity, setAdminIdentity] = useState<AdminIdentity | null>(initialAdminIdentity)
+    // El admin/dueño captura su información en la Ficha del Administrador, así que
+    // no ve la tarjeta de Información Personal (staff/contador sí, no tienen ficha).
+    const hasAdminFicha = isOrgAdmin && !!adminIdentity
     const adminTypeLabel = adminIdentity?.admin_type ? ADMIN_TYPE_LABEL[adminIdentity.admin_type] : null
 
     const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || user.user_metadata?.avatar_url || null)
@@ -332,12 +335,14 @@ export default function ResidentProfileClient({
                         </div>
                     </div>
 
-                    <div className="flex gap-3 pb-2 w-full md:w-auto">
-                        <Button className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5" onClick={handleSave} disabled={loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                            Guardar Cambios
-                        </Button>
-                    </div>
+                    {!hasAdminFicha && (
+                        <div className="flex gap-3 pb-2 w-full md:w-auto">
+                            <Button className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5" onClick={handleSave} disabled={loading}>
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                Guardar Cambios
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </motion.div>
 
@@ -348,56 +353,60 @@ export default function ResidentProfileClient({
                     animate="visible"
                     className="md:col-span-2 space-y-6"
                 >
-                    <motion.div
-                        variants={itemVariants}
-                        whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                        className="rounded-3xl border border-zinc-800 bg-zinc-900/50 p-6 hover:bg-zinc-900/80 hover:border-indigo-500/30 transition-all shadow-lg hover:shadow-indigo-500/5"
-                    >
-                        <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                            <User className="h-5 w-5 text-indigo-400" /> Información Personal
-                        </h2>
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label className="text-zinc-400">Nombre(s)</Label>
-                                <Input
-                                    value={resident?.first_name || ''}
-                                    onChange={(e) => setResident({ ...resident, first_name: e.target.value })}
-                                    className="bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-zinc-400">Apellido(s)</Label>
-                                <Input
-                                    value={resident?.last_name || ''}
-                                    onChange={(e) => setResident({ ...resident, last_name: e.target.value })}
-                                    className="bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-zinc-400">Teléfono</Label>
-                                <div className="relative">
-                                    <Phone className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                    {/* El administrador de la organización no edita aquí sus datos personales:
+                        su información se captura en la Ficha del Administrador. */}
+                    {!hasAdminFicha && (
+                        <motion.div
+                            variants={itemVariants}
+                            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                            className="rounded-3xl border border-zinc-800 bg-zinc-900/50 p-6 hover:bg-zinc-900/80 hover:border-indigo-500/30 transition-all shadow-lg hover:shadow-indigo-500/5"
+                        >
+                            <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                                <User className="h-5 w-5 text-indigo-400" /> Información Personal
+                            </h2>
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label className="text-zinc-400">Nombre(s)</Label>
                                     <Input
-                                        value={resident?.phone || ''}
-                                        onChange={(e) => setResident({ ...resident, phone: e.target.value })}
-                                        className="pl-9 bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
-                                        placeholder="+52 (55) 1234-5678"
+                                        value={resident?.first_name || ''}
+                                        onChange={(e) => setResident({ ...resident, first_name: e.target.value })}
+                                        className="bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
                                     />
                                 </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-zinc-400">Correo Electrónico</Label>
-                                <div className="relative">
-                                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                                <div className="space-y-2">
+                                    <Label className="text-zinc-400">Apellido(s)</Label>
                                     <Input
-                                        value={user.email}
-                                        disabled
-                                        className="pl-9 bg-zinc-950/20 border-zinc-800 text-zinc-500 cursor-not-allowed rounded-xl"
+                                        value={resident?.last_name || ''}
+                                        onChange={(e) => setResident({ ...resident, last_name: e.target.value })}
+                                        className="bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
                                     />
                                 </div>
+                                <div className="space-y-2">
+                                    <Label className="text-zinc-400">Teléfono</Label>
+                                    <div className="relative">
+                                        <Phone className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                                        <Input
+                                            value={resident?.phone || ''}
+                                            onChange={(e) => setResident({ ...resident, phone: e.target.value })}
+                                            className="pl-9 bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950"
+                                            placeholder="+52 (55) 1234-5678"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-zinc-400">Correo Electrónico</Label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                                        <Input
+                                            value={user.email}
+                                            disabled
+                                            className="pl-9 bg-zinc-950/20 border-zinc-800 text-zinc-500 cursor-not-allowed rounded-xl"
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </motion.div>
+                        </motion.div>
+                    )}
 
                     {isOrgAdmin && adminIdentity && (
                         <AdminIdentityCard

@@ -56,6 +56,12 @@ export async function saveAdminIdentityAction(input: AdminIdentityInput): Promis
         return { success: false, error: 'El RFC no tiene un formato válido (12 o 13 caracteres)' }
     }
 
+    const issue = cleanDate(input.sedetus_issue_date)
+    const expiry = cleanDate(input.sedetus_expiry_date)
+    if (issue && expiry && expiry < issue) {
+        return { success: false, error: 'La vigencia de la acreditación SEDETUS no puede ser anterior a su fecha de emisión' }
+    }
+
     const members: CommitteeMember[] = (Array.isArray(input.committee_members) ? input.committee_members : [])
         .slice(0, 20)
         .map((m) => ({
@@ -90,6 +96,12 @@ export async function saveAdminIdentityAction(input: AdminIdentityInput): Promis
         office_address: clean(input.office_address),
         office_hours: clean(input.office_hours),
         description: clean(input.description),
+        // La acreditación SEDETUS aplica a Empresa y a Comité por igual
+        sedetus_registration_number: clean(input.sedetus_registration_number)?.toUpperCase() || null,
+        sedetus_holder_name: clean(input.sedetus_holder_name),
+        sedetus_issue_date: cleanDate(input.sedetus_issue_date),
+        sedetus_expiry_date: cleanDate(input.sedetus_expiry_date),
+        sedetus_document_url: clean(input.sedetus_document_url),
         updated_at: new Date().toISOString(),
     }
 

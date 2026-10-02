@@ -25,16 +25,39 @@ import {
     FileText,
     UserPlus,
     EyeOff,
+    BadgeCheck,
+    Upload,
+    Paperclip,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { saveAdminIdentityAction, regenerateAdminQrAction } from '@/app/actions/admin-identity-actions'
-import { COMMITTEE_POSITIONS, type AdminIdentity, type AdminType, type CommitteeMember } from '@/types/admin-identity'
+import { createClient } from '@/utils/supabase/client'
+import {
+    COMMITTEE_POSITIONS,
+    SEDETUS_STATUS_LABEL,
+    getSedetusStatus,
+    type AdminIdentity,
+    type AdminType,
+    type CommitteeMember,
+    type SedetusStatus,
+} from '@/types/admin-identity'
 
 const inputClass = 'bg-zinc-950/50 border-zinc-800 focus:border-indigo-500 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950'
 const textareaClass = 'w-full min-h-[80px] px-3 py-2 text-sm text-white placeholder:text-zinc-600 bg-zinc-950/50 border border-zinc-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 rounded-xl transition-all hover:bg-zinc-950 resize-y'
+
+export const SEDETUS_STATUS_STYLE: Record<SedetusStatus, string> = {
+    vigente: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    sin_vigencia: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    por_vencer: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    vencida: 'text-red-400 bg-red-500/10 border-red-500/20',
+    sin_registro: 'text-zinc-400 bg-zinc-500/10 border-zinc-700',
+}
+
+const SEDETUS_MAX_BYTES = 10 * 1024 * 1024
+const SEDETUS_MIME = ['application/pdf', 'image/jpeg', 'image/png']
 
 export const ADMIN_TYPE_LABEL: Record<AdminType, string> = {
     empresa: 'Empresa administradora',
@@ -75,6 +98,9 @@ export function AdminIdentityCard({
 }) {
     const [form, setForm] = useState<AdminIdentity>(identity)
     const [saving, setSaving] = useState(false)
+    const [uploadingDoc, setUploadingDoc] = useState(false)
+    const docInputRef = useRef<HTMLInputElement>(null)
+    const sedetusStatus = getSedetusStatus(form)
 
     useEffect(() => {
         setForm((prev) => ({ ...prev, public_token: identity.public_token, is_public: identity.is_public }))
@@ -94,6 +120,30 @@ export function AdminIdentityCard({
     const removeMember = (index: number) => set('committee_members', form.committee_members.filter((_, i) => i !== index))
 
     const alreadyListed = form.committee_members.some((m) => m.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+
+    const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        e.target.value = ''
+        if (!file) return
+        if (!SEDETUS_MIME.includes(file.type)) return void toast.error('La constancia debe ser PDF, JPG o PNG.')
+        if (file.size > SEDETUS_MAX_BYTES) return void toast.error('La constancia no puede pesar más de 10 MB.')
+
+        setUploadingDoc(true)
+        try {
+            const supabase = createClient()
+            const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+            const filePath = `admin-accreditation/${form.organization_id}/sedetus-${Date.now()}.${ext}`
+            const { error } = await supabase.storage.from('condominium_documents').upload(filePath, file, { upsert: true })
+            if (error) throw error
+            const { data } = supabase.storage.from('condominium_documents').getPublicUrl(filePath)
+            set('sedetus_document_url', data.publicUrl)
+            toast.success('Constancia cargada. Presiona "Guardar ficha" para publicarla.')
+        } catch (error: any) {
+            toast.error(`No se pudo subir la constancia: ${error.message || 'Error de red'}`)
+        } finally {
+            setUploadingDoc(false)
+        }
+    }
 
     const handleSave = async () => {
         setSaving(true)
@@ -259,6 +309,65 @@ export function AdminIdentityCard({
                         </section>
                     )}
 
+                    {/* Acreditación SEDETUS — obligatoria para Empresa y para Comité */}
+                    <section className="space-y-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.03] p-4 md:p-5">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-xs font-black text-indigo-300 uppercase tracking-[0.2em] flex items-center gap-2">
+                                    <BadgeCheck className="h-4 w-4" /> Matriculación y Acreditación
+                                </h3>
+                                <p className="text-xs text-zinc-500 mt-1">
+                                    Registro de Administrador Condominal emitido por la SEDETUS (Secretaría de Desarrollo Territorial Urbano Sustentable). Requisito obligatorio.
+                                </p>
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border shrink-0 ${SEDETUS_STATUS_STYLE[sedetusStatus]}`}>
+                                {SEDETUS_STATUS_LABEL[sedetusStatus]}
+                            </span>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <Field label="Número de matrícula / registro">
+                                <Input value={form.sedetus_registration_number || ''} onChange={(e) => set('sedetus_registration_number', e.target.value.toUpperCase())} className={`${inputClass} uppercase`} placeholder="Ej. SEDETUS-AC-0123/2026" />
+                            </Field>
+                            <Field label="Administrador acreditado">
+                                <Input
+                                    value={form.sedetus_holder_name || ''}
+                                    onChange={(e) => set('sedetus_holder_name', e.target.value)}
+                                    className={inputClass}
+                                    placeholder={form.admin_type === 'empresa' ? 'Persona o empresa que aparece en la constancia' : currentUser.name || 'Nombre en la constancia'}
+                                />
+                            </Field>
+                            <Field label="Fecha de emisión">
+                                <Input type="date" value={form.sedetus_issue_date || ''} onChange={(e) => set('sedetus_issue_date', e.target.value)} className={inputClass} />
+                            </Field>
+                            <Field label="Vigente hasta">
+                                <Input type="date" value={form.sedetus_expiry_date || ''} onChange={(e) => set('sedetus_expiry_date', e.target.value)} className={inputClass} />
+                            </Field>
+                            <Field label="Constancia de acreditación" className="md:col-span-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    {form.sedetus_document_url ? (
+                                        <a href={form.sedetus_document_url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-center gap-2 h-10 px-3 rounded-xl border border-zinc-800 bg-zinc-950/50 text-sm text-indigo-300 hover:bg-zinc-950">
+                                            <Paperclip className="h-4 w-4 shrink-0" /> <span className="truncate">Ver constancia cargada</span>
+                                        </a>
+                                    ) : (
+                                        <div className="flex-1 flex items-center gap-2 h-10 px-3 rounded-xl border border-dashed border-zinc-800 text-sm text-zinc-500">
+                                            <Paperclip className="h-4 w-4 shrink-0" /> Sin constancia (PDF, JPG o PNG, máx. 10 MB)
+                                        </div>
+                                    )}
+                                    <input ref={docInputRef} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={handleDocumentUpload} />
+                                    <Button type="button" variant="ghost" onClick={() => docInputRef.current?.click()} disabled={uploadingDoc} className="h-10 rounded-xl text-xs text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 gap-1.5">
+                                        {uploadingDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                        {form.sedetus_document_url ? 'Reemplazar' : 'Subir constancia'}
+                                    </Button>
+                                    {form.sedetus_document_url && (
+                                        <Button type="button" variant="ghost" onClick={() => set('sedetus_document_url', null)} className="h-10 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10" aria-label="Quitar constancia">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </Field>
+                        </div>
+                    </section>
+
                     {/* Datos de atención — aplican a ambos tipos */}
                     <section className="space-y-4">
                         <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">Atención a residentes</h3>
@@ -393,6 +502,11 @@ export function AdminQrCard({
                         {identity.admin_type ? ADMIN_TYPE_LABEL[identity.admin_type] : 'Administración'}
                     </p>
                     <p className="text-sm font-bold text-zinc-900 leading-tight mb-3 line-clamp-2">{title}</p>
+                    {identity.sedetus_registration_number && getSedetusStatus(identity) !== 'vencida' && (
+                        <p className="-mt-2 mb-3 text-[9px] font-bold text-emerald-700 flex items-center gap-1">
+                            <BadgeCheck className="h-3 w-3" /> Acreditado SEDETUS · {identity.sedetus_registration_number}
+                        </p>
+                    )}
                     {url ? (
                         <QRCode value={url} size={168} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} viewBox="0 0 256 256" />
                     ) : (

@@ -15,9 +15,13 @@ import {
     ShieldCheck,
     MessageCircle,
     Home,
+    BadgeCheck,
+    AlertTriangle,
+    Paperclip,
 } from 'lucide-react'
 import { getPublicAdminCard } from '@/services/admin-identity-service'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
+import { getSedetusStatus, SEDETUS_STATUS_LABEL } from '@/types/admin-identity'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +72,8 @@ export default async function AdministradorPublicPage({ params }: { params: Prom
     const periodStart = formatDate(identity.committee_period_start)
     const periodEnd = formatDate(identity.committee_period_end)
     const period = periodStart || periodEnd ? `${periodStart || '—'} al ${periodEnd || '—'}` : null
+    const sedetusStatus = getSedetusStatus(identity)
+    const sedetusOk = sedetusStatus === 'vigente' || sedetusStatus === 'por_vencer' || sedetusStatus === 'sin_vigencia'
     const websiteHref = identity.website ? (/^https?:\/\//.test(identity.website) ? identity.website : `https://${identity.website}`) : undefined
 
     return (
@@ -133,6 +139,35 @@ export default async function AdministradorPublicPage({ params }: { params: Prom
                             <InfoRow icon={CalendarDays} label="Periodo de gestión" value={period} />
                             <InfoRow icon={FileText} label="Acta de asamblea" value={formatDate(identity.assembly_date)} />
                         </>
+                    )}
+                </section>
+
+                {/* Matriculación y Acreditación SEDETUS (Empresa y Comité) */}
+                <section className={`rounded-[2rem] border p-6 space-y-4 ${sedetusOk ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : 'border-zinc-800 bg-zinc-900/60'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Matriculación y Acreditación</h2>
+                            <p className="text-[11px] text-zinc-500 mt-1">Administrador Condominal · SEDETUS</p>
+                        </div>
+                        <span className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-full border shrink-0 ${sedetusOk
+                            ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                            : sedetusStatus === 'vencida'
+                                ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                                : 'text-zinc-400 bg-zinc-500/10 border-zinc-700'}`}>
+                            {sedetusOk ? <BadgeCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                            {SEDETUS_STATUS_LABEL[sedetusStatus]}
+                        </span>
+                    </div>
+                    {identity.sedetus_registration_number ? (
+                        <>
+                            <InfoRow icon={BadgeCheck} label="Número de matrícula" value={identity.sedetus_registration_number} />
+                            <InfoRow icon={UserCircle2} label="Administrador acreditado" value={identity.sedetus_holder_name} />
+                            <InfoRow icon={CalendarDays} label="Fecha de emisión" value={formatDate(identity.sedetus_issue_date)} />
+                            <InfoRow icon={CalendarDays} label="Vigente hasta" value={formatDate(identity.sedetus_expiry_date)} />
+                            <InfoRow icon={Paperclip} label="Constancia" value={identity.sedetus_document_url ? 'Ver documento' : null} href={identity.sedetus_document_url || undefined} />
+                        </>
+                    ) : (
+                        <p className="text-sm text-zinc-500">La administración aún no ha registrado su matrícula ante la SEDETUS.</p>
                     )}
                 </section>
 

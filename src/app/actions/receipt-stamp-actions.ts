@@ -103,11 +103,26 @@ export async function getReceiptStampAction(lookup: ReceiptStampLookup): Promise
 
     if (!(await canAccess(receipt.organization_id, receipt.resident_id))) return null
 
-    // La firma está en un bucket privado: se incrusta como data URL
+    // Un recibo vigente muestra siempre la firma ACTUAL de su firmante (si la
+    // cambia, se actualiza en todos sus recibos). Solo si ya no tiene firma se usa
+    // la guardada en el recibo. La firma está en un bucket privado: se incrusta
+    // como data URL.
     let signatureDataUrl: string | null = null
-    if (receipt.status === 'valido' && receipt.signer_signature_path) {
-        const { data: file } = await admin.storage.from('signatures').download(receipt.signer_signature_path)
-        if (file) signatureDataUrl = `data:image/png;base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}`
+    if (receipt.status === 'valido') {
+        let signaturePath: string | null = receipt.signer_signature_path
+        if (receipt.signer_user_id) {
+            const { data: signer } = await admin.from('profiles').select('signature_path').eq('id', receipt.signer_user_id).maybeSingle()
+            if (signer?.signature_path) {
+                signaturePath = signer.signature_path
+                if (signaturePath !== receipt.signer_signature_path) {
+                    await admin.from('payment_receipts').update({ signer_signature_path: signaturePath }).eq('id', receipt.id)
+                }
+            }
+        }
+        if (signaturePath) {
+            const { data: file } = await admin.storage.from('signatures').download(signaturePath)
+            if (file) signatureDataUrl = `data:image/png;base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}`
+        }
     }
 
     const typeLabel = receipt.admin_type ? ADMIN_TYPE_LABEL[receipt.admin_type] : null

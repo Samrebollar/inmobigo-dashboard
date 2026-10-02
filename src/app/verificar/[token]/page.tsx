@@ -28,13 +28,15 @@ export const metadata = {
 
 const money = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+// El servidor corre en UTC: la hora se muestra en la zona de México, igual que en el PDF
 const formatDateTime = (iso: string | null) => {
     if (!iso) return null
-    try {
-        return format(parseISO(iso), "d 'de' MMMM yyyy, HH:mm 'h'", { locale: es })
-    } catch {
-        return iso
-    }
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return iso
+    const tz = { timeZone: 'America/Mexico_City' } as const
+    const day = date.toLocaleDateString('es-MX', { ...tz, day: 'numeric', month: 'long', year: 'numeric' })
+    const time = date.toLocaleTimeString('es-MX', { ...tz, hour: '2-digit', minute: '2-digit', hour12: false })
+    return `${day}, ${time} h`
 }
 
 const formatDate = (iso: string | null) => {

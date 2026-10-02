@@ -8,6 +8,8 @@ export interface AdminContact {
     phone: string | null
     email: string | null
     avatarUrl: string | null
+    /** Ruta de la ficha pública (QR) del administrador, si la tiene activa */
+    publicCardPath?: string | null
 }
 
 export interface AccountStatus {
@@ -100,8 +102,16 @@ export async function resolveProfileData(supabase: SupabaseClient, user: any): P
             .limit(1)
             .maybeSingle()
 
+        const { data: publicCard } = await adminSupabase
+            .from('admin_public_profiles')
+            .select('public_token, is_public, admin_type')
+            .eq('organization_id', organizationId)
+            .maybeSingle()
+        const publicCardPath = publicCard?.is_public && publicCard.admin_type ? `/administrador/${publicCard.public_token}` : null
+
         if (adminProfile) {
             adminContact = {
+                publicCardPath,
                 name: adminProfile.full_name || 'Administrador',
                 phone: adminProfile.phone || null,
                 email: adminProfile.email || null,

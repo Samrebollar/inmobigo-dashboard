@@ -23,12 +23,16 @@ import {
     Layers,
     MessageSquare,
     Camera,
-    ShieldCheck
+    ShieldCheck,
+    Building2,
+    QrCode
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
 import { ContactInmobiGoCard } from '@/components/shared/ContactInmobiGoCard'
 import { syncMyPhoneAction } from '@/app/actions/profile-actions'
+import { AdminIdentityCard, AdminQrCard, ADMIN_TYPE_LABEL } from '@/components/settings/admin-identity-section'
+import type { AdminIdentity } from '@/types/admin-identity'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -39,6 +43,7 @@ interface AdminContact {
     phone: string | null
     email: string | null
     avatarUrl: string | null
+    publicCardPath?: string | null
 }
 
 interface AccountStatus {
@@ -58,6 +63,7 @@ export default function ResidentProfileClient({
     organizationName,
     adminContact,
     accountStatus,
+    adminIdentity: initialAdminIdentity = null,
     financeHref = '/dashboard/finance'
 }: {
     user: any,
@@ -69,6 +75,7 @@ export default function ResidentProfileClient({
     organizationName?: string | null,
     adminContact?: AdminContact | null,
     accountStatus?: AccountStatus | null,
+    adminIdentity?: AdminIdentity | null,
     financeHref?: string
 }) {
     const router = useRouter()
@@ -103,6 +110,10 @@ export default function ResidentProfileClient({
             ...res
         }
     })
+
+    // Ficha pública (Empresa o Comité) + QR — solo la recibe el admin real de la organización
+    const [adminIdentity, setAdminIdentity] = useState<AdminIdentity | null>(initialAdminIdentity)
+    const adminTypeLabel = adminIdentity?.admin_type ? ADMIN_TYPE_LABEL[adminIdentity.admin_type] : null
 
     const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || user.user_metadata?.avatar_url || null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -265,7 +276,9 @@ export default function ResidentProfileClient({
                     >
                         <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                         <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-100">
-                            {isAdmin ? 'Administrador' : 'Residente'} <span className="text-indigo-400">Verificado</span>
+                            {isOrgAdmin && adminIdentity?.admin_type
+                                ? (adminIdentity.admin_type === 'empresa' ? 'Empresa' : 'Comité')
+                                : isAdmin ? 'Administrador' : 'Residente'} <span className="text-indigo-400">Verificado</span>
                         </span>
                     </motion.div>
                 </div>
@@ -304,6 +317,12 @@ export default function ResidentProfileClient({
                             {resident?.first_name ? `${resident.first_name} ${resident.last_name || ''}` : isAdmin ? 'Administrador' : 'Residente'}
                         </h1>
                         <div className="flex flex-col gap-1">
+                            {isOrgAdmin && adminTypeLabel && (
+                                <p className="text-indigo-300 flex items-center gap-2 text-sm font-medium">
+                                    <Building2 className="h-4 w-4" /> {adminTypeLabel}
+                                    {(adminIdentity?.display_name || organizationName) && <span className="text-zinc-500">· {adminIdentity?.display_name || organizationName}</span>}
+                                </p>
+                            )}
                             <p className="text-zinc-400 flex items-center gap-2 text-sm">
                                 <Mail className="h-4 w-4" /> {user.email}
                             </p>
@@ -380,6 +399,18 @@ export default function ResidentProfileClient({
                         </div>
                     </motion.div>
 
+                    {isOrgAdmin && adminIdentity && (
+                        <AdminIdentityCard
+                            identity={adminIdentity}
+                            onSaved={setAdminIdentity}
+                            currentUser={{
+                                name: `${resident.first_name || ''} ${resident.last_name || ''}`.trim() || profile?.full_name || '',
+                                phone: resident.phone || null,
+                                email: user.email || null,
+                            }}
+                        />
+                    )}
+
                     {isOrgAdmin && (
                         <ContactInmobiGoCard
                             organizationName={organizationName}
@@ -433,6 +464,14 @@ export default function ResidentProfileClient({
 
                 {/* Right Column: Mini Cards */}
                 <div className="space-y-6">
+                    {isOrgAdmin && adminIdentity && (
+                        <AdminQrCard
+                            identity={adminIdentity}
+                            organizationName={organizationName}
+                            onChange={setAdminIdentity}
+                        />
+                    )}
+
                     {/* Administrator Mini Card — para residente/inquilino y también para
                         seguridad/staff, que sí necesitan saber quién es su administrador
                         (solo el admin/dueño real de la organización no la ve). */}
@@ -480,6 +519,11 @@ export default function ResidentProfileClient({
                                     >
                                         <MessageSquare size={14} /> Contactar
                                     </Button>
+                                    {adminContact.publicCardPath && (
+                                        <a href={adminContact.publicCardPath} target="_blank" rel="noopener noreferrer" className="mt-2 w-full h-9 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] text-zinc-300 bg-zinc-950/50 border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center gap-2 transition-colors">
+                                            <QrCode size={14} /> Ver ficha del administrador
+                                        </a>
+                                    )}
                                 </motion.div>
                     )}
 

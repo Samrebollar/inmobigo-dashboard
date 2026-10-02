@@ -57,7 +57,7 @@ export async function updateSession(request: NextRequest) {
     // Excluimos explícitamente rutas conocidas de la app para evitar conflictos
     const reservedRoutes = [
         'dashboard', 'login', 'register', 'auth', 'onboarding', 'owner', 'pase', 'api',
-        'seguridad', 'residente', 'inquilino', 'acceso-residente', 'activar-residente', 'reset-password', 'test-route'
+        'seguridad', 'residente', 'inquilino', 'acceso-residente', 'activar-residente', 'reset-password', 'test-route', 'administrador'
     ]
     const isVisitRoute = pathname !== '/' && 
                         /^\/[a-zA-Z0-9-]+$/.test(pathname) && 
@@ -75,6 +75,7 @@ export async function updateSession(request: NextRequest) {
         pathname.startsWith('/auth/verify') || 
         pathname.startsWith('/acceso-residente') || 
         pathname.startsWith('/activar-residente') || 
+        pathname.startsWith('/administrador/') || 
         pathname.startsWith('/api') ||
         pathname.includes('.')
 

@@ -13,6 +13,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Plus, Pencil } from 'lucide-react'
 import { getBankAccounts, saveBankAccount, deleteBankAccount } from '@/app/actions/bank-account-actions'
 import { propertiesService } from '@/services/properties-service'
+import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
 
 interface PaymentValidationClientProps {
     organizationId: string
@@ -300,6 +301,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
 
     return (
         <div className="space-y-6">
+            <ReceiptSigningNotice profileHref="/seguridad/perfil" />
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-white">Validación de Pagos</h1>
@@ -369,11 +371,9 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
                                         <td className="px-6 py-4">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button onClick={() => setSelectedProof(item.comprobante_url)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-indigo-400 transition-all"><Eye size={18} /></button>
+                                                {/* Seguridad no aprueba ni rechaza: el recibo lleva la firma de la administración */}
                                                 {item.status === 'pendiente' ? (
-                                                    <>
-                                                        <button onClick={() => setApproveConfirmationItem(item)} className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-bold text-xs">Aprobar</button>
-                                                        <button onClick={() => openRejectModal(item)} className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold text-xs">Rechazar</button>
-                                                    </>
+                                                    <span className="px-3 py-1.5 rounded-xl bg-zinc-800/60 text-zinc-500 font-bold text-[10px] uppercase tracking-wider">Lo valida la administración</span>
                                                 ) : null}
                                                 <button onClick={() => setDeleteConfirmation(item.id)} className="p-2 rounded-xl bg-white/[0.03] text-zinc-400 hover:text-rose-400 transition-all"><Trash size={18} /></button>
                                             </div>

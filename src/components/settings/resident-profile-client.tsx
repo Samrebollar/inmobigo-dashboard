@@ -32,6 +32,7 @@ import { ContactInmobiGoCard } from '@/components/shared/ContactInmobiGoCard'
 import { syncMyPhoneAction } from '@/app/actions/profile-actions'
 import { AdminIdentityCard, AdminQrCard, ADMIN_TYPE_LABEL } from '@/components/settings/admin-identity-section'
 import type { AdminIdentity } from '@/types/admin-identity'
+import { SignatureCard } from '@/components/settings/signature-card'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -63,6 +64,8 @@ export default function ResidentProfileClient({
     adminContact,
     accountStatus,
     adminIdentity: initialAdminIdentity = null,
+    canSignReceipts = false,
+    signature = null,
     financeHref = '/dashboard/finance'
 }: {
     user: any,
@@ -75,6 +78,8 @@ export default function ResidentProfileClient({
     adminContact?: AdminContact | null,
     accountStatus?: AccountStatus | null,
     adminIdentity?: AdminIdentity | null,
+    canSignReceipts?: boolean,
+    signature?: { url: string | null; updatedAt: string | null } | null,
     financeHref?: string
 }) {
     const router = useRouter()
@@ -412,6 +417,8 @@ export default function ResidentProfileClient({
                             </div>
                         </motion.div>
                     )}
+
+                    {canSignReceipts && <SignatureCard initialSignature={signature} />}
 
                     {isOrgAdmin && adminIdentity && (
                         <AdminIdentityCard

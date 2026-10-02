@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/modal'
 import { Calendar, DollarSign, CreditCard, FileText, Loader2, CheckCircle2 } from 'lucide-react'
 import { financeService } from '@/services/finance-service'
 import { ResidentInvoice, ResidentInvoicePayment } from '@/types/finance'
+import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
 
 interface RegisterPaymentModalProps {
     isOpen: boolean
@@ -77,6 +78,7 @@ export function RegisterPaymentModal({ isOpen, onClose, condominiumId, invoice, 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Registrar Pago">
             <form onSubmit={handleSubmit} className="space-y-4">
+                <ReceiptSigningNotice />
 
                 <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg space-y-1">
                     <p className="text-xs text-zinc-400 flex items-center gap-2">

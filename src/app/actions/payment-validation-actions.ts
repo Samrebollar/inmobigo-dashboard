@@ -7,6 +7,7 @@ import { buildFolio } from '@/services/legacy-sync-service'
 import { randomUUID } from 'crypto'
 import { createAdminClient as createServiceClient } from '@/utils/supabase/admin'
 import { getCondominiumAccess, SUSPENDED_RESIDENT_MESSAGE } from '@/lib/subscription-access'
+import { checkCanSignPayments, issuePaymentReceipt, SECURITY_CANNOT_SIGN_ERROR } from '@/lib/payment-receipts'
 
 /**
  * @param residentId - Cuando se pasa (pantalla del residente), acota el
@@ -109,6 +110,14 @@ export async function updateValidationStatus(
 
         if (validation.status === 'aprobado' && status === 'aprobado') {
             return { success: true }
+        }
+
+        // Aprobar un comprobante emite un recibo firmado por quien lo valida:
+        // seguridad no puede validar (ni aprobar ni rechazar), y para aprobar
+        // hay que tener la firma cargada.
+        const signing = await checkCanSignPayments(createServiceClient(), user.id, belongsToOrg)
+        if (!signing.ok && (status === 'aprobado' || signing.error === SECURITY_CANNOT_SIGN_ERROR)) {
+            return { success: false, error: signing.error }
         }
 
         // 2. Actualizar estado de la validación
@@ -245,6 +254,7 @@ export async function updateValidationStatus(
                         created_by: user.id,
                     })
                     if (payErr) console.error('[Validation] Error registrando el pago', invoiceId, payErr)
+                    else await issuePaymentReceipt(createServiceClient(), payId, 'manual')
                 }
 
                 // ── Aplicar pago a facturas existentes ────────────────────────────

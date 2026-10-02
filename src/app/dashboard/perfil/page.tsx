@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server'
 import ResidentProfileClient from '@/components/settings/resident-profile-client'
 import { resolveProfileData } from '@/services/profile-service'
 import { getOrCreateAdminIdentity, ORG_OWNER_ROLES } from '@/services/admin-identity-service'
+import { getUserSignature } from '@/lib/payment-receipts'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 
 export default async function ProfilePage() {
@@ -23,6 +25,11 @@ export default async function ProfilePage() {
         })
         : null
 
+    // Firma para los recibos de pago: la registra todo el equipo que puede
+    // registrar o validar pagos (seguridad no, su firma no vale en un recibo)
+    const canSignReceipts = data.isAdmin && data.role !== 'security' && !!data.organizationId
+    const signature = canSignReceipts ? await getUserSignature(createAdminClient(), user.id) : null
+
     return (
         <ResidentProfileClient
             user={user}
@@ -35,6 +42,8 @@ export default async function ProfilePage() {
             adminContact={data.adminContact}
             accountStatus={data.accountStatus}
             adminIdentity={adminIdentity}
+            canSignReceipts={canSignReceipts}
+            signature={signature}
             financeHref={data.isAdmin ? '/dashboard/finance' : '/dashboard/payments'}
         />
     )

@@ -92,6 +92,7 @@ export default function MobilePagosClient({
         generateReceiptForResident(
             {
                 folio: mostRecentPaid.folio,
+                invoiceId: mostRecentPaid.id,
                 concept: mostRecentPaid.concept,
                 amount: mostRecentPaid.amount,
                 payment_method: mostRecentPaid.paymentMethod,

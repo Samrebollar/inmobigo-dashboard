@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
 
 interface AdminPaymentsClientProps {
     payments: any[]
@@ -128,7 +129,7 @@ export function AdminPaymentsClient({ payments }: AdminPaymentsClientProps) {
         )
     }
 
-    const handleDownloadPDF = (payment: any) => {
+    const handleDownloadPDF = async (payment: any) => {
         try {
             const doc = new jsPDF()
             doc.setFillColor(79, 70, 229)
@@ -170,6 +171,9 @@ export function AdminPaymentsClient({ payments }: AdminPaymentsClientProps) {
                 styles: { fontSize: 10, cellPadding: 5 },
                 headStyles: { fillColor: [79, 70, 229] },
             })
+
+            // QR de verificación, firma del validador, matrícula SEDETUS y sello digital
+            await stampReceiptPdf(doc, { paymentId: payment.id, folio: payment.folio }, (doc as any).lastAutoTable.finalY + 12)
 
             doc.save(`Pago_${payment.resident_name?.replace(/\s+/g, '_') || 'Transaccion'}.pdf`)
         } catch (e) {

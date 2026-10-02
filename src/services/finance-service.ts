@@ -372,6 +372,8 @@ export const financeService = {
         paymentMethod?: string
         notes?: string
         paidAt?: string
+        /** Folio de un cobro ya iniciado, para agrupar varias cuotas bajo un mismo recibo */
+        folio?: string
     }): Promise<{ payment: ResidentInvoicePayment; invoice: ResidentInvoice }> {
         if (condominiumId.startsWith('demo-') || params.invoiceId.startsWith('demo-')) {
             throw new Error('No se pueden registrar pagos en modo demostración.')

@@ -14,6 +14,7 @@ import { Plus, Pencil } from 'lucide-react'
 import { getBankAccounts, saveBankAccount, deleteBankAccount } from '@/app/actions/bank-account-actions'
 import { propertiesService } from '@/services/properties-service'
 import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
+import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
 
 interface PaymentValidationClientProps {
     organizationId: string
@@ -280,6 +281,8 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
             doc.setFont('helvetica', 'bold')
             doc.setTextColor(60, 60, 60)
             doc.text(`Total Procesado: $${Number(item.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
+            // QR de verificación, firma del validador, matrícula SEDETUS y sello digital
+            await stampReceiptPdf(doc, { folio: receiptFolio }, finalY + 10)
             doc.setFontSize(8)
             doc.setTextColor(150, 150, 150)
             doc.setFont('helvetica', 'normal')

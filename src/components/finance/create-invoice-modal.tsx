@@ -15,6 +15,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { CreateInvoiceDTO, InvoiceType, ResidentInvoice } from '@/types/finance'
 import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
+import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
 
 // Mismo mapeo de categorías usadas en el alta de deuda inicial de un residente
 // (src/app/actions/resident-actions.ts) — así una Multa o Cuota Extraordinaria
@@ -295,7 +296,7 @@ export function CreateInvoiceModal({
 
     const condoName = () => condominiums.find(c => c.id === (selectedResident?.condominium_id || selectedCondoId))?.name || 'Condominio'
 
-    const downloadReceipt = (opts: {
+    const downloadReceipt = async (opts: {
         folio: string
         rows: { concept: string, period: string, amount: number }[]
         total: number
@@ -371,6 +372,9 @@ export function CreateInvoiceModal({
                 doc.text(doc.splitTextToSize(notes, 180), 14, y + 6)
             }
 
+            // QR de verificación, firma de quien cobró, matrícula SEDETUS y sello digital
+            await stampReceiptPdf(doc, { folio: opts.folio }, y + (notes ? 20 : 18))
+
             doc.setFontSize(8)
             doc.setTextColor(150, 150, 150)
             doc.setFont('helvetica', 'normal')
@@ -441,7 +445,7 @@ export function CreateInvoiceModal({
                 const c = Math.min(creditPool, balance)
                 if (c > 0.009) {
                     const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
-                        invoiceId: row.id, amount: Number(c.toFixed(2)), paymentMethod: 'Saldo a favor', notes: notes || undefined, paidAt,
+                        invoiceId: row.id, amount: Number(c.toFixed(2)), paymentMethod: 'Saldo a favor', notes: notes || undefined, paidAt, folio: folio || undefined,
                     })
                     if (!folio && payment?.folio) folio = payment.folio
                     creditPool -= c
@@ -451,7 +455,7 @@ export function CreateInvoiceModal({
                 const k = Math.min(moneyPool, balance)
                 if (k > 0.009) {
                     const { payment } = await financeService.registerPayment(selectedResident.condominium_id, {
-                        invoiceId: row.id, amount: Number(k.toFixed(2)), paymentMethod, notes: notes || undefined, paidAt,
+                        invoiceId: row.id, amount: Number(k.toFixed(2)), paymentMethod, notes: notes || undefined, paidAt, folio: folio || undefined,
                     })
                     if (!folio && payment?.folio) folio = payment.folio
                     moneyPool -= k

@@ -254,6 +254,9 @@ export async function POST(
 
         if (body.action === 'register_payment') {
             const { invoiceId, amount, paymentMethod, notes, paidAt } = body
+            // Un cobro que abarca varias cuotas comparte folio: así su recibo (y su
+            // QR) amparan el total del cobro, no solo una cuota.
+            const groupFolio = typeof body.folio === 'string' && /^REC-[A-Z0-9]{6,12}$/.test(body.folio) ? body.folio : null
             const paymentAmount = Number(amount)
 
             if (!invoiceId || !paymentAmount || paymentAmount <= 0) {
@@ -297,7 +300,7 @@ export async function POST(
             }
 
             const paymentId = randomUUID()
-            const folio = `REC-${paymentId.substring(0, 8).toUpperCase()}`
+            const folio = groupFolio || `REC-${paymentId.substring(0, 8).toUpperCase()}`
             const paidAtIso = paidAt || new Date().toISOString()
 
             const { data: payment, error: paymentError } = await adminSupabase

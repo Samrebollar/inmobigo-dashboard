@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { createClient } from '@/utils/supabase/client'
+import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
 
 const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
@@ -159,7 +160,7 @@ export default function InvoiceDetailPage() {
     const currentStatus = isPaid ? statusConfig.paid : isOverdue ? statusConfig.overdue : statusConfig.pending
     const StatusIcon = currentStatus.icon
 
-    const handleDownloadPDF = () => {
+    const handleDownloadPDF = async () => {
         if (!invoice) return
         const doc = new jsPDF()
 
@@ -245,6 +246,9 @@ export default function InvoiceDetailPage() {
         doc.text('Agradecemos su valiosa contribución para el mantenimiento de nuestro condominio.', 14, finalY + 22)
         doc.text('Para cualquier duda o aclaración sobre este documento, por favor contacte a la administración.', 14, finalY + 28)
         doc.text(`Referencia de documento: ${invoice.folio}`, 14, finalY + 34)
+
+        // Si la factura ya se pagó: QR de verificación, firma, matrícula SEDETUS y sello digital
+        if (isPaid) await stampReceiptPdf(doc, { invoiceId: invoice.id }, finalY + 42)
 
         doc.save(`Factura_${invoice.folio || 'Documento'}.pdf`)
     }

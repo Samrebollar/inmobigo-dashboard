@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable'
 
 import { createClient } from '@/utils/supabase/client'
 import { getBankAccounts } from '@/app/actions/bank-account-actions'
+import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
 
 interface SubirComprobanteClientProps {
     resident: any
@@ -89,7 +90,7 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
         }
     }, [resident.id])
 
-    const generateReceipt = (item: any) => {
+    const generateReceipt = async (item: any) => {
         try {
             const doc = new jsPDF()
             
@@ -104,7 +105,7 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
             
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
-            doc.text(`Folio: REC-${Date.now().toString().slice(-6)}`, 150, 16)
+            doc.text(`Folio: ${item.folio || `REC-${Date.now().toString().slice(-6)}`}`, 150, 16)
             doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 150, 23)
             
             // Resident Info
@@ -152,6 +153,9 @@ export function SubirComprobanteClient({ resident }: SubirComprobanteClientProps
             doc.setFont('helvetica', 'bold')
             doc.setTextColor(60, 60, 60)
             doc.text(`Total Procesado: $${Number(item.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
+
+            // QR de verificación, firma del validador, matrícula SEDETUS y sello digital
+            if (item.folio) await stampReceiptPdf(doc, { folio: item.folio }, finalY + 10)
             
             // Footer
             doc.setFontSize(8)

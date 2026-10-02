@@ -14,6 +14,7 @@ import { useUserRole } from '@/hooks/use-user-role'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { CreateInvoiceDTO, InvoiceType, ResidentInvoice } from '@/types/finance'
+import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
 
 // Mismo mapeo de categorías usadas en el alta de deuda inicial de un residente
 // (src/app/actions/resident-actions.ts) — así una Multa o Cuota Extraordinaria
@@ -582,6 +583,7 @@ export function CreateInvoiceModal({
         <Modal isOpen={isOpen} onClose={onClose} title="Nuevo Recibo" className="max-w-2xl">
             <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
                 <div className="flex-1 overflow-y-auto px-1 pr-3 space-y-5 custom-scrollbar max-h-[62vh]">
+                    <ReceiptSigningNotice />
 
                     {/* Residente */}
                     <div className="space-y-2">

@@ -13,6 +13,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Plus, Pencil } from 'lucide-react'
 import { getBankAccounts, saveBankAccount, deleteBankAccount } from '@/app/actions/bank-account-actions'
 import { propertiesService } from '@/services/properties-service'
+import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
 
 interface PaymentValidationClientProps {
     organizationId: string
@@ -304,6 +305,7 @@ export function PaymentValidationClient({ organizationId }: PaymentValidationCli
 
     return (
         <div className="space-y-6">
+            <ReceiptSigningNotice profileHref="/dashboard/perfil" />
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-white">Validación de Pagos</h1>

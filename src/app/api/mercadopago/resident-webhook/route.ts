@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCondoMercadoPagoAccountByMpUserId } from '@/services/mercadopago-connect-service'
+import { issuePaymentReceipt } from '@/lib/payment-receipts'
 
 /**
  * Webhook de Mercado Pago para pagos de residentes (cuota de mantenimiento).
@@ -122,6 +123,8 @@ async function handleWebhook(req: Request) {
                 notes: noteTag,
                 paid_at: paidAtIso,
             })
+            // Pago automático: el recibo lo firma el administrador principal
+            await issuePaymentReceipt(adminSupabase, paymentRowId, 'automatico')
 
             const newBalance = Math.max(0, currentBalance - applied)
             const isFullyPaid = newBalance <= 0.01

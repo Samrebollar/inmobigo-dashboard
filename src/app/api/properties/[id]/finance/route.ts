@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getFinanceOrgForCondo } from '@/lib/finance-auth'
+import { checkCanSignPayments, issuePaymentReceipt } from '@/lib/payment-receipts'
 
 const N8N_BASE = () => (process.env.N8N_BASE_URL || 'https://n8n.inmobigo.mx').replace(/\/$/, '')
 
@@ -164,6 +165,15 @@ export async function POST(
             return NextResponse.json({ error: 'No tienes permiso para operar las finanzas de esta propiedad' }, { status: 403 })
         }
 
+        // Registrar dinero emite un recibo firmado por quien lo registra: debe
+        // tener su firma cargada y no puede ser seguridad.
+        if (body.action === 'add_credit' || body.action === 'register_payment') {
+            const signing = await checkCanSignPayments(adminSupabase, user.id, orgId)
+            if (!signing.ok) {
+                return NextResponse.json({ error: signing.error }, { status: 403 })
+            }
+        }
+
         // ── Saldo a favor: suma el excedente de un pago al crédito del residente ──
         if (body.action === 'add_credit') {
             const amount = Math.round(Number(body.amount) * 100) / 100
@@ -198,6 +208,7 @@ export async function POST(
                 .select()
                 .single()
             if (advanceError) console.error('[add_credit] No se pudo registrar el anticipo:', advanceError)
+            else await issuePaymentReceipt(adminSupabase, advanceId, 'manual')
             return NextResponse.json({ success: true, credit_amount: newCredit, payment: advance })
         }
 
@@ -308,6 +319,7 @@ export async function POST(
                 .single()
 
             if (paymentError) throw paymentError
+            await issuePaymentReceipt(adminSupabase, paymentId, 'manual')
 
             const newBalance = Math.max(0, currentBalance - paymentAmount)
             const isFullyPaid = newBalance <= 0.01

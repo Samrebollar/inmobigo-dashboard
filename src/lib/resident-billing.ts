@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/utils/supabase/admin'
+import { issuePaymentReceipt } from '@/lib/payment-receipts'
 
 /**
  * Factura de la cuota de mantenimiento del mes en curso para un residente
@@ -132,7 +133,9 @@ export async function applyResidentCreditToInvoice(
     if (!updated || updated.length === 0) return 0
 
     const paidAt = new Date().toISOString()
-    await admin.from('resident_invoice_payments').insert({
+    const paymentId = crypto.randomUUID()
+    const { error: paymentError } = await admin.from('resident_invoice_payments').insert({
+        id: paymentId,
         invoice_id: invoice.id,
         resident_id: residentId,
         condominium_id: invoice.condominium_id,
@@ -143,6 +146,8 @@ export async function applyResidentCreditToInvoice(
         notes: 'Aplicado automáticamente al generar la cuota',
         paid_at: paidAt,
     })
+    // Pago automático: el recibo lo firma el administrador principal
+    if (!paymentError) await issuePaymentReceipt(admin, paymentId, 'automatico')
     const newBalance = Math.round((balance - apply) * 100) / 100
     await admin.from('resident_invoices').update({
         balance_due: newBalance,

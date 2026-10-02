@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import QRCode from 'react-qr-code'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,8 @@ import {
     Camera,
     ShieldCheck,
     Building2,
-    QrCode
+    QrCode,
+    ExternalLink
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
@@ -117,6 +119,14 @@ export default function ResidentProfileClient({
     // no ve la tarjeta de Información Personal (staff/contador sí, no tienen ficha).
     const hasAdminFicha = isOrgAdmin && !!adminIdentity
     const adminTypeLabel = adminIdentity?.admin_type ? ADMIN_TYPE_LABEL[adminIdentity.admin_type] : null
+
+    // URL completa de la ficha pública del administrador para el QR que ve el
+    // residente; el origen se resuelve en el cliente para no romper la hidratación.
+    const [appOrigin, setAppOrigin] = useState('')
+    useEffect(() => {
+        setAppOrigin((process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, ''))
+    }, [])
+    const adminCardUrl = adminContact?.publicCardPath && appOrigin ? `${appOrigin}${adminContact.publicCardPath}` : null
 
     const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || user.user_metadata?.avatar_url || null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -529,9 +539,28 @@ export default function ResidentProfileClient({
                                         <MessageSquare size={14} /> Contactar
                                     </Button>
                                     {adminContact.publicCardPath && (
-                                        <a href={adminContact.publicCardPath} target="_blank" rel="noopener noreferrer" className="mt-2 w-full h-9 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] text-zinc-300 bg-zinc-950/50 border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center gap-2 transition-colors">
-                                            <QrCode size={14} /> Ver ficha del administrador
-                                        </a>
+                                        <div className="mt-5 pt-5 border-t border-zinc-800/80">
+                                            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                                                <QrCode size={12} className="text-indigo-400" /> Código QR del administrador
+                                            </p>
+                                            <a
+                                                href={adminContact.publicCardPath}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label="Abrir ficha del administrador"
+                                                className="block bg-white rounded-2xl p-3 mx-auto max-w-[180px] hover:scale-[1.02] transition-transform"
+                                            >
+                                                {adminCardUrl ? (
+                                                    <QRCode value={adminCardUrl} size={156} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} viewBox="0 0 256 256" />
+                                                ) : (
+                                                    <div className="aspect-square w-full bg-zinc-100 rounded-xl animate-pulse" />
+                                                )}
+                                            </a>
+                                            <p className="text-[10px] text-zinc-500 text-center mt-2">Escanéalo o tócalo para ver la ficha completa</p>
+                                            <a href={adminContact.publicCardPath} target="_blank" rel="noopener noreferrer" className="mt-3 w-full h-9 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] text-zinc-300 bg-zinc-950/50 border border-zinc-800 hover:bg-zinc-800 flex items-center justify-center gap-2 transition-colors">
+                                                <ExternalLink size={14} /> Ver ficha
+                                            </a>
+                                        </div>
                                     )}
                                 </motion.div>
                     )}

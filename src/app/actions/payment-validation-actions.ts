@@ -234,12 +234,12 @@ export async function updateValidationStatus(
                 // Mes, en el Corte de Caja y en el historial del residente. Antes solo
                 // se marcaba la factura como pagada sin registrar el pago.
                 const paidAtIso = new Date().toISOString()
-                let folioUsed = false
                 const recordPayment = async (invoiceId: string, amount: number) => {
                     if (amount <= 0) return
                     const payId = randomUUID()
-                    const folio = !folioUsed && approvedFolio ? approvedFolio : `REC-${payId.substring(0, 8).toUpperCase()}`
-                    folioUsed = true
+                    // Todos los abonos de un mismo comprobante comparten su folio: el
+                    // recibo (y su QR) amparan el total validado.
+                    const folio = approvedFolio || `REC-${payId.substring(0, 8).toUpperCase()}`
                     const { error: payErr } = await adminClient.from('resident_invoice_payments').insert({
                         id: payId,
                         invoice_id: invoiceId,

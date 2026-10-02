@@ -35,6 +35,7 @@ import { createResidentPaymentCheckout } from '@/app/actions/mercadopago-payment
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { AccountStatementModal } from '@/components/finance/account-statement'
+import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
 
 interface ResidentPaymentsClientProps {
     resident: any
@@ -144,6 +145,8 @@ export async function generateReceiptForResident(payment: any, residentName: str
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(60, 60, 60)
         doc.text(`Total Procesado: $${Number(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 120, finalY)
+        // QR de verificación, firma del validador, matrícula SEDETUS y sello digital
+        await stampReceiptPdf(doc, { paymentId: payment.paymentId, folio, invoiceId: payment.invoiceId }, finalY + 10)
         // Footer
         doc.setFontSize(8)
         doc.setTextColor(150, 150, 150)
@@ -766,7 +769,7 @@ export default function ResidentPaymentsClient({
                                                     <button
                                                         title={`Descargar recibo ${inv.folio}`}
                                                         onClick={() => generateReceiptForResident(
-                                                            { folio: inv.folio, amount: inv.monto, payment_method: inv.payment_method, date: formatDate(inv.paid_at || inv.due_date || inv.created_at) },
+                                                            { folio: inv.folio, invoiceId: inv.id, amount: inv.monto, payment_method: inv.payment_method, date: formatDate(inv.paid_at || inv.due_date || inv.created_at) },
                                                             resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
                                                             resident.condominiums?.name || '',
                                                             unit?.unit_number
@@ -902,7 +905,7 @@ export default function ResidentPaymentsClient({
                                     <button
                                         title={`Ver recibo ${pay.folio || ''}`}
                                         onClick={() => generateReceiptForResident(
-                                            { folio: pay.folio, concept: pay.concept, amount: pay.amount, payment_method: pay.payment_method, date: formatDate(pay.paid_at || pay.created_at) },
+                                            { folio: pay.folio, paymentId: pay.id, concept: pay.concept, amount: pay.amount, payment_method: pay.payment_method, date: formatDate(pay.paid_at || pay.created_at) },
                                             resident.first_name + (resident.last_name ? ' ' + resident.last_name : ''),
                                             resident.condominiums?.name || '',
                                             unit?.unit_number

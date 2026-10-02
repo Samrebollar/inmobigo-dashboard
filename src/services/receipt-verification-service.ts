@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { computeReceiptSeal } from '@/lib/payment-receipts'
+import { distinctLegalName } from '@/types/admin-identity'
 
 export interface VerifiedReceipt {
     status: 'valido' | 'firma_pendiente' | 'cancelado'
@@ -19,6 +20,8 @@ export interface VerifiedReceipt {
     signerPosition: string | null
     adminType: string | null
     adminDisplayName: string | null
+    /** Razón social, solo si es distinta del nombre comercial */
+    adminLegalName: string | null
     sedetusNumber: string | null
     sedetusExpiry: string | null
     adminCardPath: string | null
@@ -104,7 +107,8 @@ export async function getVerifiedReceipt(token: string): Promise<VerifiedReceipt
         signerName: receipt.signer_name,
         signerPosition: receipt.signer_position,
         adminType: receipt.admin_type,
-        adminDisplayName: receipt.admin_display_name,
+        adminDisplayName: receipt.admin_display_name || (receipt.admin_type === 'empresa' ? receipt.admin_legal_name : null),
+        adminLegalName: receipt.admin_type === 'empresa' ? distinctLegalName(receipt.admin_display_name, receipt.admin_legal_name) : null,
         sedetusNumber: receipt.sedetus_registration_number,
         sedetusExpiry: receipt.sedetus_expiry_date,
         adminCardPath: card?.is_public ? `/administrador/${card.public_token}` : null,

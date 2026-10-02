@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { getPublicAdminCard } from '@/services/admin-identity-service'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
-import { getSedetusStatus, SEDETUS_STATUS_LABEL } from '@/types/admin-identity'
+import { getSedetusStatus, isSameBusinessName, SEDETUS_STATUS_LABEL } from '@/types/admin-identity'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,7 +103,7 @@ export default async function AdministradorPublicPage({ params }: { params: Prom
                             </span>
                         </div>
                         <h1 className="text-2xl font-black tracking-tight mt-3">{title}</h1>
-                        {isEmpresa && identity.legal_name && identity.legal_name !== title && (
+                        {isEmpresa && identity.legal_name && !isSameBusinessName(identity.legal_name, title) && (
                             <p className="text-sm text-zinc-400">{identity.legal_name}</p>
                         )}
                         {identity.description && <p className="text-sm text-zinc-400 mt-3 leading-relaxed whitespace-pre-line">{identity.description}</p>}

@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "inmobigo",
+    "name": "InmobiGo",
     "slug": "inmobigo",
+    "owner": "inmobigo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -37,6 +38,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fe0f26d4-ffef-4efd-a29a-96baf738752a"
+      }
     }
   }
 }

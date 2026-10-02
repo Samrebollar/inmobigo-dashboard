@@ -3,10 +3,11 @@
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { DollarSign, Building, Users, Activity, TrendingUp, Home, Wrench, AlertTriangle, Megaphone } from 'lucide-react'
+import { DollarSign, Building, Users, Activity, TrendingUp, Home, Wrench, AlertTriangle, Megaphone, CalendarRange, History } from 'lucide-react'
 import Link from 'next/link'
 import { financeService } from '@/services/finance-service'
 import { fetchCashIncome } from '@/lib/cash-income'
+import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
 import { dashboardService } from '@/services/dashboard-service'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,13 @@ export default function AdminDashboardCondominioClient({
 
     const [condominiums, setCondominiums] = useState<Array<{ id: string, name: string }>>([])
     const [selectedCondoId, setSelectedCondoId] = useState<string>('')
+    // Total del Periodo y Saldo de meses anteriores: mismo cálculo que las tarjetas
+    // "Total del Periodo" y "Saldo Inicial (Arrastre)" de Finanzas del condominio,
+    // sumado para todos los condominios (o solo el seleccionado).
+    const [periodTotals, setPeriodTotals] = useState<{ totalPeriodo: number, saldoAnterior: number } | null>(null)
+    const [isLoadingPeriod, setIsLoadingPeriod] = useState(true)
+    const [periodError, setPeriodError] = useState<string | null>(null)
+
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -153,6 +161,54 @@ export default function AdminDashboardCondominioClient({
         return () => { isMounted = false }
     }, [selectedCondoId, organizationId])
 
+    useEffect(() => {
+        let isMounted = true
+        const condoIds = (selectedCondoId ? [selectedCondoId] : condominiums.map(c => c.id))
+            .filter(id => id && !id.startsWith('demo-'))
+
+        const fetchPeriodTotals = async () => {
+            setIsLoadingPeriod(true)
+            setPeriodError(null)
+            try {
+                const now = new Date()
+                const month = now.getMonth()
+                const year = now.getFullYear()
+                const results = await Promise.all(condoIds.map(async (id) => {
+                    const res = await fetch(`/api/properties/${id}/finance?action=billing&year=${year}&month=${month}`)
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+                    const { units, residents, invoices } = await res.json()
+                    return calculateCondoMonthlyFinancials({
+                        units: units || [],
+                        residents: residents || [],
+                        invoices: invoices || [],
+                        selectedMonth: month,
+                        selectedYear: year,
+                    })
+                }))
+                if (isMounted) {
+                    setPeriodTotals({
+                        totalPeriodo: results.reduce((sum, r) => sum + (r.totalPeriodo || 0), 0),
+                        saldoAnterior: results.reduce((sum, r) => sum + (r.saldoInicialPendiente || 0), 0),
+                    })
+                }
+            } catch (err) {
+                console.error('Error calculando el total del periodo:', err)
+                if (isMounted) setPeriodError('Error')
+            } finally {
+                if (isMounted) setIsLoadingPeriod(false)
+            }
+        }
+
+        // Sin condominio elegido hay que esperar la lista de condominios
+        if (!selectedCondoId && condominiums.length === 0) {
+            setPeriodTotals({ totalPeriodo: 0, saldoAnterior: 0 })
+            setIsLoadingPeriod(false)
+        } else {
+            fetchPeriodTotals()
+        }
+        return () => { isMounted = false }
+    }, [selectedCondoId, condominiums])
+
     const container = {
         hidden: { opacity: 0 },
         show: {
@@ -189,7 +245,32 @@ export default function AdminDashboardCondominioClient({
             >
 
                 {/* Stats Grid */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <motion.div variants={item} whileHover={{ y: -5 }}>
+                        <Card className="bg-zinc-900 border-zinc-800 hover:border-indigo-500/50 transition-colors">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-zinc-400">Total del Periodo</CardTitle>
+                                <CalendarRange className="h-4 w-4 text-indigo-400" />
+                            </CardHeader>
+                            <CardContent>
+                                {isLoadingPeriod ? (
+                                    <div className="h-8 w-24 bg-zinc-800 animate-pulse rounded mt-1"></div>
+                                ) : periodError ? (
+                                    <div className="text-sm font-medium text-rose-500 mt-2">{periodError}</div>
+                                ) : (
+                                    <>
+                                        <div className="text-2xl font-bold text-white">
+                                            {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(periodTotals?.totalPeriodo || 0)}
+                                        </div>
+                                        <p className="text-xs text-indigo-400 mt-1">
+                                            Cuotas facturadas este mes
+                                        </p>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+
                     <motion.div variants={item} whileHover={{ y: -5 }}>
                         <Card className="bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 transition-colors">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -271,6 +352,31 @@ export default function AdminDashboardCondominioClient({
                                         </div>
                                         <p className="text-xs text-rose-500 mt-1">
                                             {morosidad?.total_facturas_vencidas || 0} residentes en atraso
+                                        </p>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+
+                    <motion.div variants={item} whileHover={{ y: -5 }}>
+                        <Card className="bg-zinc-900 border-zinc-800 hover:border-violet-500/50 transition-colors">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-zinc-400">Saldo de Meses Anteriores</CardTitle>
+                                <History className="h-4 w-4 text-violet-400" />
+                            </CardHeader>
+                            <CardContent>
+                                {isLoadingPeriod ? (
+                                    <div className="h-8 w-24 bg-zinc-800 animate-pulse rounded mt-1"></div>
+                                ) : periodError ? (
+                                    <div className="text-sm font-medium text-rose-500 mt-2">{periodError}</div>
+                                ) : (
+                                    <>
+                                        <div className="text-2xl font-bold text-violet-400">
+                                            {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(periodTotals?.saldoAnterior || 0)}
+                                        </div>
+                                        <p className="text-xs text-zinc-500 mt-1">
+                                            Deuda de meses anteriores, ya incluida en Morosidad
                                         </p>
                                     </>
                                 )}

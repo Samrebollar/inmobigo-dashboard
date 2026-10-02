@@ -112,6 +112,11 @@ export default async function VerificarReciboPage({ params }: { params: Promise<
                             {receipt.canceledAt ? `Cancelado el ${formatDateTime(receipt.canceledAt)}` : ''}{receipt.cancelReason ? ` · Motivo: ${receipt.cancelReason}` : ''}
                         </p>
                     )}
+                    {state === 'cancelado' && receipt.replacedBy && (
+                        <Link href={`/verificar/${receipt.replacedBy.token}`} className="inline-block mt-4 text-sm font-semibold text-indigo-300 hover:text-indigo-200">
+                            Fue reemplazado por el recibo {receipt.replacedBy.shortCode} →
+                        </Link>
+                    )}
                     <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-zinc-950/70 border border-zinc-800 px-4 py-1.5">
                         <Hash className="h-3.5 w-3.5 text-zinc-500" />
                         <span className="font-mono text-sm tracking-widest">{receipt.shortCode}</span>
@@ -162,7 +167,7 @@ export default async function VerificarReciboPage({ params }: { params: Promise<
                     <Row
                         icon={CalendarDays}
                         label="Validado"
-                        value={`${formatDateTime(receipt.issuedAt)}${receipt.validationMode === 'automatico' ? ' · pago en línea confirmado' : ''}`}
+                        value={`${formatDateTime(receipt.issuedAt)}${receipt.validationMode === 'automatico' ? ' · pago en línea confirmado' : receipt.validationMode === 'historico' ? ' · recibo emitido para un pago anterior' : ''}`}
                     />
                     <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${tampered ? 'border-red-500/30 bg-red-500/10' : receipt.sealOk ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-zinc-800 bg-zinc-950/50'}`}>
                         {tampered ? <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" /> : <ShieldCheck className={`h-5 w-5 shrink-0 ${receipt.sealOk ? 'text-emerald-400' : 'text-zinc-500'}`} />}

@@ -101,7 +101,10 @@ export default function AdminFinanceClient({
             </div>
 
             {/* Quick Link to Detailed Billing */}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-6">
+                <Link href="/dashboard/finance/recibos" className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                    Recibos validados (QR) <ArrowRight size={14} />
+                </Link>
                 <Link href={billingHref} className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
                     Ver historial completo <ArrowRight size={14} />
                 </Link>

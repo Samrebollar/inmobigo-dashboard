@@ -77,7 +77,7 @@ export async function drawReceiptStamp(doc: jsPDF, stamp: ReceiptStamp, startY: 
         stamp.adminLabel ? `En nombre de: ${stamp.adminLabel}` : null,
         stamp.adminLegalName ? `Razón social: ${stamp.adminLegalName}` : null,
         `Matrícula SEDETUS: ${stamp.sedetusNumber || 'Sin registrar'}`,
-        `Validado: ${formatIssuedAt(stamp.issuedAt)}${stamp.validationMode === 'automatico' ? ' (pago en línea confirmado)' : ''}`,
+        `Validado: ${formatIssuedAt(stamp.issuedAt)}${stamp.validationMode === 'automatico' ? ' (pago en línea confirmado)' : stamp.validationMode === 'historico' ? ' (recibo de un pago anterior)' : ''}`,
     ].filter(Boolean) as string[]
     lines.forEach((line, i) => doc.text(doc.splitTextToSize(line, 115)[0], sigX, y + 40 + i * 4.2))
 

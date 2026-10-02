@@ -2,17 +2,17 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { activatePendingReceipts, getSigningStatus, signedSignatureUrl, SECURITY_CANNOT_SIGN_ERROR } from '@/lib/payment-receipts'
+import { applySignatureToReceipts, getSigningStatus, signedSignatureUrl, SECURITY_CANNOT_SIGN_ERROR } from '@/lib/payment-receipts'
 
 const NON_TEAM_ROLES = ['resident', 'residente', 'tenant', 'viewer']
 const MAX_SIGNATURE_BYTES = 700 * 1024
 
 /**
  * Guarda la firma autógrafa digitalizada del usuario (PNG en data URL, dibujada
- * en pantalla o tomada de una foto). Cada versión se guarda en un archivo nuevo:
- * los recibos ya emitidos conservan la firma con la que se emitieron.
+ * en pantalla o tomada de una foto). Cada versión se guarda en un archivo nuevo,
+ * y todos los recibos vigentes de este firmante pasan a mostrar la firma nueva.
  */
-export async function saveMySignatureAction(dataUrl: string): Promise<{ success: true; url: string | null; activated: number } | { success: false; error: string }> {
+export async function saveMySignatureAction(dataUrl: string): Promise<{ success: true; url: string | null; activated: number; updated: number } | { success: false; error: string }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, error: 'No autorizado' }
@@ -44,10 +44,10 @@ export async function saveMySignatureAction(dataUrl: string): Promise<{ success:
         .eq('id', user.id)
     if (profileError) return { success: false, error: profileError.message }
 
-    // Recibos automáticos (Mercado Pago, saldo a favor, históricos) que esperaban esta firma
-    const activated = await activatePendingReceipts(admin, user.id, path)
+    // Todos sus recibos vigentes muestran la firma nueva; los que la esperaban quedan válidos
+    const { activated, updated } = await applySignatureToReceipts(admin, user.id, path)
 
-    return { success: true, url: await signedSignatureUrl(admin, path), activated }
+    return { success: true, url: await signedSignatureUrl(admin, path), activated, updated }
 }
 
 /**

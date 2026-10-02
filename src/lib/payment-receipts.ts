@@ -118,14 +118,24 @@ function firstRow<T>(value: T | T[] | null | undefined): T | null {
  *
  * Nunca lanza: un error aquí no debe tumbar el registro del pago (los recibos
  * faltantes se pueden volver a emitir después).
+ *
+ * opts.signerUserId fuerza al firmante (al reemitir un recibo cancelado firma
+ * quien lo reemite).
  */
 export async function issuePaymentReceipt(
     admin: AdminClient,
     paymentId: string,
-    mode: 'manual' | 'automatico' | 'historico' = 'manual'
+    mode: 'manual' | 'automatico' | 'historico' = 'manual',
+    opts: { signerUserId?: string } = {}
 ): Promise<{ id: string; status: string } | null> {
     try {
-        const { data: existing } = await admin.from('payment_receipts').select('id, status').eq('payment_id', paymentId).maybeSingle()
+        // Un pago tiene a lo más un recibo vigente (los cancelados no cuentan)
+        const { data: existing } = await admin
+            .from('payment_receipts')
+            .select('id, status')
+            .eq('payment_id', paymentId)
+            .neq('status', 'cancelado')
+            .maybeSingle()
         if (existing) return existing
 
         const { data: payment } = await admin
@@ -155,7 +165,7 @@ export async function issuePaymentReceipt(
 
         // Firmante: quien registró el pago, salvo seguridad (su firma no vale)
         // o pagos sin registrador → administrador principal.
-        let signerId: string | null = mode === 'manual' ? payment.created_by : null
+        let signerId: string | null = opts.signerUserId || (mode === 'manual' ? payment.created_by : null)
         let signerRole: string | null = null
         if (signerId && organizationId) {
             signerRole = await getOrgRole(admin, signerId, organizationId)
@@ -227,8 +237,13 @@ export async function issuePaymentReceipt(
 
             if (!error) return created
             // Otro proceso ya emitió el recibo de este pago
-            if (error.code === '23505' && error.message.includes('payment_id')) {
-                const { data: raced } = await admin.from('payment_receipts').select('id, status').eq('payment_id', paymentId).maybeSingle()
+            if (error.code === '23505' && (error.message.includes('one_active_per_payment') || error.message.includes('payment_id'))) {
+                const { data: raced } = await admin
+                    .from('payment_receipts')
+                    .select('id, status')
+                    .eq('payment_id', paymentId)
+                    .neq('status', 'cancelado')
+                    .maybeSingle()
                 return raced
             }
             if (error.code !== '23505') {
@@ -243,15 +258,89 @@ export async function issuePaymentReceipt(
     }
 }
 
-/** Al subir su firma, los recibos que esperaban la firma de este usuario quedan válidos. */
-export async function activatePendingReceipts(admin: AdminClient, userId: string, signaturePath: string): Promise<number> {
-    const { data } = await admin
+/**
+ * Al subir o cambiar su firma, todos los recibos vigentes de este firmante
+ * pasan a mostrar la firma nueva, y los que esperaban su firma quedan válidos.
+ * Los recibos cancelados conservan la firma con la que se cancelaron. La firma
+ * no forma parte del sello digital, así que los sellos siguen verificándose.
+ */
+export async function applySignatureToReceipts(admin: AdminClient, userId: string, signaturePath: string): Promise<{ activated: number; updated: number }> {
+    const { data: activated } = await admin
         .from('payment_receipts')
         .update({ status: 'valido', signer_signature_path: signaturePath })
         .eq('signer_user_id', userId)
         .eq('status', 'firma_pendiente')
         .select('id')
-    return data?.length || 0
+    const { data: updated } = await admin
+        .from('payment_receipts')
+        .update({ signer_signature_path: signaturePath })
+        .eq('signer_user_id', userId)
+        .eq('status', 'valido')
+        .neq('signer_signature_path', signaturePath)
+        .select('id')
+    return { activated: activated?.length || 0, updated: updated?.length || 0 }
+}
+
+/**
+ * Emite el recibo de los pagos de la organización que aún no tienen uno
+ * (pagos anteriores a los recibos validados). Los firma el administrador
+ * principal. Es idempotente: se puede llamar cuantas veces sea.
+ */
+export async function backfillOrgReceipts(admin: AdminClient, organizationId: string, limit = 300): Promise<number> {
+    const [{ data: payments }, { data: receipts }] = await Promise.all([
+        admin.from('resident_invoice_payments').select('id').eq('organization_id', organizationId).order('paid_at', { ascending: true }).limit(5000),
+        admin.from('payment_receipts').select('payment_id').eq('organization_id', organizationId).neq('status', 'cancelado').limit(5000),
+    ])
+    const covered = new Set((receipts || []).map((r) => r.payment_id))
+    const missing = (payments || []).filter((p) => !covered.has(p.id)).slice(0, limit)
+    let issued = 0
+    for (const p of missing) {
+        if (await issuePaymentReceipt(admin, p.id, 'historico')) issued++
+    }
+    return issued
+}
+
+/**
+ * Cancela un recibo (y los demás pagos del mismo cobro: mismo folio y
+ * residente). Con reissue=true emite un recibo nuevo para cada pago, firmado
+ * por quien cancela, y lo enlaza como reemplazo del cancelado.
+ */
+export async function cancelReceipt(
+    admin: AdminClient,
+    params: { receiptId: string; userId: string; reason: string; reissue: boolean }
+): Promise<{ canceled: number; reissued: { id: string; short_code: string; verify_token: string }[] }> {
+    const { data: target } = await admin.from('payment_receipts').select('*').eq('id', params.receiptId).maybeSingle()
+    if (!target || target.status === 'cancelado') return { canceled: 0, reissued: [] }
+
+    let group = [target]
+    if (target.folio && target.resident_id) {
+        const { data } = await admin
+            .from('payment_receipts')
+            .select('*')
+            .eq('folio', target.folio)
+            .eq('resident_id', target.resident_id)
+            .neq('status', 'cancelado')
+        if (data && data.length > 0) group = data
+    }
+
+    const canceledAt = new Date().toISOString()
+    const ids = group.map((r) => r.id)
+    await admin
+        .from('payment_receipts')
+        .update({ status: 'cancelado', canceled_at: canceledAt, canceled_by: params.userId, cancel_reason: params.reason })
+        .in('id', ids)
+
+    const reissued: { id: string; short_code: string; verify_token: string }[] = []
+    if (params.reissue) {
+        for (const old of group) {
+            const created = await issuePaymentReceipt(admin, old.payment_id, 'manual', { signerUserId: params.userId })
+            if (!created) continue
+            await admin.from('payment_receipts').update({ replaced_by: created.id }).eq('id', old.id)
+            const { data: fresh } = await admin.from('payment_receipts').select('id, short_code, verify_token').eq('id', created.id).maybeSingle()
+            if (fresh) reissued.push(fresh)
+        }
+    }
+    return { canceled: ids.length, reissued }
 }
 
 /** Estado de firma del usuario y de la acreditación SEDETUS de su organización (para avisos en pantalla). */

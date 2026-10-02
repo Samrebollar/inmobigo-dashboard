@@ -57,6 +57,7 @@ interface PaymentAgreement {
     unsigned_document_sent_at?: string | null
     signed_document_url?: string | null
     signed_document_uploaded_at?: string | null
+    id_document_type?: 'ine' | 'pasaporte' | null
     ine_front_path?: string | null
     ine_back_path?: string | null
 }
@@ -130,7 +131,9 @@ export function AgreementDetailsModal({
     const [uploadingConvenio, setUploadingConvenio] = useState(false)
 
     // Verificación de INE (signed URLs, se generan al abrir en pending_final_approval)
-    const [ineUrls, setIneUrls] = useState<{ frontUrl: string; backUrl: string } | null>(null)
+    const [ineUrls, setIneUrls] = useState<{ frontUrl: string; backUrl: string | null } | null>(null)
+    const isPassport = agreement.id_document_type === 'pasaporte'
+    const idLabel = isPassport ? 'Pasaporte' : 'INE'
     const [loadingIne, setLoadingIne] = useState(false)
 
     // Fetch installments and history logs
@@ -170,7 +173,7 @@ export function AgreementDetailsModal({
     }, [isOpen, initialAgreement.id, initialIsRejecting])
 
     useEffect(() => {
-        if (!isOpen || !agreement.ine_front_path || !agreement.ine_back_path) return
+        if (!isOpen || !agreement.ine_front_path || (!isPassport && !agreement.ine_back_path)) return
 
         let cancelled = false
         setLoadingIne(true)
@@ -178,7 +181,7 @@ export function AgreementDetailsModal({
             .then(res => {
                 if (cancelled) return
                 if (res.success) {
-                    setIneUrls({ frontUrl: res.frontUrl!, backUrl: res.backUrl! })
+                    setIneUrls({ frontUrl: res.frontUrl!, backUrl: res.backUrl ?? null })
                 } else {
                     console.error('Error loading INE signed URLs:', res.error)
                 }
@@ -186,7 +189,7 @@ export function AgreementDetailsModal({
             .finally(() => { if (!cancelled) setLoadingIne(false) })
 
         return () => { cancelled = true }
-    }, [isOpen, agreement.id, agreement.ine_front_path, agreement.ine_back_path])
+    }, [isOpen, agreement.id, agreement.ine_front_path, agreement.ine_back_path, isPassport])
 
     if (!isOpen) return null
 
@@ -734,30 +737,32 @@ export function AgreementDetailsModal({
                             {(agreement.ine_front_path || agreement.ine_back_path) && (
                                 <div className="pt-4 border-t border-zinc-800/35 space-y-3">
                                     <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                                        <User size={11} className="text-violet-400" /> Verificación de Identidad (INE) — compara con la firma del convenio
+                                        <User size={11} className="text-violet-400" /> Verificación de Identidad ({idLabel}) — compara con la firma del convenio
                                     </p>
                                     {loadingIne ? (
                                         <div className="flex items-center gap-2 text-xs text-zinc-500">
                                             <div className="h-4 w-4 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-                                            Cargando fotos de INE...
+                                            Cargando {isPassport ? 'foto del pasaporte' : 'fotos de INE'}...
                                         </div>
                                     ) : ineUrls ? (
                                         <div className="grid grid-cols-2 gap-3 max-w-lg">
                                             <a href={ineUrls.frontUrl} target="_blank" rel="noopener noreferrer" className="block group/ine">
                                                 <div className="rounded-2xl overflow-hidden border border-zinc-800 group-hover/ine:border-violet-500/40 transition-all">
-                                                    <img src={ineUrls.frontUrl} alt="INE Frente" className="w-full h-32 object-cover" />
+                                                    <img src={ineUrls.frontUrl} alt={isPassport ? 'Pasaporte' : 'INE Frente'} className="w-full h-32 object-cover" />
                                                 </div>
-                                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 text-center">INE Frente</p>
+                                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 text-center">{isPassport ? 'Pasaporte (foto y firma)' : 'INE Frente'}</p>
                                             </a>
-                                            <a href={ineUrls.backUrl} target="_blank" rel="noopener noreferrer" className="block group/ine">
-                                                <div className="rounded-2xl overflow-hidden border border-zinc-800 group-hover/ine:border-violet-500/40 transition-all">
-                                                    <img src={ineUrls.backUrl} alt="INE Reverso" className="w-full h-32 object-cover" />
-                                                </div>
-                                                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 text-center">INE Reverso</p>
-                                            </a>
+                                            {ineUrls.backUrl && (
+                                                <a href={ineUrls.backUrl} target="_blank" rel="noopener noreferrer" className="block group/ine">
+                                                    <div className="rounded-2xl overflow-hidden border border-zinc-800 group-hover/ine:border-violet-500/40 transition-all">
+                                                        <img src={ineUrls.backUrl} alt="INE Reverso" className="w-full h-32 object-cover" />
+                                                    </div>
+                                                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5 text-center">INE Reverso</p>
+                                                </a>
+                                            )}
                                         </div>
                                     ) : (
-                                        <p className="text-xs text-zinc-600">No se pudieron cargar las fotos de INE.</p>
+                                        <p className="text-xs text-zinc-600">No se pudo cargar la identificación ({idLabel}).</p>
                                     )}
                                 </div>
                             )}

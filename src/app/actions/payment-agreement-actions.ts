@@ -287,29 +287,39 @@ export async function sendAgreementForSignatureAction({ id, documentUrl }: { id:
 }
 
 /**
- * El residente sube de vuelta el convenio ya firmado junto con fotos de su
- * INE (frente y reverso), para que la administración pueda corroborar que
- * la firma corresponde a su identificación antes de la aprobación final.
- * ineFrontPath/ineBackPath son rutas dentro del bucket privado
- * resident_ine_documents (no URLs públicas — se leen con signed URLs).
+ * El residente sube de vuelta el convenio ya firmado junto con su
+ * identificación oficial, para que la administración pueda corroborar que la
+ * firma corresponde a su identificación antes de la aprobación final:
+ *  - INE: frente (ineFrontPath) y reverso (ineBackPath).
+ *  - Pasaporte: la página con fotografía y firma (en ineFrontPath).
+ * Son rutas dentro del bucket privado resident_ine_documents (no URLs
+ * públicas — se leen con signed URLs).
  */
 export async function uploadSignedAgreementAction({
     id,
     signedDocumentUrl,
+    idDocumentType = 'ine',
     ineFrontPath,
     ineBackPath,
 }: {
     id: string
     signedDocumentUrl: string
+    idDocumentType?: 'ine' | 'pasaporte'
     ineFrontPath: string
-    ineBackPath: string
+    ineBackPath?: string | null
 }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, error: 'No autorizado.' }
 
-    if (!signedDocumentUrl || !ineFrontPath || !ineBackPath) {
-        return { success: false, error: 'Debes subir el convenio firmado y ambos lados de tu INE.' }
+    const isPassport = idDocumentType === 'pasaporte'
+    if (!signedDocumentUrl || !ineFrontPath || (!isPassport && !ineBackPath)) {
+        return {
+            success: false,
+            error: isPassport
+                ? 'Debes subir el convenio firmado y la foto de tu pasaporte.'
+                : 'Debes subir el convenio firmado y ambos lados de tu INE.',
+        }
     }
 
     try {
@@ -336,8 +346,9 @@ export async function uploadSignedAgreementAction({
                 status: 'pending_final_approval',
                 signed_document_url: signedDocumentUrl,
                 signed_document_uploaded_at: new Date().toISOString(),
+                id_document_type: isPassport ? 'pasaporte' : 'ine',
                 ine_front_path: ineFrontPath,
-                ine_back_path: ineBackPath,
+                ine_back_path: isPassport ? null : ineBackPath,
             })
             .eq('id', id)
             .select()
@@ -358,8 +369,9 @@ export async function uploadSignedAgreementAction({
 }
 
 /**
- * Genera signed URLs temporales para ver las fotos de INE del residente —
- * viven en un bucket privado, así que nunca se exponen como URL pública.
+ * Genera signed URLs temporales para ver la identificación del residente (INE
+ * frente/reverso o pasaporte) — vive en un bucket privado, así que nunca se
+ * expone como URL pública. Con pasaporte backUrl es null.
  */
 export async function getIneSignedUrlsAction({ agreementId }: { agreementId: string }) {
     const supabase = await createClient()
@@ -371,7 +383,7 @@ export async function getIneSignedUrlsAction({ agreementId }: { agreementId: str
 
         const { data: agreement } = await adminSupabase
             .from('payment_agreements')
-            .select('resident_id, ine_front_path, ine_back_path')
+            .select('resident_id, id_document_type, ine_front_path, ine_back_path')
             .eq('id', agreementId)
             .maybeSingle()
 
@@ -380,24 +392,28 @@ export async function getIneSignedUrlsAction({ agreementId }: { agreementId: str
         const allowed = await canAccessResident(supabase, user.id, agreement.resident_id)
         if (!allowed) return { success: false, error: 'No tienes permiso para ver estos documentos.' }
 
-        if (!agreement.ine_front_path || !agreement.ine_back_path) {
-            return { success: false, error: 'Este convenio aún no tiene fotos de INE subidas.' }
+        const isPassport = agreement.id_document_type === 'pasaporte'
+        if (!agreement.ine_front_path || (!isPassport && !agreement.ine_back_path)) {
+            return { success: false, error: 'Este convenio aún no tiene la identificación subida.' }
         }
 
         const [frontRes, backRes] = await Promise.all([
             adminSupabase.storage.from('resident_ine_documents').createSignedUrl(agreement.ine_front_path, 3600),
-            adminSupabase.storage.from('resident_ine_documents').createSignedUrl(agreement.ine_back_path, 3600),
+            agreement.ine_back_path
+                ? adminSupabase.storage.from('resident_ine_documents').createSignedUrl(agreement.ine_back_path, 3600)
+                : Promise.resolve({ data: null, error: null }),
         ])
 
         if (frontRes.error || backRes.error) {
-            console.error('❌ Error generando signed URLs de INE:', frontRes.error || backRes.error)
-            return { success: false, error: 'No se pudieron generar los enlaces de la INE.' }
+            console.error('❌ Error generando signed URLs de la identificación:', frontRes.error || backRes.error)
+            return { success: false, error: 'No se pudieron generar los enlaces de la identificación.' }
         }
 
         return {
             success: true,
-            frontUrl: frontRes.data.signedUrl,
-            backUrl: backRes.data.signedUrl,
+            documentType: isPassport ? 'pasaporte' as const : 'ine' as const,
+            frontUrl: frontRes.data!.signedUrl,
+            backUrl: backRes.data?.signedUrl || null,
         }
     } catch (err: any) {
         console.error('❌ Excepción al generar signed URLs de INE:', err)

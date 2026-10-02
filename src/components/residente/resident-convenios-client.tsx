@@ -61,6 +61,7 @@ interface PaymentAgreement {
     unsigned_document_sent_at?: string | null
     signed_document_url?: string | null
     signed_document_uploaded_at?: string | null
+    id_document_type?: 'ine' | 'pasaporte' | null
     ine_front_path?: string | null
     ine_back_path?: string | null
 }
@@ -109,6 +110,8 @@ export function ResidentConveniosClient({
     )
     const [uploadingSignedDoc, setUploadingSignedDoc] = useState(false)
     const [signedDocFile, setSignedDocFile] = useState<File | null>(null)
+    // Identificación con la que acredita su firma: INE (frente y reverso) o Pasaporte (una foto)
+    const [idDocType, setIdDocType] = useState<'ine' | 'pasaporte'>('ine')
     const [ineFrontFile, setIneFrontFile] = useState<File | null>(null)
     const [ineBackFile, setIneBackFile] = useState<File | null>(null)
     const signedDocInputRef = useRef<HTMLInputElement>(null)
@@ -310,12 +313,22 @@ export function ResidentConveniosClient({
         setSignedDocFile(file)
     }
 
-    // Handle selecting an INE photo (staged, not uploaded yet)
+    const isPassport = idDocType === 'pasaporte'
+    const idFilesReady = !!ineFrontFile && (isPassport || !!ineBackFile)
+
+    const handleIdDocTypeChange = (type: 'ine' | 'pasaporte') => {
+        if (type === idDocType) return
+        setIdDocType(type)
+        setIneFrontFile(null)
+        setIneBackFile(null)
+    }
+
+    // Handle selecting an ID photo (staged, not uploaded yet)
     const handleIneFileChange = (side: 'front' | 'back') => (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
         if (!file.type.startsWith('image/')) {
-            toast.error('La INE debe ser una imagen (foto o escaneo).')
+            toast.error(`${isPassport ? 'El pasaporte' : 'La INE'} debe ser una imagen (foto o escaneo).`)
             e.target.value = ''
             return
         }
@@ -326,8 +339,10 @@ export function ResidentConveniosClient({
     // Handle uploading the signed convenio + INE (frente y reverso) back to administration
     const handleSubmitSignedAgreement = async () => {
         if (!activeAgreement) return
-        if (!signedDocFile || !ineFrontFile || !ineBackFile) {
-            toast.error('Debes adjuntar el convenio firmado y ambos lados de tu INE.')
+        if (!signedDocFile || !idFilesReady) {
+            toast.error(isPassport
+                ? 'Debes adjuntar el convenio firmado y la foto de tu pasaporte.'
+                : 'Debes adjuntar el convenio firmado y ambos lados de tu INE.')
             return
         }
 
@@ -347,21 +362,26 @@ export function ResidentConveniosClient({
                 .from('condominium_documents')
                 .getPublicUrl(`${condominiumId}/convenios-firmados/${activeAgreement.id}-${ts}.pdf`)
 
-            const ineFrontPath = `${condominiumId}/${residentId}/ine-frente-${activeAgreement.id}-${ts}.jpg`
+            const frontName = isPassport ? 'pasaporte' : 'ine-frente'
+            const ineFrontPath = `${condominiumId}/${residentId}/${frontName}-${activeAgreement.id}-${ts}.jpg`
             const { error: ineFrontError } = await supabase.storage
                 .from('resident_ine_documents')
-                .upload(ineFrontPath, ineFrontFile, { upsert: true })
+                .upload(ineFrontPath, ineFrontFile!, { upsert: true })
             if (ineFrontError) throw ineFrontError
 
-            const ineBackPath = `${condominiumId}/${residentId}/ine-reverso-${activeAgreement.id}-${ts}.jpg`
-            const { error: ineBackError } = await supabase.storage
-                .from('resident_ine_documents')
-                .upload(ineBackPath, ineBackFile, { upsert: true })
-            if (ineBackError) throw ineBackError
+            let ineBackPath: string | null = null
+            if (!isPassport) {
+                ineBackPath = `${condominiumId}/${residentId}/ine-reverso-${activeAgreement.id}-${ts}.jpg`
+                const { error: ineBackError } = await supabase.storage
+                    .from('resident_ine_documents')
+                    .upload(ineBackPath, ineBackFile!, { upsert: true })
+                if (ineBackError) throw ineBackError
+            }
 
             const result = await uploadSignedAgreementAction({
                 id: activeAgreement.id,
                 signedDocumentUrl: docUrlData.publicUrl,
+                idDocumentType: idDocType,
                 ineFrontPath,
                 ineBackPath
             })
@@ -858,7 +878,29 @@ export function ResidentConveniosClient({
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Identificación oficial para acreditar tu firma</p>
+                                <div className="inline-flex bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+                                    {([['ine', 'INE'], ['pasaporte', 'Pasaporte']] as const).map(([value, label]) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            disabled={uploadingSignedDoc}
+                                            onClick={() => handleIdDocTypeChange(value)}
+                                            className={`px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-60 ${idDocType === value ? 'bg-amber-600 text-white' : 'text-zinc-400 hover:text-white'}`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-[11px] text-zinc-500">
+                                    {isPassport
+                                        ? 'Sube una foto de la página de tu pasaporte donde aparecen tu fotografía y tu firma.'
+                                        : 'Sube una foto de tu INE por el frente y otra por el reverso.'}
+                                </p>
+                            </div>
+
+                            <div className={`grid grid-cols-1 gap-3 ${isPassport ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
                                 <input
                                     type="file"
                                     accept="application/pdf"
@@ -895,34 +937,38 @@ export function ResidentConveniosClient({
                                 >
                                     {ineFrontFile ? <Check size={18} /> : <IdCard size={18} />}
                                     <span className="text-[10px] font-bold uppercase tracking-widest leading-tight">
-                                        {ineFrontFile ? ineFrontFile.name : 'INE Frente (Foto)'}
+                                        {ineFrontFile ? ineFrontFile.name : isPassport ? 'Pasaporte (Foto y firma)' : 'INE Frente (Foto)'}
                                     </span>
                                 </button>
 
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    ref={ineBackInputRef}
-                                    onChange={handleIneFileChange('back')}
-                                    disabled={uploadingSignedDoc}
-                                />
-                                <button
-                                    type="button"
-                                    disabled={uploadingSignedDoc}
-                                    onClick={() => ineBackInputRef.current?.click()}
-                                    className={`h-24 px-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-60 ${ineBackFile ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}
-                                >
-                                    {ineBackFile ? <Check size={18} /> : <IdCard size={18} />}
-                                    <span className="text-[10px] font-bold uppercase tracking-widest leading-tight">
-                                        {ineBackFile ? ineBackFile.name : 'INE Reverso (Foto)'}
-                                    </span>
-                                </button>
+                                {!isPassport && (
+                                    <>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            ref={ineBackInputRef}
+                                            onChange={handleIneFileChange('back')}
+                                            disabled={uploadingSignedDoc}
+                                        />
+                                        <button
+                                            type="button"
+                                            disabled={uploadingSignedDoc}
+                                            onClick={() => ineBackInputRef.current?.click()}
+                                            className={`h-24 px-4 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-60 ${ineBackFile ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}
+                                        >
+                                            {ineBackFile ? <Check size={18} /> : <IdCard size={18} />}
+                                            <span className="text-[10px] font-bold uppercase tracking-widest leading-tight">
+                                                {ineBackFile ? ineBackFile.name : 'INE Reverso (Foto)'}
+                                            </span>
+                                        </button>
+                                    </>
+                                )}
                             </div>
 
                             <button
                                 type="button"
-                                disabled={uploadingSignedDoc || !signedDocFile || !ineFrontFile || !ineBackFile}
+                                disabled={uploadingSignedDoc || !signedDocFile || !idFilesReady}
                                 onClick={handleSubmitSignedAgreement}
                                 className="w-full h-12 px-6 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             >

@@ -115,7 +115,7 @@ export async function ownerSetManagerAction(unitId: string, input: {
     if (unitError) return { success: false, error: unitError.message }
 
     if (input.invite && managerId) {
-        const invitation = await deliverUnitContactInvitation(admin, managerId)
+        const invitation = await deliverUnitContactInvitation(admin, managerId, { automatic: true })
         if (!invitation.success) return { success: false, error: `Gestor guardado, pero ${invitation.error?.toLowerCase()}` }
     }
     revalidatePath('/propietario')

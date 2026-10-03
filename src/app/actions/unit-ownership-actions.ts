@@ -144,6 +144,25 @@ async function upsertContact(
         if (data) return data.id
     }
 
+    // La misma persona capturada otra vez (mismo correo o teléfono) no se
+    // duplica: se reutiliza su registro y conserva su cuenta del portal.
+    for (const [column, value] of [['email', fields.email], ['phone', fields.phone]] as const) {
+        if (!value) continue
+        const { data: same } = await admin
+            .from('unit_contacts')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .eq('kind', kind)
+            .eq(column, value)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+        if (same) {
+            await admin.from('unit_contacts').update(fields).eq('id', same.id)
+            return same.id
+        }
+    }
+
     const { data, error } = await admin
         .from('unit_contacts')
         .insert({ organization_id: organizationId, kind, ...fields })
@@ -230,8 +249,8 @@ async function inviteNewPortalContacts(admin: AdminClient, unitIds: string[]): P
         .is('user_id', null)
         .not('email', 'is', null)
     for (const c of pending || []) {
-        const sent = await deliverUnitContactInvitation(admin, c.id)
-        if (sent.success) result.sent.push(c.email)
+        const sent = await deliverUnitContactInvitation(admin, c.id, { automatic: true })
+        if (sent.success && !sent.linkedOnly) result.sent.push(c.email)
         else result.failed.push(`${c.email}: ${sent.error}`)
     }
     return result

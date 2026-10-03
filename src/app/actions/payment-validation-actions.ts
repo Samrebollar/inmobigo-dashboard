@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto'
 import { createAdminClient as createServiceClient } from '@/utils/supabase/admin'
 import { getCondominiumAccess, SUSPENDED_RESIDENT_MESSAGE } from '@/lib/subscription-access'
 import { checkCanSignPayments, issuePaymentReceipt, SECURITY_CANNOT_SIGN_ERROR } from '@/lib/payment-receipts'
+import { billsToOwnerRecord, isOwnerRecord } from '@/lib/owner-record'
 
 /**
  * @param residentId - Cuando se pasa (pantalla del residente), acota el
@@ -191,15 +192,18 @@ export async function updateValidationStatus(
                 if (!resData && validation.unit) {
                     const { data: unitData } = await adminClient
                         .from('units')
-                        .select('id, condominium_id')
+                        .select('id, condominium_id, occupancy_type, payment_responsible')
                         .eq('unit_number', validation.unit)
                         .maybeSingle()
                     if (unitData) {
-                        const { data: resident } = await adminClient
+                        // Se abona a quien responde por la cuota de la unidad
+                        const { data: unitResidents } = await adminClient
                             .from('residents')
-                            .select('id, condominium_id, debt_amount')
+                            .select('id, condominium_id, debt_amount, role')
                             .eq('unit_id', unitData.id)
-                            .maybeSingle()
+                            .neq('status', 'inactive')
+                        const toOwner = billsToOwnerRecord(unitData)
+                        const resident = (unitResidents || []).find((r) => isOwnerRecord(r) === toOwner) || (unitResidents || [])[0]
                         if (resident) resData = resident
                     }
                 }

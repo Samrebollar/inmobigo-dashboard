@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { ControlLecturaClient } from '@/components/dashboard/control-lectura-client'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,7 @@ export default async function ControlLecturaPage() {
     .from('residents')
     .select('*, condominiums!inner(organization_id)', { count: 'exact', head: true })
     .eq('condominiums.organization_id', organizationId)
+    .or(NOT_OWNER_RECORD)
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">

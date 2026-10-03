@@ -6,6 +6,7 @@ import { createCurrentMonthMaintenanceInvoice } from '@/lib/resident-billing'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import type { DebtLineItem } from '@/types/residents'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 const DEBT_CATEGORY_LABEL: Record<string, string> = {
     maintenance: 'Cuota de Mantenimiento',
@@ -349,6 +350,7 @@ export async function adminCreateResidentAction(payload: any) {
                 .select('first_name, last_name, units(unit_number)')
                 .eq('condominium_id', condominium_id)
                 .eq('phone', phone)
+                .or(NOT_OWNER_RECORD)
                 .maybeSingle();
 
             if (existingPhone) {

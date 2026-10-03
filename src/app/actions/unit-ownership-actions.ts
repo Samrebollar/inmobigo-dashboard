@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getFinanceOrgForCondo } from '@/lib/finance-auth'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
+import { NOT_OWNER_RECORD, syncOwnerBillingRecords, unitsOfOwnerContacts } from '@/lib/owner-billing'
 import type {
     OccupancyType,
     PaymentResponsible,
@@ -75,7 +76,8 @@ export async function getUnitOwnershipAction(condominiumId: string): Promise<
         admin
             .from('residents')
             .select('unit_id, first_name, last_name, status')
-            .eq('condominium_id', condominiumId),
+            .eq('condominium_id', condominiumId)
+            .or(NOT_OWNER_RECORD),
     ])
     if (unitsError) return { success: false, error: unitsError.message }
 
@@ -173,7 +175,7 @@ function validate(input: SaveUnitOwnershipInput): string | null {
     return null
 }
 
-async function applyOwnership(admin: AdminClient, organizationId: string, unitId: string, input: SaveUnitOwnershipInput) {
+async function applyOwnership(admin: AdminClient, organizationId: string, unitId: string, input: SaveUnitOwnershipInput): Promise<string | null> {
     const [ownerId, coOwnerId, managerId] = await Promise.all([
         upsertContact(admin, organizationId, 'propietario', input.owner),
         upsertContact(admin, organizationId, 'propietario', input.co_owner),
@@ -191,6 +193,7 @@ async function applyOwnership(admin: AdminClient, organizationId: string, unitId
         })
         .eq('id', unitId)
     if (error) throw new Error(error.message)
+    return ownerId
 }
 
 /** Guarda propietario, copropietario, gestor, ocupación y responsable de pago de una unidad. */
@@ -206,7 +209,9 @@ export async function saveUnitOwnershipAction(unitId: string, input: SaveUnitOwn
     if (invalid) return { success: false, error: invalid }
 
     try {
-        await applyOwnership(auth.admin, auth.organizationId, unitId, input)
+        const ownerId = await applyOwnership(auth.admin, auth.organizationId, unitId, input)
+        // Registro de cobro del propietario de esta unidad y de las demás donde aparece
+        await syncOwnerBillingRecords(auth.admin, [unitId, ...await unitsOfOwnerContacts(auth.admin, [ownerId])])
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message || 'No se pudo guardar' }
@@ -266,6 +271,8 @@ export async function bulkApplyUnitOwnershipAction(condominiumId: string, rows: 
 
     const errors: string[] = []
     let updated = 0
+    const touchedUnits: string[] = []
+    const touchedOwners = new Set<string>()
     for (const row of relevant) {
         const unit: any = unitByNumber.get(String(row.unit_number).toLowerCase())
         if (!unit) {
@@ -303,10 +310,17 @@ export async function bulkApplyUnitOwnershipAction(condominiumId: string, rows: 
                     knownContacts.push({ id, kind, phone: phone ? normalizeMexicanPhone(phone) || phone : null, email: email?.trim().toLowerCase() || null })
                 }
             }
+            touchedUnits.push(unit.id)
+            if (fresh?.owner_contact_id) touchedOwners.add(fresh.owner_contact_id)
             updated++
         } catch (error: any) {
             errors.push(`Unidad ${row.unit_number}: ${error.message}`)
         }
+    }
+    try {
+        await syncOwnerBillingRecords(admin, [...touchedUnits, ...await unitsOfOwnerContacts(admin, [...touchedOwners])])
+    } catch (error: any) {
+        errors.push(error.message)
     }
     return { success: true, updated, errors }
 }

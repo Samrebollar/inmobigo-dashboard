@@ -9,6 +9,7 @@ import { financeService } from '@/services/finance-service'
 import { Resident } from '@/types/residents'
 import { InvoiceType } from '@/types/finance'
 import { format } from 'date-fns'
+import { billsToOwnerRecord, isOwnerRecord } from '@/lib/owner-record'
 
 interface BulkChargeModalProps {
     isOpen: boolean
@@ -64,10 +65,12 @@ export function BulkChargeModal({
     useEffect(() => {
         if (!isOpen || !condoId) return
         setLoadingResidents(true)
-        residentsService.getByCondominium(condoId)
+        residentsService.getByCondominium(condoId, { includeOwnerRecords: true })
             .then(residents => {
                 const active = residents.filter(r => r.status !== 'inactive')
-                setRows(active.map(r => ({ resident: r, selected: true, amount: '' })))
+                // Preseleccionado quien paga la unidad: el propietario que no vive
+                // ahí, o los residentes si vive ahí o paga el inquilino
+                setRows(active.map(r => ({ resident: r, selected: billsToOwnerRecord(r) === isOwnerRecord(r), amount: '' })))
             })
             .catch(() => toast.error('Error al cargar los residentes de la privada.'))
             .finally(() => setLoadingResidents(false))
@@ -244,6 +247,7 @@ export function BulkChargeModal({
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm text-white font-medium truncate">
                                                     {row.resident.first_name} {row.resident.last_name}
+                                                    {isOwnerRecord(row.resident) && <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">Propietario</span>}
                                                 </p>
                                                 <p className="text-[11px] text-slate-500">{row.resident.unit_number || 'S/N'}</p>
                                             </div>

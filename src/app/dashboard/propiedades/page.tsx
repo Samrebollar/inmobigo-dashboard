@@ -17,6 +17,7 @@ import { Condominium } from '@/types/properties'
 import { useDemoMode } from '@/hooks/use-demo-mode'
 import { useUserRole } from '@/hooks/use-user-role'
 import { demoDb } from '@/utils/demo-db'
+import { isOwnerRecord } from '@/lib/owner-record'
 
 export default function PropiedadesPage() {
   const supabase = createClient()
@@ -109,7 +110,7 @@ export default function PropiedadesPage() {
                       // Ocupadas" como del propio conteo de morosos de abajo.
                       supabase
                           .from('residents')
-                          .select('id, condominium_id, status, unit_id')
+                          .select('id, condominium_id, status, unit_id, role')
                           .in('condominium_id', condoIds)
                           .neq('status', 'inactive')
                   ])
@@ -156,7 +157,7 @@ export default function PropiedadesPage() {
                   setRpcTotalDelinquent(delinquentIds.size)
                   
                   const occupiedUnitIds = new Set(
-                      activeRes.filter(r => r.unit_id).map(r => r.unit_id)
+                      activeRes.filter(r => r.unit_id && !isOwnerRecord(r)).map(r => r.unit_id)
                   )
                   setRpcOccupiedUnits(occupiedUnitIds.size)
               } catch (err) {

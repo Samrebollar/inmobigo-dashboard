@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { Wrench } from 'lucide-react'
 import AdminDashboardPropiedadesClient from '@/components/seguridad/admin-dashboard-propiedades-client'
 import ResidentDashboardPropiedadesClient from '@/components/seguridad/resident-dashboard-propiedades-client'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -230,6 +231,7 @@ export default async function DashboardPage({
       .from('residents')
       .select('id, first_name, last_name, created_at, condominiums(name), units(unit_number)')
       .in('condominium_id', activeIds)
+      .or(NOT_OWNER_RECORD)
       .order('created_at', { ascending: false })
       .limit(10)
 

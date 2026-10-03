@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 export async function GET() {
     const supabase = await createClient()
@@ -55,6 +56,7 @@ export async function GET() {
             .from('residents')
             .select('id, condominium_id')
             .in('condominium_id', propertyIds)
+            .or(NOT_OWNER_RECORD)
 
         const enhancedProperties = properties.map(p => ({
             ...p,

@@ -332,6 +332,9 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                                             <p className="text-xs text-zinc-400"><span className="text-zinc-500">Gestor:</span> {o.manager.full_name}</p>
                                                         )}
                                                         <p className="text-[11px] text-zinc-500">Paga: {PAYMENT_RESPONSIBLE_LABEL[o.payment_responsible]}</p>
+                                                        {o.occupancy_type !== 'propietario' && o.payment_responsible !== 'inquilino' && !o.owner && (
+                                                            <p className="text-[11px] font-semibold text-amber-400">No se factura: captura al propietario</p>
+                                                        )}
                                                     </div>
                                                 )
                                             })() : (

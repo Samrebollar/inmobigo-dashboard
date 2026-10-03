@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import { applyResidentCreditToInvoice } from '@/lib/resident-billing'
+import { billsToOwnerRecord, isOwnerRecord, OWNER_RECORD_ROLE } from '@/lib/owner-billing'
 
 /**
  * GET /api/cron/generate-monthly-invoices
@@ -124,9 +125,12 @@ async function handleRequest(request: Request) {
                 id,
                 condominium_id,
                 unit_id,
+                role,
                 units (
                     id,
                     unit_number,
+                    occupancy_type,
+                    payment_responsible,
                     monto_mensual,
                     facturacion_activa,
                     billing_status,
@@ -140,7 +144,22 @@ async function handleRequest(request: Request) {
             residentsQuery = residentsQuery.eq('condominium_id', filterCondoId)
         }
 
-        const { data: residents, error: residentsError } = await residentsQuery
+        const { data: allResidents, error: residentsError } = await residentsQuery
+
+        // Por unidad se factura a quien responde por la cuota: el propietario que
+        // no vive ahí (su registro de cobro) o, si vive ahí o paga el inquilino,
+        // los residentes. Una unidad rentada o desocupada se factura igual.
+        const residents = (allResidents || []).filter((r: any) => {
+            const unit = Array.isArray(r.units) ? r.units[0] : r.units
+            return billsToOwnerRecord(unit) === isOwnerRecord(r)
+        })
+        // Unidad que se le cobra al propietario pero sin propietario capturado
+        const unitsWithOwnerRecord = new Set(residents.filter((r: any) => isOwnerRecord(r)).map((r: any) => r.unit_id))
+        const unitsMissingOwner = new Set<string>()
+        for (const r of (allResidents || []) as any[]) {
+            const unit = Array.isArray(r.units) ? r.units[0] : r.units
+            if (billsToOwnerRecord(unit) && !unitsWithOwnerRecord.has(r.unit_id)) unitsMissingOwner.add(unit?.unit_number || r.unit_id)
+        }
 
         if (residentsError) {
             console.error('[GenerateInvoices] Error fetching residents:', residentsError)
@@ -191,7 +210,7 @@ async function handleRequest(request: Request) {
         // Para evitar duplicados (idempotencia)
         let existingQuery = supabase
             .from('resident_invoices')
-            .select('resident_id')
+            .select('resident_id, unit_id')
             .eq('invoice_type', 'maintenance')
             .gte('due_date', firstDayStr)
             .lte('due_date', lastDayStr)
@@ -204,11 +223,26 @@ async function handleRequest(request: Request) {
         const alreadyBilledResidentIds = new Set(
             (existingInvoices || []).map((inv: any) => inv.resident_id)
         )
+        // Si en el mes cambió quién paga, la unidad no se cobra dos veces: el
+        // propietario no se factura si la unidad ya tiene cuota del mes, y los
+        // residentes no se facturan si ya se le cobró al propietario.
+        let ownerRecordsQuery = supabase.from('residents').select('id').eq('role', OWNER_RECORD_ROLE)
+        if (filterCondoId) ownerRecordsQuery = ownerRecordsQuery.eq('condominium_id', filterCondoId)
+        const { data: ownerRecords } = await ownerRecordsQuery
+        const ownerRecordIds = new Set((ownerRecords || []).map((r: any) => r.id))
+        const billedUnitIds = new Set((existingInvoices || []).map((inv: any) => inv.unit_id).filter(Boolean))
+        const ownerBilledUnitIds = new Set(
+            (existingInvoices || []).filter((inv: any) => ownerRecordIds.has(inv.resident_id)).map((inv: any) => inv.unit_id).filter(Boolean)
+        )
 
         console.log(`[GenerateInvoices] Residentes activos: ${residents.length}, ya facturados este mes: ${alreadyBilledResidentIds.size}`)
 
         // ── 3. Generar facturas faltantes ───────────────────────────────────────
         const results = { generated: 0, skipped: 0, errors: 0, details: [] as string[] }
+        for (const unitNumber of unitsMissingOwner) {
+            results.skipped++
+            results.details.push(`Unidad ${unitNumber}: se le cobra al propietario pero no está capturado`)
+        }
 
         for (const resident of residents) {
             const unit = resident.units as any
@@ -278,6 +312,10 @@ async function handleRequest(request: Request) {
 
             // Ya tiene factura este mes → saltar (idempotencia)
             if (alreadyBilledResidentIds.has(resident.id)) {
+                results.skipped++
+                continue
+            }
+            if (isOwnerRecord(resident) ? billedUnitIds.has(resident.unit_id) : ownerBilledUnitIds.has(resident.unit_id)) {
                 results.skipped++
                 continue
             }

@@ -200,7 +200,8 @@ export function UnitOwnershipModal({
                     </div>
                     <p className="text-[11px] text-zinc-500">
                         Por ley el propietario responde por la cuota aunque la unidad no esté habitada.
-                        {responsible === 'propietario' && occupancy === 'inquilino' && ' El inquilino no verá la cuota de mantenimiento cuando se active el cobro por responsable.'}
+                        {!ownerLivesThere && responsible !== 'inquilino' && ' La cuota mensual se le factura al propietario (aunque pague el gestor en su nombre); el inquilino ya no la recibe. Multas y amenidades siguen siendo del inquilino.'}
+                        {responsible === 'inquilino' && ' La cuota se le factura al inquilino y el propietario recibe copia de los recordatorios.'}
                     </p>
                 </div>
 

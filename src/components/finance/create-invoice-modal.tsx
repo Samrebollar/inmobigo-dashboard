@@ -16,6 +16,7 @@ import autoTable from 'jspdf-autotable'
 import { CreateInvoiceDTO, InvoiceType, ResidentInvoice } from '@/types/finance'
 import { ReceiptSigningNotice } from '@/components/finance/receipt-signing-notice'
 import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
+import { isOwnerRecord } from '@/lib/owner-record'
 
 // Mismo mapeo de categorías usadas en el alta de deuda inicial de un residente
 // (src/app/actions/resident-actions.ts) — así una Multa o Cuota Extraordinaria
@@ -286,7 +287,7 @@ export function CreateInvoiceModal({
 
     const loadResidents = async (condoId: string) => {
         try {
-            const data = await residentsService.getByCondominium(condoId)
+            const data = await residentsService.getByCondominium(condoId, { includeOwnerRecords: true })
             setResidents(data)
         } catch (error) {
             const msg = error instanceof Error ? error.message : ''
@@ -636,7 +637,7 @@ export function CreateInvoiceModal({
                                     >
                                         <option value="">Seleccionar...</option>
                                         {residents.map(r => (
-                                            <option key={r.id} value={r.id}>{r.first_name} {r.last_name} ({r.unit_number})</option>
+                                            <option key={r.id} value={r.id}>{r.first_name} {r.last_name} ({r.unit_number}){isOwnerRecord(r) ? ' · Propietario (no reside)' : ''}</option>
                                         ))}
                                     </select>
                                 </div>

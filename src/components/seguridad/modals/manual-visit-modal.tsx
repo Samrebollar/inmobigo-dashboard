@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
 import { createVisitorPassAction } from '@/app/actions/service-actions'
 import { toast } from 'sonner'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 interface ManualVisitModalProps {
     isOpen: boolean
@@ -60,6 +61,7 @@ export function ManualVisitModal({ isOpen, onClose, organizationId, availableCon
                 .from('residents')
                 .select('user_id, first_name, last_name, units(id, unit_number)')
                 .eq('condominium_id', condoId)
+                .or(NOT_OWNER_RECORD)
             
             if (data) {
                 const formatted = data.map(r => ({

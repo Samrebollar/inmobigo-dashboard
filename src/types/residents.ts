@@ -32,7 +32,11 @@ export interface Resident {
     // Linked data (optional for joins)
     unit_number?: string
     /** Ocupación de su unidad: propietario, inquilino, vacacional o desocupada */
+    /** 'propietario_no_residente' = registro de cobro del propietario que no vive en la unidad */
+    role?: string
     occupancy_type?: string
+    /** Quién paga la cuota de su unidad: propietario, gestor o inquilino */
+    payment_responsible?: string
     payment_deadline?: number
     vehicles?: Vehicle[]
 }

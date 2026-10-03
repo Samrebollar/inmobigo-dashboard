@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, Loader2, ShieldCheck } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { settleReservationDepositAction } from '@/app/actions/amenity-reservation-actions'
 import { todayMx } from '@/lib/amenity-booking'
+import { DepositEvidenceButton, DepositEvidencePicker, type EvidencePhoto } from '@/components/amenities/deposit-evidence'
 
 const money = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('es-MX', {
@@ -62,9 +63,12 @@ export function ReservationAdminActions({ res, onChanged }: { res: any; onChange
             ? `Retenido ${money(Number(res.deposit_retained_amount || 0))}${Number(res.deposit_refunded_amount || 0) > 0 ? ` · devuelto ${money(Number(res.deposit_refunded_amount))}` : ''}`
             : 'Pagada'
     return (
-        <p className="w-full text-center text-[11px] font-semibold text-emerald-400 flex items-center justify-center gap-1.5" title={res.deposit_notes || ''}>
-            <CheckCircle2 size={13} /> {label}
-        </p>
+        <div className="w-full flex flex-col items-center gap-1">
+            <p className="text-center text-[11px] font-semibold text-emerald-400 flex items-center justify-center gap-1.5" title={res.deposit_notes || ''}>
+                <CheckCircle2 size={13} /> {label}
+            </p>
+            <DepositEvidenceButton reservationId={res.id} count={(res.deposit_photo_paths || []).length} />
+        </div>
     )
 }
 
@@ -74,6 +78,7 @@ function SettleDepositModal({ res, onClose, onDone }: { res: any; onClose: () =>
     const [retained, setRetained] = useState('')
     const [method, setMethod] = useState<string>('efectivo')
     const [notes, setNotes] = useState('')
+    const [photos, setPhotos] = useState<EvidencePhoto[]>([])
     const [saving, setSaving] = useState(false)
 
     const retainedAmount = mode === 'full' ? 0 : Math.min(Math.max(Number(retained) || 0, 0), deposit)
@@ -82,8 +87,9 @@ function SettleDepositModal({ res, onClose, onDone }: { res: any; onClose: () =>
     const submit = async () => {
         if (mode === 'partial' && retainedAmount <= 0) return toast.error('Indica cuánto se retiene')
         if (mode === 'partial' && notes.trim().length < 5) return toast.error('Describe el motivo de la retención')
+        if (mode === 'partial' && photos.length === 0) return toast.error('Agrega al menos una foto de los daños')
         setSaving(true)
-        const result = await settleReservationDepositAction(res.id, { refundAmount: refund, method: method as any, notes })
+        const result = await settleReservationDepositAction(res.id, { refundAmount: refund, method: method as any, notes, photoPaths: mode === 'partial' ? photos.map((p) => p.path) : [] })
         setSaving(false)
         if (!result.success) return toast.error(result.error)
         toast.success(refund > 0 ? `Depósito liquidado: se devuelven ${money(refund)}` : 'Depósito retenido por completo')
@@ -127,6 +133,7 @@ function SettleDepositModal({ res, onClose, onDone }: { res: any; onClose: () =>
                             placeholder="Ej. Silla rota y mancha en el piso del salón"
                             className="w-full px-3 py-2 text-sm text-white bg-zinc-950/60 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:outline-none resize-none"
                         />
+                        <DepositEvidencePicker reservationId={res.id} photos={photos} onChange={setPhotos} />
                     </div>
                 )}
                 {refund > 0 && (

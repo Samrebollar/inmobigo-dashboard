@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { CheckCircle2, CreditCard, Loader2, ShieldCheck } from 'lucide-react'
 import { createReservationCheckoutAction, sweepExpiredReservationsAction } from '@/app/actions/amenity-reservation-actions'
 import { amenityDeposit, amenityFee } from '@/lib/amenity-booking'
+import { DepositEvidenceButton } from '@/components/amenities/deposit-evidence'
 
 const money = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('es-MX', {
@@ -74,6 +75,7 @@ export function ReservationPaymentCell({ reserva, returnPath }: { reserva: any; 
                     {reserva.deposit_notes ? ` · ${reserva.deposit_notes}` : ''}
                 </p>
             )}
+            <DepositEvidenceButton reservationId={reserva.id} count={(reserva.deposit_photo_paths || []).length} />
         </div>
     )
 }

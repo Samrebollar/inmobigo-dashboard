@@ -18,6 +18,7 @@ import { useDemoMode } from '@/hooks/use-demo-mode'
 import { useUserRole } from '@/hooks/use-user-role'
 import { demoDb } from '@/utils/demo-db'
 import { isOwnerRecord } from '@/lib/owner-record'
+import { isReservationInvoice } from '@/lib/invoice-types'
 
 export default function PropiedadesPage() {
   const supabase = createClient()
@@ -128,7 +129,7 @@ export default function PropiedadesPage() {
 
                   activeRes.forEach(res => {
                       const hasOverdueInvoice = invoicesList.some(inv => 
-                          inv.resident_id === res.id && 
+                          inv.resident_id === res.id && !isReservationInvoice(inv) &&
                           (inv.status === 'overdue' || (inv.status === 'pending' && inv.due_date < new Date().toISOString().substring(0, 10)))
                       )
 

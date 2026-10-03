@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import ResidentPaymentsClient from '@/components/residente/resident-payments-client'
 import { NotLinkedState } from '@/components/residente/NotLinkedState'
 import { getCondoMercadoPagoAccount } from '@/services/mercadopago-connect-service'
+import { NOT_RESERVATION_CHARGE } from '@/lib/invoice-types'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -38,6 +39,7 @@ export default async function PaymentsPage() {
             .from('resident_invoices')
             .select('*')
             .eq('resident_id', resident.id)
+            .or(NOT_RESERVATION_CHARGE)
             .order('created_at', { ascending: false })
 
         if (!error && inv) {
@@ -108,6 +110,13 @@ export default async function PaymentsPage() {
                 const invMap: Record<string, any> = {}
                 for (const i of inv) {
                     invMap[i.id] = i
+                }
+                // Pagos de cargos que no salen en el estado de cuenta (reservas de
+                // amenidades): su concepto se toma de su propio cargo
+                const missing = Array.from(new Set(payRows.map(p => p.invoice_id).filter((id: string | null) => id && !invMap[id])))
+                if (missing.length > 0) {
+                    const { data: extra } = await adminSupabase.from('resident_invoices').select('id, description').in('id', missing)
+                    for (const i of extra || []) invMap[i.id] = i
                 }
 
                 directPayments = payRows.map(p => {

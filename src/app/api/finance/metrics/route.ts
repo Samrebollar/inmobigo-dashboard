@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { calculateCondoMonthlyFinancials } from '@/utils/finance-utils'
+import { isDepositInvoice, isReservationInvoice } from '@/lib/invoice-types'
 
 /**
  * GET /api/finance/metrics
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
         const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, '0')}-01`
         const monthEndIso = new Date(`${nextMonth}T00:00:00-06:00`).toISOString()
 
-        type InvRow = { id: string, amount: number | null, balance_due: number | null, status: string | null, due_date: string | null, created_at: string | null, paid_at: string | null }
+        type InvRow = { id: string, amount: number | null, balance_due: number | null, status: string | null, due_date: string | null, created_at: string | null, paid_at: string | null, invoice_type?: string | null }
         const invList = (invoices || []) as InvRow[]
         const invById = new Map(invList.map(i => [i.id, i]))
 
@@ -143,12 +144,15 @@ export async function GET(request: Request) {
         for (const p of monthPayments || []) {
             if (p.invoice_id) invoicesWithPaymentRows.add(p.invoice_id)
             if (p.payment_method === 'Saldo a favor') continue
+            // El depósito en garantía no es ingreso (se devuelve); lo retenido por
+            // daños entra como cargo aparte (amenity_damage)
+            if (p.invoice_id && isDepositInvoice(invById.get(p.invoice_id))) continue
             classify(p.invoice_id ? invById.get(p.invoice_id)?.due_date : null, Number(p.amount || 0))
         }
         // Facturas marcadas como pagadas este mes sin renglón de pago (flujos
         // antiguos): se cuenta lo pagado de la factura.
         const paidThisMonthIds = invList
-            .filter(i => i.status === 'paid' && i.paid_at && i.paid_at >= monthStartIso && i.paid_at < monthEndIso && !invoicesWithPaymentRows.has(i.id))
+            .filter(i => i.status === 'paid' && i.paid_at && i.paid_at >= monthStartIso && i.paid_at < monthEndIso && !invoicesWithPaymentRows.has(i.id) && !isDepositInvoice(i))
             .map(i => i.id)
         if (paidThisMonthIds.length > 0) {
             const { data: anyRows } = await supabase
@@ -170,6 +174,7 @@ export async function GET(request: Request) {
         let vencidoAnterior = 0
         for (const i of invList) {
             if (!['pending', 'overdue', 'partial'].includes(String(i.status))) continue
+            if (isReservationInvoice(i)) continue
             const due = String(i.due_date || '').slice(0, 10)
             const bal = Number(i.balance_due ?? i.amount ?? 0)
             if (!due || bal <= 0 || due >= todayMx) continue

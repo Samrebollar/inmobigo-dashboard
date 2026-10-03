@@ -8,6 +8,10 @@
  * - Se reserva con hasta BOOKING_WINDOW_DAYS días de anticipación.
  */
 export const BOOKING_WINDOW_DAYS = 10
+/** Amenidades con costo: se reservan con al menos estos días, para pagar 48 h antes. */
+export const PAID_MIN_DAYS_AHEAD = 3
+/** El pago de una reserva vence estas horas antes del evento. */
+export const PAYMENT_DEADLINE_HOURS = 48
 export const ACTIVE_RESERVATION_STATUSES = ['pending', 'approved']
 
 export type BookingMode = 'exclusivo' | 'compartido'
@@ -42,4 +46,21 @@ export function operatesOn(amenity: { use_days?: unknown } | null | undefined, i
     const days = Array.isArray(amenity?.use_days) ? (amenity!.use_days as unknown[]).map(String) : null
     if (!days || days.length === 0) return true
     return days.includes(weekdayOf(iso))
+}
+
+type PricedAmenity = { base_price?: number | string | null; deposit_required?: boolean | null; deposit_amount?: number | string | null }
+
+export const amenityFee = (a: PricedAmenity | null | undefined) => Math.max(0, Number(a?.base_price || 0))
+export const amenityDeposit = (a: PricedAmenity | null | undefined) => (a?.deposit_required ? Math.max(0, Number(a?.deposit_amount || 0)) : 0)
+export const amenityHasCost = (a: PricedAmenity | null | undefined) => amenityFee(a) + amenityDeposit(a) > 0
+
+/** Primera fecha reservable: hoy, o en 3 días si la amenidad tiene costo. */
+export function firstBookableDate(amenity: PricedAmenity | null | undefined): string {
+    return addDaysIso(todayMx(), amenityHasCost(amenity) ? PAID_MIN_DAYS_AHEAD : 0)
+}
+
+/** Límite de pago: 48 h antes del inicio del día del evento (hora de Cancún/CDMX, UTC-6). */
+export function paymentDueAt(reservationDate: string): string {
+    const start = new Date(`${reservationDate}T00:00:00-06:00`)
+    return new Date(start.getTime() - PAYMENT_DEADLINE_HOURS * 3600 * 1000).toISOString()
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { NOT_DEPOSIT_CHARGE } from '@/lib/invoice-types'
 
 export async function GET(request: Request) {
     try {
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
         let query = supabase
             .from('resident_invoices')
             .select('amount, balance_due, status, created_at, due_date')
+            .or(NOT_DEPOSIT_CHARGE)
 
         if (condominiumId) {
             query = query.eq('condominium_id', condominiumId)

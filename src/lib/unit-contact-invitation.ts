@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/utils/supabase/admin'
-import { ensureResidentAuthUser } from '@/lib/resident-invitation'
+import { ensureResidentAuthUser, findAuthUserIdByEmail } from '@/lib/resident-invitation'
 
 /**
  * Invitación al Portal de Propietarios y Gestores. Igual que la de residentes:
@@ -13,7 +13,18 @@ type AdminClient = ReturnType<typeof createAdminClient>
 
 const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://app.inmobigo.mx'
 
-export async function deliverUnitContactInvitation(admin: AdminClient, contactId: string): Promise<{ success: boolean; error?: string }> {
+/**
+ * automatic: invitación que sale sola al guardar la ficha de la unidad. Si la
+ * persona ya tiene cuenta (por ejemplo, es propietaria de otra unidad), solo
+ * se le liga la unidad nueva y NO se le manda correo: ya puede entrar con su
+ * contraseña y verá la unidad en su portal. El botón "Reenviar invitación"
+ * del administrador sí manda el correo siempre.
+ */
+export async function deliverUnitContactInvitation(
+    admin: AdminClient,
+    contactId: string,
+    options: { automatic?: boolean } = {}
+): Promise<{ success: boolean; error?: string; linkedOnly?: boolean }> {
     const { data: contact } = await admin
         .from('unit_contacts')
         .select('id, kind, full_name, phone, email, user_id')
@@ -33,7 +44,14 @@ export async function deliverUnitContactInvitation(admin: AdminClient, contactId
                 await admin.from('unit_contacts').update({ user_id: null }).eq('id', contact.id)
             }
         }
-        const userId = linkedId || await ensureResidentAuthUser(admin, {
+        const existingAccount = linkedId ? null : await findAuthUserIdByEmail(admin, email)
+        if (options.automatic && (linkedId || existingAccount)) {
+            if (!linkedId && existingAccount) {
+                await admin.from('unit_contacts').update({ user_id: existingAccount, updated_at: new Date().toISOString() }).eq('id', contact.id)
+            }
+            return { success: true, linkedOnly: true }
+        }
+        const userId = linkedId || existingAccount || await ensureResidentAuthUser(admin, {
             email,
             firstName: contact.full_name,
             phone: contact.phone,

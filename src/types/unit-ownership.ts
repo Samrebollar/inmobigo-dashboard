@@ -8,6 +8,8 @@ export interface UnitContact {
     full_name: string
     phone: string | null
     email: string | null
+    /** Ya tiene cuenta en el Portal de Propietarios y Gestores */
+    has_access?: boolean
 }
 
 /** Contacto a guardar: existente (id) o nuevo (sin id). */

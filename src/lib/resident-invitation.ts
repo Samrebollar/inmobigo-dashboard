@@ -16,7 +16,7 @@ type AdminClient = ReturnType<typeof createAdminClient>
 
 const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://app.inmobigo.mx'
 
-async function findAuthUserIdByEmail(admin: AdminClient, email: string): Promise<string | null> {
+export async function findAuthUserIdByEmail(admin: AdminClient, email: string): Promise<string | null> {
     const target = email.toLowerCase()
     const { data: profile } = await admin.from('profiles').select('id').ilike('email', target).maybeSingle()
     if (profile?.id) return profile.id
@@ -36,6 +36,8 @@ export async function ensureResidentAuthUser(admin: AdminClient, params: {
     firstName?: string | null
     lastName?: string | null
     phone?: string | null
+    /** Cuenta del Portal de Propietarios y Gestores en lugar de residente */
+    portal?: 'propietario'
 }): Promise<string> {
     const email = params.email.trim().toLowerCase()
     const existing = await findAuthUserIdByEmail(admin, email)
@@ -53,10 +55,19 @@ export async function ensureResidentAuthUser(admin: AdminClient, params: {
             last_name: lastName,
             full_name: `${firstName} ${lastName}`.trim(),
             phone: params.phone || null,
-            role: 'resident',
-            role_name: 'Residente',
-            role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
-            user_type: 'resident',
+            ...(params.portal === 'propietario'
+                ? {
+                    role: 'propietario',
+                    role_name: 'Propietario',
+                    role_description: 'Podrás ver el estado de cuenta de tus unidades, a tus inquilinos y pagar la cuota.',
+                    user_type: 'propietario',
+                }
+                : {
+                    role: 'resident',
+                    role_name: 'Residente',
+                    role_description: 'Podrás reservar amenidades, ver tus estados de cuenta y reportar incidencias.',
+                    user_type: 'resident',
+                }),
         },
     })
     if (error || !data?.user) throw new Error(error?.message || 'No se pudo crear la cuenta de acceso')

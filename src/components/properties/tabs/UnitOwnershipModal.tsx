@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Home, KeyRound, Palmtree, DoorOpen, UserRound, Users, Briefcase, Loader2, Save } from 'lucide-react'
+import { Home, KeyRound, Palmtree, DoorOpen, UserRound, Users, Briefcase, Loader2, Save, Send } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { saveUnitOwnershipAction } from '@/app/actions/unit-ownership-actions'
+import { inviteUnitContactAction } from '@/app/actions/owner-portal-actions'
 import {
     OCCUPANCY_LABEL,
     PAYMENT_RESPONSIBLE_LABEL,
@@ -44,6 +45,7 @@ function ContactFields({
     contacts,
     required,
     hint,
+    saved,
 }: {
     title: string
     icon: React.ElementType
@@ -53,6 +55,8 @@ function ContactFields({
     contacts: UnitContact[]
     required?: boolean
     hint?: string
+    /** Contacto ya guardado en esta unidad (para invitarlo al portal) */
+    saved?: UnitContact | null
 }) {
     const options = contacts.filter((c) => c.kind === kind)
     return (
@@ -83,6 +87,35 @@ function ContactFields({
                 <Input value={draft.email} onChange={(e) => onChange({ ...draft, email: e.target.value })} placeholder="Correo" type="email" className={`${inputClass} sm:col-span-2`} />
             </div>
             {draft.id && <p className="text-[11px] text-zinc-500">Ya registrado: si cambias sus datos se actualizan en todas sus unidades.</p>}
+            {saved && <PortalInvite contact={saved} />}
+        </div>
+    )
+}
+
+/** Invitación al Portal de Propietarios y Gestores de un contacto ya guardado en esta unidad. */
+function PortalInvite({ contact }: { contact: UnitContact }) {
+    const [sending, setSending] = useState(false)
+    const [sent, setSent] = useState(false)
+    if (!contact.email) {
+        return <p className="text-[11px] text-zinc-500">Captura su correo para darle acceso al portal de propietarios.</p>
+    }
+    const send = async () => {
+        setSending(true)
+        const result = await inviteUnitContactAction(contact.id)
+        setSending(false)
+        if (!result.success) return toast.error(result.error)
+        setSent(true)
+        toast.success(`Invitación enviada a ${contact.email}`)
+    }
+    return (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <p className="text-[11px] text-zinc-400">
+                {contact.has_access || sent ? 'Con acceso al portal de propietarios' : 'Sin acceso al portal de propietarios'}
+            </p>
+            <button type="button" onClick={send} disabled={sending} className="text-xs font-semibold text-indigo-300 hover:text-indigo-200 flex items-center gap-1 disabled:opacity-50">
+                {sending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                {contact.has_access || sent ? 'Reenviar invitación' : 'Invitar al portal'}
+            </button>
         </div>
     )
 }
@@ -214,13 +247,14 @@ export function UnitOwnershipModal({
                     onChange={setOwner}
                     contacts={contacts}
                     required={!ownerLivesThere}
+                    saved={ownership.owner}
                     hint={ownerLivesThere
                         ? 'El dueño es el residente que vive aquí. Captúralo solo si quieres registrar otros datos de contacto.'
                         : 'El dueño no vive en la unidad: es a quien se le cobra y avisa.'}
                 />
 
                 {showCoOwner ? (
-                    <ContactFields title="Copropietario" icon={Users} kind="propietario" draft={coOwner} onChange={setCoOwner} contacts={contacts} />
+                    <ContactFields title="Copropietario" icon={Users} kind="propietario" draft={coOwner} onChange={setCoOwner} contacts={contacts} saved={ownership.co_owner} />
                 ) : (
                     <button type="button" onClick={() => setShowCoOwner(true)} className="text-xs font-semibold text-indigo-300 hover:text-indigo-200">
                         + Agregar copropietario
@@ -236,6 +270,7 @@ export function UnitOwnershipModal({
                     onChange={setManager}
                     contacts={contacts}
                     required={responsible === 'gestor'}
+                    saved={ownership.manager}
                     hint="Persona que le administra la propiedad al dueño. Puede llevar varias unidades."
                 />
                 {manager.full_name.trim() && (

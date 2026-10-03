@@ -31,6 +31,8 @@ export interface Resident {
     facturacion_activa?: boolean
     // Linked data (optional for joins)
     unit_number?: string
+    /** Ocupación de su unidad: propietario, inquilino, vacacional o desocupada */
+    occupancy_type?: string
     payment_deadline?: number
     vehicles?: Vehicle[]
 }

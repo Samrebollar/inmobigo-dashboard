@@ -35,6 +35,7 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
     const [loading, setLoading] = useState(true)
     const [residents, setResidents] = useState<ResidentRow[]>([])
     const [search, setSearch] = useState('')
+    const [typeFilter, setTypeFilter] = useState<'todos' | 'propietario' | 'inquilino'>('todos')
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isBulkOpen, setIsBulkOpen] = useState(false)
     const [residentToEdit, setResidentToEdit] = useState<Resident | null>(null)
@@ -97,9 +98,16 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
         }
     }
 
+    // El residente es inquilino si su unidad está rentada (largo plazo o vacacional)
+    const residentType = (r: Resident): 'propietario' | 'inquilino' =>
+        r.occupancy_type === 'inquilino' || r.occupancy_type === 'vacacional' ? 'inquilino' : 'propietario'
+    const tenantCount = residents.filter(r => residentType(r) === 'inquilino').length
+
     const filteredResidents = residents.filter(resident =>
-        `${resident.first_name} ${resident.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-        resident.unit_number?.toLowerCase().includes(search.toLowerCase())
+        (typeFilter === 'todos' || residentType(resident) === typeFilter) && (
+            `${resident.first_name} ${resident.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+            resident.unit_number?.toLowerCase().includes(search.toLowerCase())
+        )
     )
 
     const confirmDelete = (resident: Resident) => {
@@ -220,6 +228,23 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                         className="pl-9 bg-zinc-900 border-zinc-800 focus:border-indigo-500"
                     />
                 </div>
+                {!isPropiedades && (
+                    <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 self-start">
+                        {([
+                            ['todos', `Todos (${residents.length})`],
+                            ['propietario', `Propietarios (${residents.length - tenantCount})`],
+                            ['inquilino', `Inquilinos (${tenantCount})`],
+                        ] as const).map(([value, label]) => (
+                            <button
+                                key={value}
+                                onClick={() => setTypeFilter(value)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${typeFilter === value ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:text-white'}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 <div className="flex gap-2">
                     <Button onClick={confirmDeleteAll} variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300">
                         <Trash2 className="mr-2 h-4 w-4" /> Borrar Todos
@@ -261,6 +286,17 @@ export function ResidentsTab({ onResidentsUpdated }: ResidentsTabProps = {}) {
                                     >
                                         <td className="px-6 py-4 font-medium text-white">
                                             {resident.first_name} {resident.last_name}
+                                            {!isPropiedades && (
+                                                residentType(resident) === 'inquilino' ? (
+                                                    <span className="ml-2 align-middle inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/10 border-amber-500/20">
+                                                        {resident.occupancy_type === 'vacacional' ? 'Huésped' : 'Inquilino'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="ml-2 align-middle inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border-emerald-500/20">
+                                                        Propietario
+                                                    </span>
+                                                )
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 font-medium text-indigo-400">
                                             {resident.unit_number || '-'}

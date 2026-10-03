@@ -41,7 +41,8 @@ export const residentsService = {
           unit_number,
           monto_mensual,
           payment_deadline,
-          facturacion_activa
+          facturacion_activa,
+          occupancy_type
         ),
         vehicles (*)
       `)
@@ -54,7 +55,8 @@ export const residentsService = {
         return data?.map(r => ({
             ...r,
             unit_number: r.units?.unit_number,
-            payment_deadline: r.units?.payment_deadline
+            payment_deadline: r.units?.payment_deadline,
+            occupancy_type: r.units?.occupancy_type
         })) || []
     },
 

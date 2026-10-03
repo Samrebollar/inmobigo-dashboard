@@ -49,7 +49,8 @@ export function AmenityModal({ isOpen, onClose, orgId, condominiumId, amenityToE
         use_days: DEFAULT_DAYS.map(d => d.id),
         color: COLOR_OPTIONS[0].value,
         status: 'active',
-        rules_pdf_url: ''
+        rules_pdf_url: '',
+        booking_mode: 'exclusivo'
     })
 
     useEffect(() => {
@@ -66,7 +67,8 @@ export function AmenityModal({ isOpen, onClose, orgId, condominiumId, amenityToE
                 use_days: amenityToEdit.use_days || DEFAULT_DAYS.map(d => d.id),
                 color: amenityToEdit.color || COLOR_OPTIONS[0].value,
                 status: amenityToEdit.status || 'active',
-                rules_pdf_url: amenityToEdit.rules_pdf_url || ''
+                rules_pdf_url: amenityToEdit.rules_pdf_url || '',
+                booking_mode: amenityToEdit.booking_mode || 'exclusivo'
             })
         } else if (isOpen && !amenityToEdit) {
             // Reset
@@ -82,7 +84,8 @@ export function AmenityModal({ isOpen, onClose, orgId, condominiumId, amenityToE
                 use_days: DEFAULT_DAYS.map(d => d.id),
                 color: COLOR_OPTIONS[0].value,
                 status: 'active',
-                rules_pdf_url: ''
+                rules_pdf_url: '',
+                booking_mode: 'exclusivo'
             })
         }
     }, [isOpen, amenityToEdit])
@@ -330,6 +333,25 @@ export function AmenityModal({ isOpen, onClose, orgId, condominiumId, amenityToE
                                     <Clock size={14} /> Horarios y Operación
                                 </h3>
                                 <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="text-sm font-medium text-zinc-300">Tipo de uso</label>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            {([
+                                                ['exclusivo', 'Uso exclusivo', 'Se aparta el día completo (salón, palapa, asador). Nadie más puede reservar esa fecha.'],
+                                                ['compartido', 'Uso compartido', 'Varios residentes la usan el mismo día (gimnasio, alberca). No bloquea fechas.'],
+                                            ] as const).map(([value, label, hint]) => (
+                                                <button
+                                                    key={value}
+                                                    type="button"
+                                                    onClick={() => setFormData(s => ({ ...s, booking_mode: value }))}
+                                                    className={`text-left rounded-xl border p-3 transition-colors ${formData.booking_mode === value ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-700'}`}
+                                                >
+                                                    <p className="text-sm font-semibold text-white">{label}</p>
+                                                    <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">{hint}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <div className="space-y-1.5 md:col-span-2">
                                         <label className="text-sm font-medium text-zinc-300">Horario de Servicio</label>
                                         <Input 

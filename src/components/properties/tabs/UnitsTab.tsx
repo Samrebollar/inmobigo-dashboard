@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, TrendingUp, DollarSign } from 'lucide-react'
+import { Plus, Search, Filter, MoreHorizontal, Edit, Trash2, TrendingUp, DollarSign, UserRound } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Unit } from '@/types/units'
 import { unitsService } from '@/services/units-service'
 import { CreateUnitModal } from './CreateUnitModal'
+import { UnitOwnershipModal } from './UnitOwnershipModal'
+import { getUnitOwnershipAction } from '@/app/actions/unit-ownership-actions'
+import { OCCUPANCY_LABEL, PAYMENT_RESPONSIBLE_LABEL, type OccupancyType, type UnitContact, type UnitOwnership } from '@/types/unit-ownership'
 import { Modal } from '@/components/ui/modal'
 import { Upload } from 'lucide-react'
 
@@ -33,6 +36,12 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
     const [isBulkOpen, setIsBulkOpen] = useState(false)
 
     const [unitToEdit, setUnitToEdit] = useState<Unit | null>(null)
+
+    // Propietario, ocupante, gestor y responsable de pago de cada unidad
+    const [ownership, setOwnership] = useState<Record<string, UnitOwnership>>({})
+    const [contacts, setContacts] = useState<UnitContact[]>([])
+    const [ownershipTarget, setOwnershipTarget] = useState<UnitOwnership | null>(null)
+    const [occupancyFilter, setOccupancyFilter] = useState<'todas' | OccupancyType | 'no_reside'>('todas')
     
     // Delete Confirmation State
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -58,6 +67,7 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
             setLoading(true)
             const data = await unitsService.getByCondominium(condominiumId)
             setUnits(data)
+            if (!condominiumId.startsWith('demo-')) await fetchOwnership()
         } catch (error: any) {
             console.error('UnitsTab Error (RAW):', error)
         } finally {
@@ -65,9 +75,27 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
         }
     }
 
-    const filteredUnits = units.filter(unit =>
-        unit.unit_number.toLowerCase().includes(search.toLowerCase())
-    )
+    const fetchOwnership = async () => {
+        const result = await getUnitOwnershipAction(condominiumId)
+        if (!result.success) return
+        setOwnership(Object.fromEntries(result.units.map(u => [u.unit_id, u])))
+        setContacts(result.contacts)
+    }
+
+    const filteredUnits = units.filter(unit => {
+        if (!unit.unit_number.toLowerCase().includes(search.toLowerCase())) return false
+        if (occupancyFilter === 'todas') return true
+        const occ = ownership[unit.id]?.occupancy_type
+        if (occupancyFilter === 'no_reside') return !!occ && occ !== 'propietario'
+        return occ === occupancyFilter
+    })
+
+    const OCCUPANCY_STYLE: Record<OccupancyType, string> = {
+        propietario: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
+        inquilino: 'text-sky-300 bg-sky-500/10 border-sky-500/20',
+        vacacional: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
+        desocupada: 'text-zinc-400 bg-zinc-500/10 border-zinc-700',
+    }
 
     const confirmDelete = (unit: Unit) => {
         setUnitToDelete(unit)
@@ -204,6 +232,36 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                 </div>
             </div>
 
+            {/* Filtro por ocupación */}
+            {Object.keys(ownership).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {([
+                        ['todas', 'Todas'],
+                        ['propietario', 'Vive el propietario'],
+                        ['inquilino', 'Rentadas'],
+                        ['vacacional', 'Renta vacacional'],
+                        ['desocupada', 'Desocupadas'],
+                        ['no_reside', 'Propietario no vive aquí'],
+                    ] as const).map(([value, label]) => {
+                        const count = value === 'todas'
+                            ? units.length
+                            : units.filter(u => {
+                                const occ = ownership[u.id]?.occupancy_type
+                                return value === 'no_reside' ? !!occ && occ !== 'propietario' : occ === value
+                            }).length
+                        return (
+                            <button
+                                key={value}
+                                onClick={() => setOccupancyFilter(value)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${occupancyFilter === value ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-white'}`}
+                            >
+                                {label} <span className="opacity-60">· {count}</span>
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
+
             {/* Units Table */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
                 <div className="overflow-x-auto">
@@ -216,7 +274,7 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                 <th className="px-6 py-4 font-medium">Cuota</th>
                                 <th className="px-6 py-4 font-medium">Inicio de cobro</th>
                                 <th className="px-6 py-4 font-medium">Fecha limite</th>
-                                <th className="px-6 py-4 font-medium">Estado de Ocupación</th>
+                                <th className="px-6 py-4 font-medium">Ocupación y propietario</th>
                                 <th className="px-6 py-4 font-medium">Estado cobranza</th>
                                 <th className="px-6 py-4 font-medium text-center">Acciones</th>
                             </tr>
@@ -255,9 +313,32 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                             {unit.payment_deadline ? `Día ${unit.payment_deadline}` : '-'}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <Badge variant={unit.status === 'occupied' ? 'default' : 'warning'}>
-                                                {unit.status === 'occupied' ? 'Ocupada' : 'Vacía'}
-                                            </Badge>
+                                            {ownership[unit.id] ? (() => {
+                                                const o = ownership[unit.id]
+                                                const ownerName = o.owner?.full_name || (o.occupancy_type === 'propietario' ? o.occupants[0] : null)
+                                                return (
+                                                    <div className="space-y-1 min-w-[180px]">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${OCCUPANCY_STYLE[o.occupancy_type]}`}>
+                                                            {OCCUPANCY_LABEL[o.occupancy_type]}
+                                                        </span>
+                                                        <p className="text-xs text-zinc-300">
+                                                            <span className="text-zinc-500">Propietario:</span>{' '}
+                                                            {ownerName || <span className="text-amber-400">Sin capturar</span>}
+                                                        </p>
+                                                        {o.occupancy_type === 'inquilino' && o.occupants.length > 0 && (
+                                                            <p className="text-xs text-zinc-400"><span className="text-zinc-500">Inquilino:</span> {o.occupants.join(', ')}</p>
+                                                        )}
+                                                        {o.manager && (
+                                                            <p className="text-xs text-zinc-400"><span className="text-zinc-500">Gestor:</span> {o.manager.full_name}</p>
+                                                        )}
+                                                        <p className="text-[11px] text-zinc-500">Paga: {PAYMENT_RESPONSIBLE_LABEL[o.payment_responsible]}</p>
+                                                    </div>
+                                                )
+                                            })() : (
+                                                <Badge variant={unit.status === 'occupied' ? 'default' : 'warning'}>
+                                                    {unit.status === 'occupied' ? 'Ocupada' : 'Vacía'}
+                                                </Badge>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <Badge variant={unit.billing_status === 'suspended' ? 'destructive' : 'success'}>
@@ -266,6 +347,15 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <div className="flex items-center justify-center gap-2.5">
+                                                {ownership[unit.id] && (
+                                                    <button
+                                                        onClick={() => setOwnershipTarget(ownership[unit.id])}
+                                                        title="Propietario, ocupante y gestor"
+                                                        className="p-2.5 text-emerald-400 hover:text-emerald-100 bg-emerald-500/10 hover:bg-emerald-600 rounded-xl transition-all duration-300 transform hover:scale-110 shadow-sm border border-emerald-500/20"
+                                                    >
+                                                        <UserRound className="h-4 w-4" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => handleEdit(unit)}
                                                     title="Editar Unidad"
@@ -295,6 +385,14 @@ export function UnitsTab({ onUnitsUpdated }: UnitsTabProps = {}) {
                     </table>
                 </div>
             </div>
+
+            <UnitOwnershipModal
+                isOpen={!!ownershipTarget}
+                onClose={() => setOwnershipTarget(null)}
+                onSaved={fetchOwnership}
+                ownership={ownershipTarget}
+                contacts={contacts}
+            />
 
             <CreateUnitModal
                 isOpen={isCreateOpen}

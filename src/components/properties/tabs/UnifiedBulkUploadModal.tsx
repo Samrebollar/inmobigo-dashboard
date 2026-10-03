@@ -8,6 +8,7 @@ import Papa from 'papaparse'
 import { Button } from '@/components/ui/button'
 import { bulkService, UnifiedBulkRow } from '@/services/bulk-service'
 import { sendResidentInvitationsAction, billNewResidentsAction } from '@/app/actions/resident-invite-actions'
+import { bulkApplyUnitOwnershipAction, type BulkOwnershipRow } from '@/app/actions/unit-ownership-actions'
 
 interface UnifiedBulkUploadModalProps {
     isOpen: boolean
@@ -93,6 +94,7 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
             complete: async (results) => {
                 const rows = results.data as any[]
                 const unifiedRows: UnifiedBulkRow[] = []
+                const ownershipRows: BulkOwnershipRow[] = []
                 const validationErrors: string[] = []
 
                 rows.forEach((row, index) => {
@@ -183,6 +185,18 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
                         vehicle_plate: row['Placas'] || row['placas'],
                         vehicle_brand: row['Marca'] || row['marca']
                     })
+
+                    // Quién ocupa la unidad, propietario y gestor (opcionales)
+                    ownershipRows.push({
+                        unit_number: unitNumber,
+                        occupancy: row['Ocupada por'] || row['ocupada por'],
+                        owner_name: row['Propietario Nombre'] || row['propietario nombre'],
+                        owner_phone: row['Propietario Telefono'] || row['propietario telefono'],
+                        owner_email: row['Propietario Email'] || row['propietario email'],
+                        manager_name: row['Gestor Nombre'] || row['gestor nombre'],
+                        manager_phone: row['Gestor Telefono'] || row['gestor telefono'],
+                        manager_email: row['Gestor Email'] || row['gestor email'],
+                    })
                 })
 
                 if (validationErrors.length > 0) {
@@ -193,6 +207,11 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
 
                 try {
                     const result = await bulkService.unifiedBulkUpload(condominiumId, unifiedRows)
+
+                    // Propietario, gestor y ocupación de cada unidad
+                    const ownership = await bulkApplyUnitOwnershipAction(condominiumId, ownershipRows)
+                    if (!ownership.success) result.errors.push(`Propietarios: ${ownership.error}`)
+                    else result.errors.push(...ownership.errors)
 
                     // Invitación por correo a cada residente nuevo para que active su cuenta
                     let inviteNote = ''
@@ -229,9 +248,9 @@ export function UnifiedBulkUploadModal({ isOpen, onClose, onSuccess, condominium
     }
 
     const downloadTemplate = () => {
-        const headers = "Unidad,Piso,Tipo,Cuota,Inicio de cobro,Fecha limite,Estado de Ocupacion,Estado cobranza,Nombre,Email,Telefono,Placas,Marca,Saldo Pendiente,Saldo a Favor"
-        const row1 = "A-101,1,Departamento,5000,5,10,Ocupada,Activa,Juan Morales,juan@ejemplo.com,5219981234567,ABC-123,Toyota,0,0"
-        const row2 = "B-202,2,Casa,8500,1,15,Ocupada,Suspendida,Clara Licona,clara@ejemplo.com,5219987654321,XYZ-789,Honda,1500,500"
+        const headers = "Unidad,Piso,Tipo,Cuota,Inicio de cobro,Fecha limite,Estado de Ocupacion,Estado cobranza,Nombre,Email,Telefono,Placas,Marca,Saldo Pendiente,Saldo a Favor,Ocupada por,Propietario Nombre,Propietario Telefono,Propietario Email,Gestor Nombre,Gestor Telefono,Gestor Email"
+        const row1 = "A-101,1,Departamento,5000,5,10,Ocupada,Activa,Juan Morales,juan@ejemplo.com,5219981234567,ABC-123,Toyota,0,0,Propietario,,,,,,"
+        const row2 = "B-202,2,Casa,8500,1,15,Ocupada,Suspendida,Clara Licona,clara@ejemplo.com,5219987654321,XYZ-789,Honda,1500,500,Inquilino,Roberto Díaz,5219981112233,roberto@ejemplo.com,Gestiones Caribe,5219984445566,gestor@ejemplo.com"
         const csvContent = `\uFEFF${headers}\n${row1}\n${row2}`
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

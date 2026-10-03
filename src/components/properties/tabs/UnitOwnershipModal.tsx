@@ -178,6 +178,8 @@ export function UnitOwnershipModal({
             })
             if (!result.success) throw new Error(result.error)
             toast.success(`Unidad ${ownership.unit_number} actualizada`)
+            if (result.invited.length > 0) toast.success(`Invitación al portal de propietarios enviada a ${result.invited.join(', ')}`)
+            for (const failure of result.inviteErrors) toast.error(`No se pudo invitar al portal a ${failure}`)
             onSaved()
             onClose()
         } catch (error: any) {

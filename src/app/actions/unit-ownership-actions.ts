@@ -5,6 +5,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { getFinanceOrgForCondo } from '@/lib/finance-auth'
 import { normalizeMexicanPhone } from '@/utils/phone-utils'
 import { NOT_OWNER_RECORD, syncOwnerBillingRecords, unitsOfOwnerContacts } from '@/lib/owner-billing'
+import { deliverUnitContactInvitation } from '@/lib/unit-contact-invitation'
 import type {
     OccupancyType,
     PaymentResponsible,
@@ -196,8 +197,46 @@ async function applyOwnership(admin: AdminClient, organizationId: string, unitId
     return ownerId
 }
 
+/**
+ * Invitación automática al Portal de Propietarios a los contactos de estas
+ * unidades que tienen correo y aún no tienen cuenta: el propietario y
+ * copropietario cuando no viven en la unidad (si viven ahí usan el panel de
+ * residente) y el gestor siempre.
+ */
+async function inviteNewPortalContacts(admin: AdminClient, unitIds: string[]): Promise<{ sent: string[]; failed: string[] }> {
+    const result = { sent: [] as string[], failed: [] as string[] }
+    if (unitIds.length === 0) return result
+    const { data: units } = await admin
+        .from('units')
+        .select('occupancy_type, owner_contact_id, co_owner_contact_id, manager_contact_id')
+        .in('id', unitIds)
+    const ids = new Set<string>()
+    for (const u of units || []) {
+        if ((u.occupancy_type || 'propietario') !== 'propietario') {
+            if (u.owner_contact_id) ids.add(u.owner_contact_id)
+            if (u.co_owner_contact_id) ids.add(u.co_owner_contact_id)
+        }
+        if (u.manager_contact_id) ids.add(u.manager_contact_id)
+    }
+    if (ids.size === 0) return result
+    const { data: pending } = await admin
+        .from('unit_contacts')
+        .select('id, email')
+        .in('id', [...ids])
+        .is('user_id', null)
+        .not('email', 'is', null)
+    for (const c of pending || []) {
+        const sent = await deliverUnitContactInvitation(admin, c.id)
+        if (sent.success) result.sent.push(c.email)
+        else result.failed.push(`${c.email}: ${sent.error}`)
+    }
+    return result
+}
+
 /** Guarda propietario, copropietario, gestor, ocupación y responsable de pago de una unidad. */
-export async function saveUnitOwnershipAction(unitId: string, input: SaveUnitOwnershipInput): Promise<{ success: true } | { success: false; error: string }> {
+export async function saveUnitOwnershipAction(unitId: string, input: SaveUnitOwnershipInput): Promise<
+    { success: true; invited: string[]; inviteErrors: string[] } | { success: false; error: string }
+> {
     const lookup = createAdminClient()
     const { data: unit } = await lookup.from('units').select('id, condominium_id').eq('id', unitId).maybeSingle()
     if (!unit) return { success: false, error: 'Unidad no encontrada' }
@@ -212,7 +251,8 @@ export async function saveUnitOwnershipAction(unitId: string, input: SaveUnitOwn
         const ownerId = await applyOwnership(auth.admin, auth.organizationId, unitId, input)
         // Registro de cobro del propietario de esta unidad y de las demás donde aparece
         await syncOwnerBillingRecords(auth.admin, [unitId, ...await unitsOfOwnerContacts(auth.admin, [ownerId])])
-        return { success: true }
+        const invitations = await inviteNewPortalContacts(auth.admin, [unitId])
+        return { success: true, invited: invitations.sent, inviteErrors: invitations.failed }
     } catch (error: any) {
         return { success: false, error: error.message || 'No se pudo guardar' }
     }
@@ -319,6 +359,8 @@ export async function bulkApplyUnitOwnershipAction(condominiumId: string, rows: 
     }
     try {
         await syncOwnerBillingRecords(admin, [...touchedUnits, ...await unitsOfOwnerContacts(admin, [...touchedOwners])])
+        const invitations = await inviteNewPortalContacts(admin, touchedUnits)
+        errors.push(...invitations.failed.map((f) => `Invitación al portal ${f}`))
     } catch (error: any) {
         errors.push(error.message)
     }

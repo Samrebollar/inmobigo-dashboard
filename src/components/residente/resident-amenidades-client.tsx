@@ -27,6 +27,7 @@ import { createClient } from '@/utils/supabase/client'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { getAmenitiesAction, createAmenityReservationAction } from '@/app/actions/service-actions'
+import { AmenityCalendarGrid, bookingBlockReason, useAmenityAvailability } from '@/components/amenities/amenity-calendar'
 import { 
     format, 
     isSameDay, 
@@ -57,6 +58,8 @@ interface Amenity {
     status?: string
     capacity?: number
     rules_pdf_url?: string
+    booking_mode?: string | null
+    use_days?: unknown
 }
 
 const getIcon = (name: string) => {
@@ -79,6 +82,8 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
     const [fetching, setFetching] = useState(true)
     const [showSuccess, setShowSuccess] = useState(false)
     const [acceptedRules, setAcceptedRules] = useState(false)
+    const availability = useAmenityAvailability(selectedAmenity?.id)
+    const blockReason = selectedAmenity ? bookingBlockReason(selectedAmenity, format(bookingDate, 'yyyy-MM-dd'), availability) : null
 
     useEffect(() => {
         fetchAmenities()
@@ -144,6 +149,10 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
     const handleBooking = async () => {
         if (!selectedAmenity) return
+        if (blockReason) {
+            toast.error(blockReason)
+            return
+        }
         setLoading(true)
         
         try {
@@ -182,13 +191,14 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
             }
 
             setShowSuccess(true)
+            availability.refresh()
             toast.success('¡Reserva solicitada con éxito!')
         } catch (error: any) {
             console.error('Error detallado booking:', error)
             
             const errorMsg = error.message || 'Error desconocido al procesar la reserva'
-            alert(`Error al reservar: ${errorMsg}`)
-            toast.error(`Error: ${errorMsg}`)
+            availability.refresh()
+            toast.error(errorMsg)
         } finally {
             setLoading(false)
         }
@@ -430,36 +440,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                                                             </div>
                                                         ))}
                                                     </div>
-                                                    <div className="grid grid-cols-7 gap-1">
-                                                        {calendarDays.map((day) => {
-                                                            const isSelected = isSameDay(day, bookingDate)
-                                                            const isCurMonth = isSameMonth(day, viewDate)
-                                                            const isPast = day < new Date(new Date().setHours(0,0,0,0))
-
-                                                            return (
-                                                                <button
-                                                                    key={day.toISOString()}
-                                                                    disabled={isPast}
-                                                                    onClick={() => setBookingDate(day)}
-                                                                    className={`
-                                                                        relative h-12 w-full rounded-xl flex flex-col items-center justify-center text-sm font-bold transition-all
-                                                                        ${!isCurMonth ? 'opacity-20' : ''}
-                                                                        ${isSelected 
-                                                                            ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] z-10 scale-105' 
-                                                                            : isPast 
-                                                                                ? 'text-zinc-700 cursor-not-allowed' 
-                                                                                : 'text-zinc-400 hover:bg-zinc-800/80 hover:text-white'
-                                                                        }
-                                                                    `}
-                                                                >
-                                                                    {format(day, 'd')}
-                                                                    {isToday(day) && !isSelected && (
-                                                                        <div className="absolute bottom-1.5 h-1 w-1 rounded-full bg-indigo-500" />
-                                                                    )}
-                                                                </button>
-                                                            )
-                                                        })}
-                                                    </div>
+                                                    <AmenityCalendarGrid amenity={selectedAmenity} days={calendarDays} viewDate={viewDate} bookingDate={bookingDate} onSelect={setBookingDate} availability={availability} />
                                                 </div>
                                             </div>
 
@@ -528,7 +509,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
 
                                                 <Button 
                                                     onClick={handleBooking}
-                                                    disabled={loading || !acceptedRules}
+                                                    disabled={loading || !acceptedRules || !!blockReason}
                                                     className={`w-full ${acceptedRules ? 'bg-indigo-600 hover:bg-indigo-500 shadow-[0_0_20px_rgba(79,70,229,0.3)]' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none'} text-white font-black h-16 rounded-2xl text-[11px] uppercase tracking-[0.2em] group transition-all`}
                                                 >
                                                     {loading ? (
@@ -538,7 +519,7 @@ export default function ResidentAmenidadesClient({ resident }: { resident: any }
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-3">
-                                                            Reservar
+                                                            {blockReason && !availability.loading ? 'Fecha no disponible' : 'Reservar'}
                                                             <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                                                         </div>
                                                     )}

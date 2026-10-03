@@ -481,9 +481,12 @@ export function AvisosClient({
 
             setToastMessage(`Reserva ${status === 'approved' ? 'aprobada' : 'denegada'} correctamente`)
             setTimeout(() => setToastMessage(null), 3000)
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating reservation:', error)
-            alert('Error al actualizar reserva')
+            // Trigger de empalmes: ya hay otra reserva activa de esa amenidad ese día
+            alert(error?.code === '23505'
+                ? 'No se puede aprobar: esa amenidad ya tiene otra reserva activa para ese día.'
+                : 'Error al actualizar reserva')
         }
     }
 

@@ -1,5 +1,7 @@
 'use server'
 
+import { ACTIVE_RESERVATION_STATUSES, BOOKING_WINDOW_DAYS, addDaysIso, isExclusiveAmenity, operatesOn, todayMx } from '@/lib/amenity-booking'
+
 import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { notifyResidentNotice } from './security-ops-actions'
@@ -390,7 +392,45 @@ export async function deleteAmenityAction(id: string) {
 }
 
 /**
- * Crea una reserva de amenidad (Bypass RLS)
+ * Fechas ocupadas de una amenidad de uso exclusivo (reservas pendientes o
+ * aprobadas) dentro de la ventana de reserva, y la reserva activa del propio
+ * usuario en esa amenidad (solo se permite una a la vez).
+ */
+export async function getAmenityAvailabilityAction(amenityId: string): Promise<
+    { success: true; occupied: string[]; myActiveDate: string | null } | { success: false; error: string }
+> {
+    if (!amenityId) return { success: false, error: 'Amenidad no especificada' }
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'No autenticado' }
+
+    const admin = createAdminClient()
+    const { data: amenity } = await admin.from('amenities').select('id, booking_mode').eq('id', amenityId).maybeSingle()
+    if (!amenity) return { success: false, error: 'Amenidad no encontrada' }
+
+    const today = todayMx()
+    const { data: reservations } = await admin
+        .from('amenity_reservations')
+        .select('reservation_date, resident_id')
+        .eq('amenity_id', amenityId)
+        .in('status', ACTIVE_RESERVATION_STATUSES)
+        .gte('reservation_date', today)
+        .order('reservation_date', { ascending: true })
+
+    const mine = (reservations || []).find((r: any) => r.resident_id === user.id)
+    return {
+        success: true,
+        occupied: isExclusiveAmenity(amenity) ? Array.from(new Set((reservations || []).map((r: any) => r.reservation_date))) : [],
+        myActiveDate: mine?.reservation_date || null,
+    }
+}
+
+/**
+ * Crea una reserva de amenidad (Bypass RLS). Reglas: la fecha debe estar
+ * dentro de los próximos BOOKING_WINDOW_DAYS días y en un día en que la
+ * amenidad opere; 1 reserva activa por residente por amenidad; y una amenidad
+ * de uso exclusivo no se puede apartar dos veces el mismo día (también lo
+ * garantiza un trigger en la base de datos).
  */
 export async function createAmenityReservationAction(data: {
     amenity_id: string,
@@ -408,25 +448,59 @@ export async function createAmenityReservationAction(data: {
 
     try {
         const adminClient = createAdminClient()
-        
+
+        const { data: amenity } = await adminClient
+            .from('amenities')
+            .select('id, name, booking_mode, use_days, status')
+            .eq('id', data.amenity_id)
+            .maybeSingle()
+        if (!amenity) return { success: false, error: 'La amenidad ya no está disponible.' }
+
+        const date = data.reservation_date
+        const today = todayMx()
+        if (date < today) return { success: false, error: 'No puedes reservar en una fecha pasada.' }
+        if (date > addDaysIso(today, BOOKING_WINDOW_DAYS)) {
+            return { success: false, error: `Solo puedes reservar con hasta ${BOOKING_WINDOW_DAYS} días de anticipación.` }
+        }
+        if (!operatesOn(amenity, date)) return { success: false, error: `${amenity.name} no abre ese día. Elige otra fecha.` }
+
+        const { data: active } = await adminClient
+            .from('amenity_reservations')
+            .select('reservation_date, amenity_id')
+            .eq('resident_id', data.resident_id)
+            .in('status', ACTIVE_RESERVATION_STATUSES)
+            .gte('reservation_date', today)
+        if ((active || []).some((r: any) => r.amenity_id === data.amenity_id)) {
+            return { success: false, error: `Ya tienes una reserva activa de ${amenity.name}. Podrás apartar otra cuando pase o la canceles.` }
+        }
+
+        if (isExclusiveAmenity(amenity)) {
+            const { data: taken } = await adminClient
+                .from('amenity_reservations')
+                .select('id')
+                .eq('amenity_id', data.amenity_id)
+                .eq('reservation_date', date)
+                .in('status', ACTIVE_RESERVATION_STATUSES)
+                .limit(1)
+            if (taken && taken.length > 0) return { success: false, error: 'Esta fecha ya está ocupada. Por favor elige otra.' }
+        }
+
         const { error } = await adminClient
             .from('amenity_reservations')
             .insert({
                 amenity_id: data.amenity_id,
                 resident_id: data.resident_id,
                 organization_id: data.organization_id,
-                reservation_date: data.reservation_date,
+                reservation_date: date,
                 status: data.status || 'pending'
             })
 
         if (error) {
             console.error('Supabase Error in createAmenityReservationAction:', error)
-            
-            // Error de duplicado (Unique Constraint)
+            // Otro residente apartó la fecha al mismo tiempo (trigger de empalmes)
             if (error.code === '23505') {
-                return { success: false, error: 'Este horario ya ha sido reservado por otro residente. Por favor elige otra fecha.' }
+                return { success: false, error: 'Esta fecha ya está ocupada. Por favor elige otra.' }
             }
-            
             throw error
         }
 

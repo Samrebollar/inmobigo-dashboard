@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { issuePaymentReceipt } from '@/lib/payment-receipts'
-import { billsToOwnerRecord, isOwnerRecord } from '@/lib/owner-billing'
+import { billsToOwnerRecord, isOwnerRecord } from '@/lib/owner-record'
 
 /**
  * Factura de la cuota de mantenimiento del mes en curso para un residente
@@ -84,6 +84,24 @@ export async function createCurrentMonthMaintenanceInvoice(
         .lte('due_date', lastDayStr)
         .limit(1)
     if (existing && existing.length > 0) return { created: false, reason: 'Ya facturado este mes' }
+
+    // Si en el mes cambió quién paga, la unidad no se cobra dos veces: el
+    // propietario no se factura si la unidad ya tiene cuota del mes, y el
+    // residente no se factura si ya se le cobró al propietario.
+    const { data: unitInvoices } = await admin
+        .from('resident_invoices')
+        .select('resident_id')
+        .eq('unit_id', resident.unit_id)
+        .eq('invoice_type', 'maintenance')
+        .neq('status', 'cancelled')
+        .gte('due_date', firstDayStr)
+        .lte('due_date', lastDayStr)
+    if (unitInvoices && unitInvoices.length > 0) {
+        if (isOwnerRecord(resident)) return { created: false, reason: 'La unidad ya tiene la cuota del mes' }
+        const payerIds = Array.from(new Set(unitInvoices.map((i: any) => i.resident_id).filter(Boolean)))
+        const { data: payers } = await admin.from('residents').select('role').in('id', payerIds)
+        if ((payers || []).some((p: any) => isOwnerRecord(p))) return { created: false, reason: 'La cuota del mes ya se le cobró al propietario' }
+    }
 
     const { data: inserted, error } = await admin.from('resident_invoices').insert({
         condominium_id: resident.condominium_id,

@@ -24,13 +24,22 @@ export async function deliverUnitContactInvitation(admin: AdminClient, contactId
     if (!email) return { success: false, error: 'Captura su correo para poder invitarlo al portal.' }
 
     try {
-        const userId = contact.user_id || await ensureResidentAuthUser(admin, {
+        // Cuenta ligada que ya no existe o con otro correo: se vuelve a crear/ligar
+        let linkedId: string | null = contact.user_id
+        if (linkedId) {
+            const { data: linked } = await admin.auth.admin.getUserById(linkedId)
+            if (!linked?.user || linked.user.email?.toLowerCase() !== email) {
+                linkedId = null
+                await admin.from('unit_contacts').update({ user_id: null }).eq('id', contact.id)
+            }
+        }
+        const userId = linkedId || await ensureResidentAuthUser(admin, {
             email,
             firstName: contact.full_name,
             phone: contact.phone,
             portal: 'propietario',
         })
-        if (!contact.user_id) {
+        if (!linkedId) {
             await admin.from('unit_contacts').update({ user_id: userId, updated_at: new Date().toISOString() }).eq('id', contact.id)
         }
 

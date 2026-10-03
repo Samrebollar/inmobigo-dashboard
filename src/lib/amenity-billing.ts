@@ -206,6 +206,7 @@ export async function settleReservationDeposit(admin: AdminClient, reservationId
     refundAmount: number
     method: DepositRefundMethod
     notes?: string | null
+    photoPaths?: string[]
     settledBy: string
 }): Promise<void> {
     const reservation = await loadReservation(admin, reservationId)
@@ -217,6 +218,10 @@ export async function settleReservationDeposit(admin: AdminClient, reservationId
     const retained = MONEY(deposit - refund)
     const notes = input.notes?.trim().slice(0, 500) || null
     if (retained > 0 && !notes) throw new Error('Indica el motivo de la retención')
+    // Solo fotos subidas para esta reserva
+    const prefix = `${reservation.organization_id}/${reservationId}/`
+    const photoPaths = (input.photoPaths || []).filter((path) => typeof path === 'string' && path.startsWith(prefix)).slice(0, 6)
+    if (retained > 0 && photoPaths.length === 0) throw new Error('Agrega al menos una foto de los daños')
 
     const resident = await reservationResident(admin, reservation)
     if (!resident) throw new Error('No se encontró el registro del residente')
@@ -287,6 +292,7 @@ export async function settleReservationDeposit(admin: AdminClient, reservationId
             deposit_settled_at: nowIso,
             deposit_settled_by: input.settledBy,
             deposit_notes: notes,
+            deposit_photo_paths: photoPaths,
         })
         .eq('id', reservationId)
         .eq('deposit_status', 'en_resguardo')

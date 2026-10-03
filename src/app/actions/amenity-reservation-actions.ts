@@ -170,6 +170,7 @@ export async function settleReservationDepositAction(reservationId: string, inpu
     refundAmount: number
     method: DepositRefundMethod
     notes?: string
+    photoPaths?: string[]
 }): Promise<Result> {
     const user = await currentUser()
     if (!user) return { success: false, error: 'No autorizado' }
@@ -193,4 +194,48 @@ export async function settleReservationDepositAction(reservationId: string, inpu
     } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : 'No se pudo liquidar el depósito' }
     }
+}
+
+const EVIDENCE_BUCKET = 'amenity_damage_evidence'
+
+/** Sube una foto de los daños de una reserva (administración o seguridad). Devuelve su ruta privada. */
+export async function uploadDepositEvidenceAction(formData: FormData): Promise<{ success: true; path: string; url: string } | { success: false; error: string }> {
+    const user = await currentUser()
+    if (!user) return { success: false, error: 'No autorizado' }
+    const reservationId = String(formData.get('reservation_id') || '')
+    const file = formData.get('file')
+    if (!reservationId || !(file instanceof File)) return { success: false, error: 'Falta la foto' }
+    if (!file.type.startsWith('image/')) return { success: false, error: 'Solo se permiten imágenes' }
+    if (file.size > 10 * 1024 * 1024) return { success: false, error: 'La foto pesa más de 10 MB' }
+
+    const admin = createAdminClient()
+    const { data: reservation } = await admin.from('amenity_reservations').select('organization_id').eq('id', reservationId).maybeSingle()
+    if (!reservation) return { success: false, error: 'Reserva no encontrada' }
+    if (!(await isOrgStaff(admin, user.id, reservation.organization_id))) return { success: false, error: 'No autorizado' }
+
+    const path = `${reservation.organization_id}/${reservationId}/${crypto.randomUUID()}.jpg`
+    const { error } = await admin.storage.from(EVIDENCE_BUCKET).upload(path, file, { contentType: file.type, upsert: false })
+    if (error) return { success: false, error: error.message }
+    const { data: signed } = await admin.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, 3600)
+    return { success: true, path, url: signed?.signedUrl || '' }
+}
+
+/** Fotos de los daños de una reserva: las ve el residente que reservó y el equipo de la organización. */
+export async function getDepositEvidenceAction(reservationId: string): Promise<{ success: true; urls: string[] } | { success: false; error: string }> {
+    const user = await currentUser()
+    if (!user) return { success: false, error: 'No autorizado' }
+    const admin = createAdminClient()
+    const { data: reservation } = await admin
+        .from('amenity_reservations')
+        .select('organization_id, resident_id, deposit_photo_paths')
+        .eq('id', reservationId)
+        .maybeSingle()
+    if (!reservation) return { success: false, error: 'Reserva no encontrada' }
+    if (reservation.resident_id !== user.id && !(await isOrgStaff(admin, user.id, reservation.organization_id))) {
+        return { success: false, error: 'No autorizado' }
+    }
+    const paths: string[] = reservation.deposit_photo_paths || []
+    if (paths.length === 0) return { success: true, urls: [] }
+    const { data } = await admin.storage.from(EVIDENCE_BUCKET).createSignedUrls(paths, 3600)
+    return { success: true, urls: (data || []).map((d) => d.signedUrl).filter(Boolean) as string[] }
 }

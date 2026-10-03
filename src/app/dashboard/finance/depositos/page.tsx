@@ -38,12 +38,19 @@ export default async function DepositosPage() {
 
     const { data } = await admin
         .from('amenity_reservations')
-        .select('id, reservation_date, resident_id, deposit_amount, deposit_status, deposit_refunded_amount, deposit_retained_amount, deposit_refund_method, deposit_settled_at, deposit_notes, amenities(name), profiles:resident_id(full_name)')
+        .select('id, reservation_date, resident_id, deposit_amount, deposit_status, deposit_refunded_amount, deposit_retained_amount, deposit_refund_method, deposit_settled_at, deposit_notes, deposit_photo_paths, amenities(name), profiles:resident_id(full_name)')
         .eq('organization_id', organizationId)
         .neq('deposit_status', 'none')
         .order('reservation_date', { ascending: false })
         .limit(500)
     const rows = (data || []) as any[]
+
+    // Fotos de los daños (bucket privado): URLs firmadas por 1 hora
+    const allPaths = rows.flatMap((r) => r.deposit_photo_paths || [])
+    const signed = allPaths.length
+        ? (await admin.storage.from('amenity_damage_evidence').createSignedUrls(allPaths, 3600)).data || []
+        : []
+    const urlByPath = new Map(signed.map((s: any) => [s.path, s.signedUrl]))
 
     const sum = (list: any[], key: string) => list.reduce((acc, r) => acc + Number(r[key] || 0), 0)
     const held = rows.filter((r) => r.deposit_status === 'en_resguardo')
@@ -119,6 +126,15 @@ export default async function DepositosPage() {
                                                     {Number(r.deposit_retained_amount || 0) > 0 && `Retenido ${money(Number(r.deposit_retained_amount))}`}
                                                 </p>
                                                 <p className="text-zinc-500">{fmtDate(r.deposit_settled_at)}{r.deposit_notes ? ` · ${r.deposit_notes}` : ''}</p>
+                                                {(r.deposit_photo_paths || []).length > 0 && (
+                                                    <div className="mt-1.5 flex gap-1.5">
+                                                        {(r.deposit_photo_paths as string[]).map((path) => urlByPath.get(path) && (
+                                                            <a key={path} href={urlByPath.get(path)} target="_blank" rel="noopener noreferrer" className="block h-10 w-10 rounded-md overflow-hidden border border-zinc-700">
+                                                                <img src={urlByPath.get(path)} alt="Daño" className="h-full w-full object-cover" />
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </>
                                         ) : r.deposit_status === 'en_resguardo' && r.reservation_date <= today ? (
                                             <span className="text-amber-400">Pendiente de liquidar</span>

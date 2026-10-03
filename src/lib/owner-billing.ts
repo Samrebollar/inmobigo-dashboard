@@ -13,6 +13,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
  */
 
 import { OWNER_RECORD_ROLE } from '@/lib/owner-record'
+import { createCurrentMonthMaintenanceInvoice } from '@/lib/resident-billing'
 
 export { OWNER_RECORD_ROLE, NOT_OWNER_RECORD, billsToOwnerRecord, isOwnerRecord } from '@/lib/owner-record'
 
@@ -68,6 +69,19 @@ export async function syncOwnerBillingRecords(admin: AdminClient, unitIds: strin
         } else if (record && record.status !== 'inactive') {
             await admin.from('residents').update({ status: 'inactive', is_active: false }).eq('id', record.id)
         }
+    }
+
+    // Cuota del mes en curso al propietario recién registrado, igual que a un
+    // residente nuevo (sin esperar al cron). Es idempotente y no cobra dos veces
+    // la misma unidad en el mes; si paga el inquilino, no hace nada.
+    const { data: payers } = await admin
+        .from('residents')
+        .select('id')
+        .in('unit_id', ids)
+        .eq('role', OWNER_RECORD_ROLE)
+        .neq('status', 'inactive')
+    for (const payer of payers || []) {
+        await createCurrentMonthMaintenanceInvoice(admin, payer.id)
     }
 }
 

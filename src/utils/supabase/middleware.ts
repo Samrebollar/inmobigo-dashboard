@@ -57,7 +57,7 @@ export async function updateSession(request: NextRequest) {
     // Excluimos explícitamente rutas conocidas de la app para evitar conflictos
     const reservedRoutes = [
         'dashboard', 'login', 'register', 'auth', 'onboarding', 'owner', 'pase', 'api',
-        'seguridad', 'residente', 'inquilino', 'acceso-residente', 'activar-residente', 'reset-password', 'test-route', 'administrador', 'verificar'
+        'seguridad', 'residente', 'inquilino', 'propietario', 'acceso-residente', 'activar-residente', 'reset-password', 'test-route', 'administrador', 'verificar'
     ]
     const isVisitRoute = pathname !== '/' && 
                         /^\/[a-zA-Z0-9-]+$/.test(pathname) && 
@@ -115,7 +115,7 @@ export async function updateSession(request: NextRequest) {
         // sumar tres viajes a la base de datos en cada navegación.
         const adminSupabase = createAdminClient()
 
-        const [{ data: orgUser }, { data: profile }, { data: resident }] = await Promise.all([
+        const [{ data: orgUser }, { data: profile }, { data: resident }, { data: portalContact }] = await Promise.all([
             adminSupabase
                 .from('organization_users')
                 .select('role_new, organization_id')
@@ -131,7 +131,15 @@ export async function updateSession(request: NextRequest) {
                 .select('id, condominiums(organization_id)')
                 .eq('user_id', user.id)
                 .maybeSingle(),
+            // Propietario o gestor con acceso al Portal de Propietarios
+            adminSupabase
+                .from('unit_contacts')
+                .select('id')
+                .eq('user_id', user.id)
+                .limit(1)
+                .maybeSingle(),
         ])
+        const hasPortal = !!portalContact
 
         let role = 'viewer'
         if (orgUser?.role_new) {
@@ -143,6 +151,10 @@ export async function updateSession(request: NextRequest) {
         } else if (resident || profile?.role_new === 'resident' || profile?.role_new === 'tenant' || user.user_metadata?.role === 'resident' || user.user_metadata?.role === 'tenant') {
             role = 'resident' 
         }
+        // Sin organización ni residencia propia: es propietario o gestor que no
+        // vive en el condominio (profiles.role_new nace como 'resident' por defecto)
+        if (hasPortal && !orgUser && !resident) role = 'propietario'
+        if (role === 'propietario' && !hasPortal) role = 'viewer'
 
         // Determine associated business_type
         let orgId = orgUser?.organization_id || (resident?.condominiums as any)?.organization_id
@@ -188,6 +200,24 @@ export async function updateSession(request: NextRequest) {
         const userType = profile?.user_type || user.user_metadata?.user_type
 
         // --- GLOBAL REDIRECTIONS BASED ON ROLES ---
+        // Un residente, inquilino o miembro del equipo que además es propietario
+        // o gestor de otra unidad puede entrar al portal de propietarios.
+        const isPortalPath = path === '/propietario' || path.startsWith('/propietario/')
+        if (isPortalPath && !hasPortal) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/dashboard'
+            return NextResponse.redirect(url)
+        }
+        if (isPortalPath && hasPortal) {
+            return supabaseResponse
+        }
+
+        if (role === 'propietario' && !isPublicStaticOrAuth) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/propietario'
+            return NextResponse.redirect(url)
+        }
+
         if (role === 'resident' && !path.startsWith('/residente') && !isPublicStaticOrAuth) {
             const url = request.nextUrl.clone()
             url.pathname = '/residente'

@@ -5,6 +5,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { canOperateOrgFinance } from '@/lib/finance-auth'
 import { distinctLegalName } from '@/types/admin-identity'
 import { issuePaymentReceipt } from '@/lib/payment-receipts'
+import { getPortalAccessForResident } from '@/lib/owner-portal-access'
 
 export interface ReceiptStamp {
     verifyUrl: string
@@ -58,12 +59,14 @@ export async function getReceiptStampAction(lookup: ReceiptStampLookup): Promise
     if (lookup.folio) attempts.push(['folio', lookup.folio, true])
     if (lookup.invoiceId) attempts.push(['invoice_id', lookup.invoiceId, false])
 
-    // Autorización: equipo de la organización o el residente dueño del pago
+    // Autorización: equipo de la organización, el residente dueño del pago, o el
+    // propietario / gestor de esa unidad (Portal de Propietarios)
     const canAccess = async (organizationId: string | null, residentId: string | null) => {
         if (organizationId && await canOperateOrgFinance(admin, user.id, organizationId)) return true
         if (!residentId) return false
         const { data: resident } = await admin.from('residents').select('user_id').eq('id', residentId).maybeSingle()
-        return resident?.user_id === user.id
+        if (resident?.user_id === user.id) return true
+        return !!(await getPortalAccessForResident(admin, user.id, residentId))
     }
 
     // El recibo vigente tiene prioridad sobre uno cancelado del mismo pago

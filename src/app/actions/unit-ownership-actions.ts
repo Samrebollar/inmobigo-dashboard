@@ -51,7 +51,7 @@ const clean = (v: unknown, max = 200): string | null => {
 }
 
 const toContact = (row: any): UnitContact | null => row
-    ? { id: row.id, kind: row.kind, full_name: row.full_name, phone: row.phone, email: row.email }
+    ? { id: row.id, kind: row.kind, full_name: row.full_name, phone: row.phone, email: row.email, has_access: !!row.user_id }
     : null
 
 /** Propietarios y gestores ya registrados en la organización, y la ficha de cada unidad del condominio. */
@@ -70,7 +70,7 @@ export async function getUnitOwnershipAction(condominiumId: string): Promise<
             .order('unit_number', { ascending: true }),
         admin
             .from('unit_contacts')
-            .select('id, kind, full_name, phone, email')
+            .select('id, kind, full_name, phone, email, user_id')
             .eq('organization_id', organizationId)
             .order('full_name', { ascending: true }),
         admin

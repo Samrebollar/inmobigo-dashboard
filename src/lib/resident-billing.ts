@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { issuePaymentReceipt } from '@/lib/payment-receipts'
+import { billsToOwnerRecord, isOwnerRecord } from '@/lib/owner-billing'
 
 /**
  * Factura de la cuota de mantenimiento del mes en curso para un residente
@@ -19,6 +20,8 @@ const MONTH_NAMES = [
 ]
 
 type UnitBilling = {
+    occupancy_type: string | null
+    payment_responsible: string | null
     monto_mensual: number | null
     facturacion_activa: boolean | null
     billing_status: string | null
@@ -31,7 +34,7 @@ export async function createCurrentMonthMaintenanceInvoice(
 ): Promise<{ created: boolean, reason?: string }> {
     const { data: resident } = await admin
         .from('residents')
-        .select('id, condominium_id, unit_id, status, units(monto_mensual, facturacion_activa, billing_status, payment_deadline)')
+        .select('id, condominium_id, unit_id, status, role, units(occupancy_type, payment_responsible, monto_mensual, facturacion_activa, billing_status, payment_deadline)')
         .eq('id', residentId)
         .maybeSingle()
 
@@ -44,6 +47,10 @@ export async function createCurrentMonthMaintenanceInvoice(
     }
     const fee = Number(unit.monto_mensual || 0)
     if (fee <= 0) return { created: false, reason: 'Cuota mensual en 0' }
+    // La cuota de la unidad la paga el propietario que no vive ahí (o solo él)
+    if (billsToOwnerRecord(unit) !== isOwnerRecord(resident)) {
+        return { created: false, reason: isOwnerRecord(resident) ? 'La cuota la paga el residente' : 'La cuota la paga el propietario' }
+    }
 
     // Mes en curso en hora de México (no UTC)
     const todayMx = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })

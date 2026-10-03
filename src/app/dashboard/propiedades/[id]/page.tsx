@@ -28,6 +28,7 @@ import { EditCondominiumModal } from '@/components/properties/EditCondominiumMod
 import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
 import { calculateResidentDebtSummary } from '@/utils/finance-utils'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 export default function CondominiumPage() {
     const { isPropiedades } = useUserRole()
@@ -78,6 +79,7 @@ export default function CondominiumPage() {
                         .from('residents')
                         .select('*', { count: 'exact', head: true })
                         .eq('condominium_id', id)
+                        .or(NOT_OWNER_RECORD)
 
                         ; (data as any).residents_count = realResidentsCount || 0
 
@@ -287,6 +289,7 @@ export default function CondominiumPage() {
                                 .from('residents')
                                 .select('unit_id', { count: 'exact', head: true })
                                 .eq('condominium_id', id)
+                                .or(NOT_OWNER_RECORD)
                                 .neq('status', 'inactive')
                                 .not('unit_id', 'is', null)
                             ;(data as any).ocupadas_count = ocupadasCount || 0

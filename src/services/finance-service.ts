@@ -12,6 +12,7 @@ import {
 } from '@/types/finance'
 import { calculateCondoMonthlyFinancials, getLocalDateParts } from '@/utils/finance-utils'
 import { buildFolio } from './legacy-sync-service'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -996,6 +997,7 @@ export const financeService = {
                 .from('residents')
                 .select('*, condominiums(name), units(unit_number)')
                 .order('created_at', { ascending: false })
+                .or(NOT_OWNER_RECORD)
                 .limit(5)
             if (condominiumId && condominiumId !== 'all') {
                 residentsQuery = residentsQuery.eq('condominium_id', condominiumId)

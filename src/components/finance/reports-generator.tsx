@@ -16,6 +16,7 @@ import { getBitacoraEntriesAction } from '@/app/actions/bitacora-actions'
 import { EVENT_TYPE_CONFIG, STATUS_CONFIG } from '@/types/bitacora'
 import { getPaymentAgreementsAction } from '@/app/actions/payment-agreement-actions'
 import { getAllAnnouncementViewsAction } from '@/app/actions/announcement-actions'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 interface ReportsGeneratorModalProps {
     isOpen: boolean
@@ -1061,6 +1062,7 @@ export function ReportsGeneratorModal({ isOpen, reportType = 'executive', onClos
                     .from('residents')
                     .select('*, condominiums!inner(organization_id)', { count: 'exact', head: true })
                     .eq('condominiums.organization_id', organizationId)
+                    .or(NOT_OWNER_RECORD)
                 if (selectedCondo !== 'all') totalResidentsQuery = totalResidentsQuery.eq('condominium_id', selectedCondo)
                 const { count: totalResidentsCount } = await totalResidentsQuery
 

@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/client'
 import { Resident, CreateResidentDTO, UpdateResidentDTO } from '@/types/residents'
 import { demoDb } from '@/utils/demo-db'
+import { NOT_OWNER_RECORD } from '@/lib/owner-record'
 
 /**
  * Recalcula el "Estado de Ocupación" de una unidad (Ocupada/Vacía) según si
@@ -15,6 +16,7 @@ async function syncUnitOccupancy(supabase: any, unitId?: string | null): Promise
         .select('id', { count: 'exact', head: true })
         .eq('unit_id', unitId)
         .neq('status', 'inactive')
+        .or(NOT_OWNER_RECORD)
 
     await supabase
         .from('units')
@@ -23,7 +25,12 @@ async function syncUnitOccupancy(supabase: any, unitId?: string | null): Promise
 }
 
 export const residentsService = {
-    async getByCondominium(condominiumId: string): Promise<Resident[]> {
+    /**
+     * Residentes del condominio. Por defecto sin el registro de cobro de los
+     * propietarios que no viven ahí; los cobros (cargos, cuotas extraordinarias)
+     * piden includeOwnerRecords para poder facturarles.
+     */
+    async getByCondominium(condominiumId: string, options: { includeOwnerRecords?: boolean } = {}): Promise<Resident[]> {
         if (condominiumId.startsWith('demo-')) {
             const residents = demoDb.getResidents(condominiumId)
             const units = demoDb.getUnits(condominiumId)
@@ -42,11 +49,13 @@ export const residentsService = {
           monto_mensual,
           payment_deadline,
           facturacion_activa,
-          occupancy_type
+          occupancy_type,
+          payment_responsible
         ),
         vehicles (*)
       `)
             .eq('condominium_id', condominiumId)
+            .or(options.includeOwnerRecords ? 'id.not.is.null' : NOT_OWNER_RECORD)
             .order('first_name', { ascending: true })
 
         if (error) throw error
@@ -56,7 +65,8 @@ export const residentsService = {
             ...r,
             unit_number: r.units?.unit_number,
             payment_deadline: r.units?.payment_deadline,
-            occupancy_type: r.units?.occupancy_type
+            occupancy_type: r.units?.occupancy_type,
+            payment_responsible: r.units?.payment_responsible
         })) || []
     },
 
@@ -165,6 +175,7 @@ export const residentsService = {
                 .select('first_name, last_name, units(unit_number)')
                 .eq('condominium_id', resident.condominium_id)
                 .eq('email', resident.email.trim().toLowerCase())
+                .or(NOT_OWNER_RECORD)
                 .maybeSingle()
 
             if (existingEmail) {
@@ -181,6 +192,7 @@ export const residentsService = {
                 .select('first_name, last_name, units(unit_number)')
                 .eq('condominium_id', resident.condominium_id)
                 .eq('phone', resident.phone)
+                .or(NOT_OWNER_RECORD)
                 .maybeSingle()
 
             if (existingPhone) {

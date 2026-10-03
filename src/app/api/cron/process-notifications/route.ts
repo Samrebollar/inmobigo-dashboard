@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { cronService } from '@/services/cron-service'
+import { isOwnerRecord } from '@/lib/owner-record'
 
 // Defaults para propiedades que aún no guardan settings_condominio (fila null):
 // sin fila, antes se notificaba TODOS los días desde el vencimiento — ahora que
@@ -68,6 +69,7 @@ export async function GET(request: Request) {
                 residents (
                     first_name,
                     last_name,
+                    role,
                     phone,
                     email,
                     units (
@@ -103,6 +105,29 @@ export async function GET(request: Request) {
             recargos_applied: 0,
             webhooks_sent: 0,
             errors: 0,
+        }
+
+        // Copias del recordatorio de la cuota: al gestor cuando se le cobra al
+        // propietario que no vive ahí, y al propietario cuando paga el inquilino.
+        const copyCache = new Map<string, { name: string; phone: string }[]>()
+        const copyRecipients = async (unitId: string | null, billedToOwner: boolean, payerPhone: string) => {
+            if (!unitId) return []
+            const key = `${unitId}:${billedToOwner}`
+            if (!copyCache.has(key)) {
+                const { data: unit } = await supabase
+                    .from('units')
+                    .select('occupancy_type, owner_contact_id, manager_contact_id')
+                    .eq('id', unitId)
+                    .maybeSingle()
+                const contactId = billedToOwner
+                    ? unit?.manager_contact_id
+                    : (unit && (unit.occupancy_type || 'propietario') !== 'propietario' ? unit.owner_contact_id : null)
+                const { data: contact } = contactId
+                    ? await supabase.from('unit_contacts').select('full_name, phone').eq('id', contactId).maybeSingle()
+                    : { data: null }
+                copyCache.set(key, contact?.phone ? [{ name: contact.full_name, phone: contact.phone }] : [])
+            }
+            return (copyCache.get(key) || []).filter((c) => c.phone !== payerPhone)
         }
 
         // ── 2. Procesar cada factura ──────────────────────────────────────────────
@@ -187,6 +212,27 @@ export async function GET(request: Request) {
                         diasAtraso
                     )
                     results.webhooks_sent++
+
+                    if (factura.invoice_type === 'maintenance') {
+                        for (const copy of await copyRecipients(factura.unit_id, isOwnerRecord(resident), resident.phone)) {
+                            await cronService.dispararWebhookN8N(
+                                {
+                                    id: factura.id,
+                                    resident_id: factura.resident_id,
+                                    organization_id: factura.organization_id,
+                                    amount: Number(factura.amount),
+                                    balance_due: Number(factura.balance_due),
+                                    due_date: factura.due_date,
+                                    residents: { first_name: copy.name, last_name: '', phone: copy.phone },
+                                    condominiums: { name: condo?.name },
+                                    unit_number: resident?.units?.unit_number,
+                                },
+                                tipoNotif,
+                                diasAtraso
+                            )
+                            results.webhooks_sent++
+                        }
+                    }
                 }
             } catch (facturaErr: any) {
                 console.error(`[Cron] Error procesando resident_invoice ${factura.id}:`, facturaErr.message)

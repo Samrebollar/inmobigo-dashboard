@@ -129,9 +129,13 @@ async function upsertContact(
     }
 
     if (input.id) {
+        // Si cambia el correo, la cuenta del portal ligada al correo anterior se
+        // desliga: la invitación se vuelve a mandar al correo nuevo.
+        const { data: current } = await admin.from('unit_contacts').select('email').eq('id', input.id).maybeSingle()
+        const emailChanged = !!current && (current.email || null) !== fields.email
         const { data } = await admin
             .from('unit_contacts')
-            .update(fields)
+            .update(emailChanged ? { ...fields, user_id: null } : fields)
             .eq('id', input.id)
             .eq('organization_id', organizationId)
             .eq('kind', kind)

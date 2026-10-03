@@ -55,6 +55,43 @@ const toContact = (row: any): UnitContact | null => row
     ? { id: row.id, kind: row.kind, full_name: row.full_name, phone: row.phone, email: row.email, has_access: !!row.user_id }
     : null
 
+/**
+ * Limpia contactos repetidos (mismo tipo y correo, o teléfono si no hay
+ * correo) que no están asignados a ninguna unidad: quedan de capturas previas
+ * a la deduplicación. Se conserva siempre al menos uno de cada persona.
+ */
+async function dropDuplicateContacts(admin: AdminClient, contacts: any[]): Promise<any[]> {
+    const keyOf = (c: any) => {
+        const id = (c.email || '').trim().toLowerCase() || (c.phone || '').trim()
+        return id ? `${c.kind}:${id}` : null
+    }
+    const groups = new Map<string, any[]>()
+    for (const c of contacts) {
+        const key = keyOf(c)
+        if (!key) continue
+        groups.set(key, [...(groups.get(key) || []), c])
+    }
+    const candidates = [...groups.values()].filter((g) => g.length > 1).flat()
+    if (candidates.length === 0) return contacts
+
+    const ids = candidates.map((c) => c.id).join(',')
+    const { data: refs } = await admin
+        .from('units')
+        .select('owner_contact_id, co_owner_contact_id, manager_contact_id')
+        .or(`owner_contact_id.in.(${ids}),co_owner_contact_id.in.(${ids}),manager_contact_id.in.(${ids})`)
+    const used = new Set((refs || []).flatMap((u: any) => [u.owner_contact_id, u.co_owner_contact_id, u.manager_contact_id]).filter(Boolean))
+
+    const drop = new Set<string>()
+    for (const group of groups.values()) {
+        if (group.length < 2) continue
+        const keep = group.find((c) => used.has(c.id)) || group.find((c) => c.user_id) || group[0]
+        for (const c of group) if (c.id !== keep.id && !used.has(c.id)) drop.add(c.id)
+    }
+    if (drop.size === 0) return contacts
+    await admin.from('unit_contacts').delete().in('id', [...drop])
+    return contacts.filter((c) => !drop.has(c.id))
+}
+
 /** Propietarios y gestores ya registrados en la organización, y la ficha de cada unidad del condominio. */
 export async function getUnitOwnershipAction(condominiumId: string): Promise<
     { success: true; units: UnitOwnership[]; contacts: UnitContact[] } | { success: false; error: string }
@@ -80,9 +117,10 @@ export async function getUnitOwnershipAction(condominiumId: string): Promise<
             .eq('condominium_id', condominiumId)
             .or(NOT_OWNER_RECORD),
     ])
+    const contactList = await dropDuplicateContacts(admin, contacts || [])
     if (unitsError) return { success: false, error: unitsError.message }
 
-    const byId = new Map((contacts || []).map((c: any) => [c.id, c]))
+    const byId = new Map(contactList.map((c: any) => [c.id, c]))
     const occupantsByUnit = new Map<string, string[]>()
     for (const r of residents || []) {
         if (!r.unit_id || r.status === 'inactive') continue
@@ -93,7 +131,7 @@ export async function getUnitOwnershipAction(condominiumId: string): Promise<
 
     return {
         success: true,
-        contacts: (contacts || []).map(toContact) as UnitContact[],
+        contacts: contactList.map(toContact) as UnitContact[],
         units: (units || []).map((u: any) => ({
             unit_id: u.id,
             unit_number: u.unit_number,

@@ -76,7 +76,7 @@ function ContactFields({
                         className="h-8 max-w-[55%] px-2 text-xs text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-lg focus:outline-none focus:border-indigo-500"
                     >
                         <option value="">+ Nuevo</option>
-                        {options.map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                        {options.map((c) => <option key={c.id} value={c.id}>{c.full_name}{c.email || c.phone ? ` · ${c.email || c.phone}` : ''}</option>)}
                     </select>
                 )}
             </div>

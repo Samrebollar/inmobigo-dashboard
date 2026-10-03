@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { format, isSameDay, isSameMonth, isToday } from 'date-fns'
 import { getAmenityAvailabilityAction } from '@/app/actions/service-actions'
-import { BOOKING_WINDOW_DAYS, isExclusiveAmenity, lastBookableDate, operatesOn, todayMx } from '@/lib/amenity-booking'
+import { BOOKING_WINDOW_DAYS, PAID_MIN_DAYS_AHEAD, firstBookableDate, isExclusiveAmenity, lastBookableDate, operatesOn, todayMx } from '@/lib/amenity-booking'
 
-type AmenityLike = { id: string; name: string; booking_mode?: string | null; use_days?: unknown }
+type AmenityLike = { id: string; name: string; booking_mode?: string | null; use_days?: unknown; base_price?: number | null; deposit_required?: boolean | null; deposit_amount?: number | null }
 
 export interface AmenityAvailability {
     occupied: Set<string>
@@ -42,10 +42,11 @@ export function useAmenityAvailability(amenityId: string | null | undefined): Am
     return { occupied, myActiveDate, loading, refresh }
 }
 
-type DayState = 'available' | 'past' | 'out_of_window' | 'closed' | 'occupied'
+type DayState = 'available' | 'past' | 'too_soon' | 'out_of_window' | 'closed' | 'occupied'
 
 function dayState(amenity: AmenityLike, iso: string, occupied: Set<string>): DayState {
     if (iso < todayMx()) return 'past'
+    if (iso < firstBookableDate(amenity)) return 'too_soon'
     if (iso > lastBookableDate()) return 'out_of_window'
     if (!operatesOn(amenity, iso)) return 'closed'
     if (isExclusiveAmenity(amenity) && occupied.has(iso)) return 'occupied'
@@ -59,6 +60,7 @@ export function bookingBlockReason(amenity: AmenityLike, iso: string, availabili
     }
     switch (dayState(amenity, iso, availability.occupied)) {
         case 'past': return 'Elige una fecha a partir de hoy.'
+        case 'too_soon': return `Esta amenidad tiene costo: resérvala con al menos ${PAID_MIN_DAYS_AHEAD} días de anticipación para pagar 48 horas antes.`
         case 'out_of_window': return `Solo puedes reservar con hasta ${BOOKING_WINDOW_DAYS} días de anticipación.`
         case 'closed': return `${amenity.name} no abre ese día.`
         case 'occupied': return 'Esa fecha ya está ocupada. Elige otra.'
@@ -91,7 +93,7 @@ export function AmenityCalendarGrid({
                     const isSelected = isSameDay(day, bookingDate) && state === 'available'
                     const isCurMonth = isSameMonth(day, viewDate)
                     const disabled = state !== 'available'
-                    const title = state === 'occupied' ? 'Ocupado' : state === 'closed' ? 'Cerrado' : state === 'out_of_window' ? `Disponible ${BOOKING_WINDOW_DAYS} días antes` : undefined
+                    const title = state === 'occupied' ? 'Ocupado' : state === 'closed' ? 'Cerrado' : state === 'too_soon' ? `Mínimo ${PAID_MIN_DAYS_AHEAD} días de anticipación` : state === 'out_of_window' ? `Disponible ${BOOKING_WINDOW_DAYS} días antes` : undefined
 
                     return (
                         <button
@@ -129,7 +131,7 @@ export function AmenityCalendarGrid({
                     <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-red-500/30 border border-red-500/40" /> Ocupado</span>
                 )}
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-zinc-800" /> No disponible</span>
-                <span>Reserva con hasta {BOOKING_WINDOW_DAYS} días de anticipación{isExclusiveAmenity(amenity) ? ' · se aparta el día completo' : ' · uso compartido'}</span>
+                <span>Reserva con {firstBookableDate(amenity) > todayMx() ? `${PAID_MIN_DAYS_AHEAD} a ` : 'hasta '}{BOOKING_WINDOW_DAYS} días de anticipación{isExclusiveAmenity(amenity) ? ' · se aparta el día completo' : ' · uso compartido'}</span>
             </div>
             {availability.myActiveDate && (
                 <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">

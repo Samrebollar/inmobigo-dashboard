@@ -36,6 +36,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { AccountStatementModal } from '@/components/finance/account-statement'
 import { stampReceiptPdf } from '@/lib/receipt-stamp-pdf'
+import { NOT_RESERVATION_CHARGE } from '@/lib/invoice-types'
 
 interface ResidentPaymentsClientProps {
     resident: any
@@ -304,6 +305,7 @@ export default function ResidentPaymentsClient({
                     .from('resident_invoices')
                     .select('*')
                     .eq('resident_id', resident.id)
+                    .or(NOT_RESERVATION_CHARGE)
                     .order('created_at', { ascending: false })
                 if (data) {
                     // ── Cruzar folios reales desde payment_validations ──────────────

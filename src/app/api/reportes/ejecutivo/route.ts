@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { NOT_DEPOSIT_CHARGE } from '@/lib/invoice-types'
 
 export const runtime = 'nodejs'
 
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
             .from('resident_invoices')
             .select('amount, balance_due, status')
             .eq('condominium_id', condominiumId)
+            .or(NOT_DEPOSIT_CHARGE)
             .gte('due_date', mesInicio)
             .lt('due_date', mesFin),
         supabase

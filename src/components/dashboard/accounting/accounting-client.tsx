@@ -29,6 +29,7 @@ import { ReserveFundModule } from './reserve-fund-module'
 import { SatTaxProjection } from './sat-tax-projection'
 import { RegimeSelector } from './regime-selector'
 import { cn } from '@/lib/utils'
+import { isDepositInvoice } from '@/lib/invoice-types'
 
 const MONTHS = [
     { value: 'all', label: 'Todo el año' },
@@ -125,6 +126,8 @@ export function AccountingClient({
     const firstMonthIndex = selectedMonthIndex === -1 ? 0 : selectedMonthIndex
     const otherCharges = chargeList.filter(inv => {
         if (inv.invoice_type === 'maintenance' || inv.invoice_type === 'initial_balance') return false
+        // Depósito en garantía de amenidades: se devuelve, no es ingreso ni deuda
+        if (isDepositInvoice(inv)) return false
         if (inv.status === 'cancelled') return false
         const dateStr: string = String(inv.due_date || inv.created_at || '').slice(0, 10)
         if (!dateStr) return false
@@ -146,7 +149,7 @@ export function AccountingClient({
     // Saldo arrastrado de antes (debt_amount / facturas de saldo inicial): no es
     // de este periodo, se informa aparte en la tarjeta de Morosidad.
     const otherBalancesAnyType = chargeList
-        .filter(inv => inv.invoice_type !== 'maintenance')
+        .filter(inv => inv.invoice_type !== 'maintenance' && !isDepositInvoice(inv))
         .filter(inv => {
             const dateStr: string = String(inv.due_date || inv.created_at || '').slice(0, 10)
             const [y, m] = dateStr.split('-').map(Number)

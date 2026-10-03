@@ -1,5 +1,6 @@
 import { Resident } from '@/types/residents'
 import { ResidentInvoice } from '@/types/finance'
+import { withoutReservationCharges } from '@/lib/invoice-types'
 
 const MESES_ES = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -145,6 +146,9 @@ export function calculateResidentMonthlyFinancials({
     selectedYear?: number
     monthlyFee: number
 }): ResidentFinancials {
+    // Los cargos de reservas de amenidades se pagan desde la reserva (y el
+    // depósito en garantía no es deuda): no entran al estado de cuenta de cuotas
+    invoices = withoutReservationCharges(invoices)
     const today = new Date()
     const currentMonthIndex = today.getMonth()
     const currentYear = today.getFullYear()
@@ -562,6 +566,9 @@ export function calculateCondoMonthlyFinancials({
     // Una factura cancelada (p. ej. la de un residente eliminado) no es cobranza:
     // no cuenta en el Total del Periodo, ni como pendiente, ni como arrastre.
     invoices = invoices.filter(inv => inv.status !== 'cancelled')
+    // Cargos de reservas de amenidades: se cobran desde la reserva y se cancelan
+    // solos si no se pagan; no son cobranza ni arrastre del condominio
+    invoices = withoutReservationCharges(invoices)
 
     // Determine the first and last months of the period
     let firstMonth = 0
@@ -888,6 +895,7 @@ export function calculateResidentDebtSummary({
     invoices: any[]
     unit: any
 }): ResidentDebtSummary {
+    invoices = withoutReservationCharges(invoices)
     const today = new Date()
     const currentMonthIndex = today.getMonth()
     const paymentDeadlineDay = Number(unit?.payment_deadline) || 10

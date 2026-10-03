@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { cronService } from '@/services/cron-service'
 import { isOwnerRecord } from '@/lib/owner-record'
+import { NOT_RESERVATION_CHARGE } from '@/lib/invoice-types'
+import { sweepExpiredReservations } from '@/lib/amenity-billing'
 
 // Defaults para propiedades que aún no guardan settings_condominio (fila null):
 // sin fila, antes se notificaba TODOS los días desde el vencimiento — ahora que
@@ -40,6 +42,8 @@ export async function GET(request: Request) {
 
     try {
         const supabase = createAdminClient()
+        // Reservas de amenidades que no se pagaron (o aprobaron) 48 h antes del evento
+        await sweepExpiredReservations(supabase).catch((err) => console.error('[Cron] sweepExpiredReservations', err))
         const now = new Date()
         const todayStr = now.toISOString().split('T')[0]
         // Ventana hacia adelante para poder mandar "recordatorios antes del
@@ -81,6 +85,9 @@ export async function GET(request: Request) {
                 )
             `)
             .in('status', ['pending', 'overdue'])
+            // Los cargos de reservas se cancelan solos si no se pagan a tiempo:
+            // no llevan recordatorios, recargos ni pasan a vencidos
+            .or(NOT_RESERVATION_CHARGE)
             .lte('due_date', upperBoundStr)
             .order('due_date', { ascending: true })
 

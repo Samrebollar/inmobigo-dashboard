@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCondoMercadoPagoAccountByMpUserId } from '@/services/mercadopago-connect-service'
 import { issuePaymentReceipt } from '@/lib/payment-receipts'
+import { NOT_RESERVATION_CHARGE } from '@/lib/invoice-types'
+import { markReservationPaidIfSettled } from '@/lib/amenity-billing'
 
 /**
  * Webhook de Mercado Pago para pagos de residentes (cuota de mantenimiento).
@@ -96,12 +98,19 @@ async function handleWebhook(req: Request) {
         let remaining = Number(payment.transaction_amount || 0)
         const paidAtIso = new Date().toISOString()
 
-        const { data: pendingInvoices } = await adminSupabase
+        // Pago de una reserva de amenidad: se aplica solo a los cargos de esa
+        // reserva (cuota de uso y depósito). Cualquier otro pago se aplica a las
+        // cuotas más antiguas, sin tocar cargos de reservas.
+        const reservationId: string | null = payment.metadata?.reservation_id || null
+        let pendingQuery = adminSupabase
             .from('resident_invoices')
             .select('id, amount, balance_due, status, resident_id, condominium_id, organization_id, paid_at, due_date')
             .eq('resident_id', residentId)
             .in('status', ['pending', 'overdue'])
-            .order('due_date', { ascending: true })
+        pendingQuery = reservationId
+            ? pendingQuery.eq('reservation_id', reservationId)
+            : pendingQuery.or(NOT_RESERVATION_CHARGE)
+        const { data: pendingInvoices } = await pendingQuery.order('due_date', { ascending: true })
 
         for (const invoice of pendingInvoices || []) {
             if (remaining <= 0.01) break
@@ -140,6 +149,21 @@ async function handleWebhook(req: Request) {
                 .eq('id', invoice.id)
 
             remaining -= applied
+        }
+
+        if (reservationId) {
+            await markReservationPaidIfSettled(adminSupabase, reservationId)
+            // La reserva ya se había cancelado (pago tardío): el dinero queda
+            // como saldo a favor del residente
+            if (remaining > 0.01) {
+                const { data: row } = await adminSupabase.from('residents').select('credit_amount').eq('id', residentId).maybeSingle()
+                await adminSupabase
+                    .from('residents')
+                    .update({ credit_amount: Math.round((Number(row?.credit_amount || 0) + remaining) * 100) / 100 })
+                    .eq('id', residentId)
+                console.warn(`[MP Resident Webhook] Pago ${paymentId} de la reserva ${reservationId} sin cargos pendientes: $${remaining} a saldo a favor`)
+            }
+            return NextResponse.json({ message: 'Pago de reserva aplicado' })
         }
 
         // Si sobra monto (deuda calculada que no tenía una factura generada

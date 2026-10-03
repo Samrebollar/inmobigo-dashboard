@@ -22,6 +22,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Link from 'next/link'
 import { deleteAmenityReservationAction } from '@/app/actions/service-actions'
+import { ReservationPaymentCell, reservationDay, sweepReservations, useMercadoPagoReturnToast } from '@/components/amenities/reservation-payment-cell'
 
 function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, onUpdate: () => void, onDeleteClick: (reserva: any) => void }) {
     const [showMenu, setShowMenu] = useState(false)
@@ -91,7 +92,7 @@ function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, on
             
             {/* 2. Fecha de reserva */}
             <td className="px-4 py-6">
-                <p className="text-white font-bold text-sm whitespace-nowrap text-center">{format(new Date(reserva.reservation_date), 'd MMM yyyy', { locale: es })}</p>
+                <p className="text-white font-bold text-sm whitespace-nowrap text-center">{format(reservationDay(reserva.reservation_date), 'd MMM yyyy', { locale: es })}</p>
             </td>
             
             {/* 3. Horario de servicio */}
@@ -110,9 +111,7 @@ function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, on
 
             {/* 5. Deposito en Garantia (Total) */}
             <td className="px-4 py-6">
-                <p className="text-white font-bold text-sm whitespace-nowrap text-center">
-                    ${((reserva.amenities?.base_price || 0) + (reserva.amenities?.deposit_amount || 0)).toLocaleString('en-US')} MXN
-                </p>
+                <ReservationPaymentCell reserva={reserva} returnPath="/inquilino/amenidades/reservas" />
             </td>
 
             {/* 6. Reglamento */}
@@ -138,23 +137,7 @@ function ReservationRow({ reserva, onUpdate, onDeleteClick }: { reserva: any, on
             {/* 8. Acciones inline */}
             <td className="px-4 py-6">
                 <div className="flex items-center justify-center gap-3">
-                    {/* Payment Action Icon */}
-                    {reserva.status === 'approved' && ((reserva.amenities?.base_price || 0) + (reserva.amenities?.deposit_required ? reserva.amenities.deposit_amount : 0)) > 0 ? (
-                        <button 
-                            onClick={() => alert('Pasarela de pago próximamente')} 
-                            className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white flex items-center justify-center transition-all group relative border border-indigo-500/20"
-                            title="Pagar E-Ticket"
-                        >
-                            <CreditCard size={14} />
-                        </button>
-                    ) : reserva.status === 'pending' && ((reserva.amenities?.base_price || 0) + (reserva.amenities?.deposit_required ? reserva.amenities.deposit_amount : 0)) > 0 ? (
-                        <div 
-                            className="h-8 w-8 rounded-lg bg-amber-500/5 text-amber-500/60 flex items-center justify-center cursor-not-allowed border border-amber-500/10"
-                            title="Pendiente de autorización"
-                        >
-                            <Clock size={14} />
-                        </div>
-                    ) : null}
+                    
 
                     {/* Cancel Action Icon */}
                     {reserva.status === 'pending' && (
@@ -188,6 +171,7 @@ export default function ResidentReservasTabla({ resident }: { resident: any }) {
     const [loading, setLoading] = useState(true)
     const [deletingReserva, setDeletingReserva] = useState<any | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    useMercadoPagoReturnToast()
 
     const fetchReservas = async () => {
         setLoading(true)
@@ -203,6 +187,15 @@ export default function ResidentReservasTabla({ resident }: { resident: any }) {
 
             if (!error && data) {
                 setReservas(data)
+                // Reservas vencidas (sin pagar o sin aprobar 48 h antes): se cancelan y se recarga
+                if (await sweepReservations(data)) {
+                    const { data: fresh } = await supabase
+                        .from('amenity_reservations')
+                        .select('*, amenities(*)')
+                        .eq('resident_id', user.id)
+                        .order('reservation_date', { ascending: false })
+                    if (fresh) setReservas(fresh)
+                }
             }
         } catch (error) {
             console.error('Error fetching reservas:', error)

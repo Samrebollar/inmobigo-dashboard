@@ -1,8 +1,9 @@
 'use server'
 
-import { ACTIVE_RESERVATION_STATUSES, BOOKING_WINDOW_DAYS, addDaysIso, isExclusiveAmenity, operatesOn, todayMx } from '@/lib/amenity-booking'
+import { ACTIVE_RESERVATION_STATUSES, BOOKING_WINDOW_DAYS, PAID_MIN_DAYS_AHEAD, addDaysIso, firstBookableDate, isExclusiveAmenity, operatesOn, todayMx } from '@/lib/amenity-booking'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+import { cancelReservationCharges } from '@/lib/amenity-billing'
 import { revalidatePath } from 'next/cache'
 import { notifyResidentNotice } from './security-ops-actions'
 import { createClient } from '@/utils/supabase/server'
@@ -451,7 +452,7 @@ export async function createAmenityReservationAction(data: {
 
         const { data: amenity } = await adminClient
             .from('amenities')
-            .select('id, name, booking_mode, use_days, status')
+            .select('id, name, booking_mode, use_days, status, base_price, deposit_required, deposit_amount')
             .eq('id', data.amenity_id)
             .maybeSingle()
         if (!amenity) return { success: false, error: 'La amenidad ya no está disponible.' }
@@ -459,6 +460,9 @@ export async function createAmenityReservationAction(data: {
         const date = data.reservation_date
         const today = todayMx()
         if (date < today) return { success: false, error: 'No puedes reservar en una fecha pasada.' }
+        if (date < firstBookableDate(amenity)) {
+            return { success: false, error: `${amenity.name} tiene costo: resérvala con al menos ${PAID_MIN_DAYS_AHEAD} días de anticipación para pagar 48 horas antes.` }
+        }
         if (date > addDaysIso(today, BOOKING_WINDOW_DAYS)) {
             return { success: false, error: `Solo puedes reservar con hasta ${BOOKING_WINDOW_DAYS} días de anticipación.` }
         }
@@ -526,6 +530,21 @@ export async function deleteAmenityReservationAction(reservationId: string) {
 
     try {
         const adminClient = createAdminClient()
+
+        // Una reserva con depósito pagado no se borra hasta liquidarlo; los
+        // cargos sin pagar se cancelan antes de borrarla
+        const { data: reservation } = await adminClient
+            .from('amenity_reservations')
+            .select('deposit_status, paid_at, status, reservation_date')
+            .eq('id', reservationId)
+            .maybeSingle()
+        if (reservation?.deposit_status === 'en_resguardo') {
+            return { success: false, error: 'Esta reserva tiene un depósito en garantía pendiente de liquidar.' }
+        }
+        if (reservation?.paid_at && reservation.status === 'approved' && reservation.reservation_date >= todayMx()) {
+            return { success: false, error: 'Esta reserva ya está pagada; no se puede borrar antes del evento.' }
+        }
+        await cancelReservationCharges(adminClient, reservationId)
         
         const { error } = await adminClient
             .from('amenity_reservations')

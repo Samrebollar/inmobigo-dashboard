@@ -55,6 +55,8 @@ import { ClipboardList, Handshake } from 'lucide-react'
 import { PaymentAgreementsAdmin } from './servicios/payment-agreements-admin'
 import { ServiceAccessAdmin } from './servicios/service-access-admin'
 import { getPendingTransportNoticesServer } from '@/app/actions/security-ops-actions'
+import { sweepExpiredReservationsAction, updateReservationStatusAction } from '@/app/actions/amenity-reservation-actions'
+import { ReservationAdminActions } from '@/components/amenities/reservation-admin-actions'
 
 type TabType = 'announcements' | 'packages' | 'transport' | 'delivery' | 'provider' | 'access' | 'amenities' | 'contracts' | 'inventory' | 'agreements'
 
@@ -413,6 +415,8 @@ export function AvisosClient({
     const fetchAmenityReservations = async () => {
         setLoadingAmenities(true)
         try {
+            // Reservas vencidas (sin pagar o sin aprobar 48 h antes del evento)
+            if (admin?.organization_id && !isDemo) await sweepExpiredReservationsAction(admin.organization_id)
             console.log('Fetching reservations for org_id:', admin?.organization_id);
             if (!admin?.organization_id) {
                 setLoadingAmenities(false)
@@ -459,35 +463,18 @@ export function AvisosClient({
     }
 
     const handleUpdateReservation = async (id: string, status: string, rejectionReason?: string) => {
-        try {
-            const payload: any = {
-                status,
-                updated_at: new Date().toISOString()
-            }
-            if (status === 'cancelled') {
-                payload.rejection_reason = rejectionReason?.trim() || null
-            }
-
-            const { error } = await supabase
-                .from('amenity_reservations')
-                .update(payload)
-                .eq('id', id)
-
-            if (error) throw error
-
-            setAmenityReservations(prev => prev.map(r =>
-                r.id === id ? { ...r, ...payload } : r
-            ))
-
-            setToastMessage(`Reserva ${status === 'approved' ? 'aprobada' : 'denegada'} correctamente`)
-            setTimeout(() => setToastMessage(null), 3000)
-        } catch (error: any) {
-            console.error('Error updating reservation:', error)
-            // Trigger de empalmes: ya hay otra reserva activa de esa amenidad ese día
-            alert(error?.code === '23505'
-                ? 'No se puede aprobar: esa amenidad ya tiene otra reserva activa para ese día.'
-                : 'Error al actualizar reserva')
+        // Al aprobar se generan los cargos (cuota de uso y depósito); al rechazar se cancelan
+        const result = await updateReservationStatusAction(id, status as 'approved' | 'cancelled', rejectionReason)
+        if (!result.success) {
+            alert(result.error)
+            return
         }
+        setAmenityReservations(prev => prev.map(r =>
+            r.id === id ? { ...r, status, ...(status === 'cancelled' ? { rejection_reason: rejectionReason?.trim() || null } : {}) } : r
+        ))
+        setToastMessage(`Reserva ${status === 'approved' ? 'aprobada' : 'denegada'} correctamente`)
+        setTimeout(() => setToastMessage(null), 3000)
+        fetchAmenityReservations()
     }
 
     const [rejectingReservation, setRejectingReservation] = useState<any | null>(null)
@@ -1098,7 +1085,7 @@ export function AvisosClient({
                                 const unitInfo = res.residentInfo?.units?.unit_number ? `${res.residentInfo.units.unit_number}` : 'N/A'
                                 const propInfo = res.residentInfo?.condominiums?.name || 'Comunidad General'
                                 
-                                const dateFormatted = format(new Date(res.reservation_date), 'd MMM, yyyy', { locale: es })
+                                const dateFormatted = format(new Date(`${String(res.reservation_date).slice(0, 10)}T12:00:00`), 'd MMM, yyyy', { locale: es })
                                 const totalPrice = (res.amenities?.base_price || 0) + (res.amenities?.deposit_required ? (res.amenities?.deposit_amount || 0) : 0)
                                 const price = totalPrice > 0 ? `$${totalPrice.toLocaleString('en-US')}` : 'Gratis'
                                 
@@ -1234,12 +1221,7 @@ export function AvisosClient({
                                                 </button>
                                             )}
                                             {res.status === 'approved' && (
-                                                <button
-                                                    disabled
-                                                    className="w-full h-11 px-6 rounded-xl flex items-center justify-center text-zinc-600 bg-zinc-900 border border-zinc-800 font-bold text-[10px] uppercase tracking-widest cursor-not-allowed opacity-50"
-                                                >
-                                                    Acción Procesada
-                                                </button>
+                                                <ReservationAdminActions res={res} onChanged={fetchAmenityReservations} />
                                             )}
                                         </div>
                                     </div>

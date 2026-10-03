@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { canOperateOrgFinance } from '@/lib/finance-auth'
+import { DEPOSIT_RETAINED_METHOD } from '@/lib/invoice-types'
 
 /**
  * GET /api/finance/cash-cut?organization_id=..&condominium_id=..&date=YYYY-MM-DD
@@ -45,7 +46,9 @@ export async function GET(request: Request) {
     const { data: payments, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const rows = payments || []
+    // Lo retenido de un depósito en garantía no es dinero que entre ese día:
+    // ya se cobró cuando el residente pagó el depósito
+    const rows = (payments || []).filter(p => p.payment_method !== DEPOSIT_RETAINED_METHOD)
     const ids = <T,>(arr: (T | null | undefined)[]) => Array.from(new Set(arr.filter(Boolean))) as T[]
     const invoiceIds = ids(rows.map(p => p.invoice_id as string))
     const residentIds = ids(rows.map(p => p.resident_id as string))

@@ -29,6 +29,7 @@ import { demoDb } from '@/utils/demo-db'
 import { useUserRole } from '@/hooks/use-user-role'
 import { calculateResidentDebtSummary } from '@/utils/finance-utils'
 import { NOT_OWNER_RECORD } from '@/lib/owner-record'
+import { withoutReservationCharges } from '@/lib/invoice-types'
 
 export default function CondominiumPage() {
     const { isPropiedades } = useUserRole()
@@ -148,7 +149,8 @@ export default function CondominiumPage() {
                                 .select('id, unit_id, amount, balance_due, resident_id, status, created_at, due_date, invoice_type')
                                 .eq('condominium_id', id)
 
-                            const invoices = allInvoices || []
+                            // Cargos de reservas de amenidades: no son cobranza ni morosidad
+                            const invoices = withoutReservationCharges(allInvoices)
 
                             const isInvoiceInCurrentMonth = (inv: any) => {
                                 const dateStr = inv.due_date || inv.created_at
